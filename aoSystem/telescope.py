@@ -9,7 +9,7 @@ import numpy as np
 from astropy.io import fits
 import matplotlib.pyplot as plt
 import re
-import FourierUtils
+import fourier.FourierUtils as FourierUtils
 
     
 class Attribute(object):

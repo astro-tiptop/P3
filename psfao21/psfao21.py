@@ -18,10 +18,10 @@ import re
 
 from astropy.io import fits
 
-import FourierUtils
-from telescope import telescope
-from atmosphere import atmosphere
-from source import source
+import fourier.FourierUtils as FourierUtils
+from aoSystem.telescope import telescope
+from aoSystem.atmosphere import atmosphere
+from aoSystem.source import source
 
 #%%
 rad2mas = 3600 * 180 * 1000 / np.pi
@@ -210,7 +210,10 @@ class psfao21:
         self.statModes = None
         self.nModes = 1
         self.isStatic = False
-        self.path_statModes = eval(config['telescope']['path_statModes'])
+        if config.has_option('telescope', 'path_statModes'):
+            self.path_statModes = eval(config['telescope']['path_statModes'])
+        else:
+            self.path_statModes = []
         if self.path_statModes:
             if ospath.isfile(self.path_statModes) == True and re.search(".fits",self.path_statModes)!=None:                
                 self.statModes = fits.getdata(self.path_statModes)

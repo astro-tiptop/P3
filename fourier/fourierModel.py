@@ -30,10 +30,10 @@ from astropy.io import fits
 from configparser import ConfigParser
 from distutils.spawn import find_executable
 
-import FourierUtils
-from telescope import telescope
-from atmosphere import atmosphere
-from source import source
+import fourier.FourierUtils as FourierUtils
+from aoSystem.telescope import telescope
+from aoSystem.atmosphere import atmosphere
+from aoSystem.source import source
 
    
 #%% DISPLAY FEATURES
