@@ -290,20 +290,20 @@ class psfao21:
         nPup = self.tel.pupil.shape[0]
         
         # ADDING STATIC MAP
-        opdStat = np.zeros((nPup,nPup))
+        phaseStat = np.zeros((nPup,nPup))
         if np.any(self.opdMap_ext):
-            opdStat = self.opdMap_ext
+            phaseStat = 2*np.pi*1e-9/wvl * self.opdMap_ext
             
         # ADDING USER-SPECIFIED STATIC MODES
         xStat = np.asarray(xStat)
-        self.opdMap = 0
+        self.phaseMap = 0
         if self.isStatic:
             if self.statModes.shape[2]==len(xStat):
-                self.opdMap = 2*np.pi*1e-9/wvl * np.sum(self.statModes*xStat,axis=2)
-                opdStat += self.opdMap
+                self.phaseMap = 2*np.pi*1e-9/wvl * np.sum(self.statModes*xStat,axis=2)
+                phaseStat += self.phaseMap
                 
         # OTF
-        otfStat = FourierUtils.pupil2otf(self.tel.pupil * self.apodizer,opdStat,samp)
+        otfStat = FourierUtils.pupil2otf(self.tel.pupil * self.apodizer,phaseStat,samp)
         return FourierUtils.interpolateSupport(otfStat,nOtf)
     
     def __call__(self,x0,xdata=None,nPix=None):
