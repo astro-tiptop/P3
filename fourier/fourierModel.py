@@ -122,7 +122,8 @@ class fourierModel:
     # CONTRUCTOR
     def __init__(self,file,calcPSF=True,verbose=False,display=True,displayContour=False,aoFilter='circle',\
                  getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,getEncircledEnergy=False,\
-                 extraPSFsDirections=None,cartPointingCoords=None,kcExt=None,overSampling=1,pitchScaling=1,path_pupil='',path_static=''):
+                 extraPSFsDirections=None,cartPointingCoords=None,kcExt=None,\
+                 overSampling=1,pitchScaling=1,path_pupil='',path_static='',addChromatism=False):
         
         tstart = time.time()
         # PARSING INPUTS
@@ -136,7 +137,7 @@ class fourierModel:
         self.kcExt         = np.array(kcExt)
         self.pitchScaling  = pitchScaling
         self.overSampling  = overSampling
-        
+        self.addChromatism = addChromatism
         # GRAB PARAMETERS
         self.status = self.parameters(self.file,cartPointingCoords=cartPointingCoords,\
                                       extraPSFsDirections=extraPSFsDirections,\
@@ -243,7 +244,7 @@ class fourierModel:
     def parameters(self,file,extraPSFsDirections=None,cartPointingCoords=None,path_pupil='',path_static=''):
                     
         tstart = time.time() 
-    
+        self.t_getParam = 0
         # verify if the file exists
         if ospath.isfile(file) == False:
             print('%%%%%%%% ERROR %%%%%%%%')
@@ -1012,13 +1013,16 @@ class fourierModel:
         psd[id1:id2,id1:id2,:]  = psd[id1:id2,id1:id2,:] + np.repeat(self.psdAlias[:, :, np.newaxis], self.nSrc, axis=2)
         
         # Differential refractive anisoplanatism
-        self.psdDiffRef         = self.differentialRefractionPSD()
-        psd[id1:id2,id1:id2,:]  = psd[id1:id2,id1:id2,:] + self.psdDiffRef
+        if self.addChromatism:
+            self.psdDiffRef         = self.differentialRefractionPSD()
+            psd[id1:id2,id1:id2,:]  = psd[id1:id2,id1:id2,:] + self.psdDiffRef
         
-        # Chromatism
-        self.psdChromatism      = self.chromatismPSD()
-        psd[id1:id2,id1:id2,:]  = psd[id1:id2,id1:id2,:] + self.psdChromatism
-        
+            # Chromatism
+            self.psdChromatism      = self.chromatismPSD()
+            psd[id1:id2,id1:id2,:]  = psd[id1:id2,id1:id2,:] + self.psdChromatism
+        else:
+            self.psdDiffRef = self.psdChromatism = np.zeros((self.resAO,self.resAO,self.nSrc))
+            
         # Add the noise and spatioTemporal PSD
         self.psdSpatioTemporal  = np.real(self.spatioTemporalPSD())
         psd[id1:id2,id1:id2,:]  = psd[id1:id2,id1:id2,:] + self.psdSpatioTemporal
@@ -1051,11 +1055,12 @@ class fourierModel:
             print('\n_____ ERROR BREAKDOWN  ON-AXIS_____')
             print('------------------------------------------')
             idCenter = self.zenithSrc.argmin()
-            print('.Image Strehl at %4.2fmicron:\t%4.2f%s'%(self.wvlRef*1e6,self.SR[idCenter,0],'%'))
+            if len(fao.SR):
+                print('.Image Strehl at %4.2fmicron:\t%4.2f%s'%(self.wvlRef*1e6,self.SR[idCenter,0],'%'))
             print('.Maréchal Strehl at %4.2fmicron:\t%4.2f%s'%(self.atm.wvl*1e6,self.SRmar[idCenter],'%'))
             print('.Residual wavefront error:\t%4.2fnm'%self.wfeTot[idCenter])
             print('.Fitting error:\t\t\t%4.2fnm'%self.wfeFit)
-            print('.Differential refraction:\t\t%4.2fnm'%self.wfeDiffRef[idCenter])
+            print('.Differential refraction:\t%4.2fnm'%self.wfeDiffRef[idCenter])
             print('.Chromatic error:\t\t%4.2fnm'%self.wfeChrom[idCenter])
             np.sqrt(self.psdDiffRef.sum(axis=(0,1)))* rad2nm
             print('.Aliasing error:\t\t%4.2fnm'%self.wfeAl)
