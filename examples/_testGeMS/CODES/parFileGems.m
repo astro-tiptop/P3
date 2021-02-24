@@ -1,0 +1,22 @@
+parm = [];
+parm.atm.photometry             = photometry.V0;                % photometric band
+parm.atm.windSpeed              = 10;                           % wind speed vector in m/s
+parm.atm.windDirection          = 0;                            % wind direction vector in rad
+parm.atm.r0                     = 0.16;         % coherence lenght in meters at 0.5microns
+parm.atm.L0                     = 30;                           % Outer scale in meters
+parm.atm.altitude               = 0;                            % altitude vector in meters
+parm.atm.fractionalR0           = 1;                            % fractional Cn2 profile (sum=1)                                              
+parm.sci.x                      = 0;                            % Sources x cartesian position in arcsec
+parm.sci.y                      = 0;                            % Sources x cartesian position in arcsec
+parm.tel.D                      = 8.1;                            % telescope primary mirror diameter
+parm.tel.obstructionRatio       = 0.12;                         % central obscuration ratio
+parm.nGs.photometry             = photometry.V2;                % photometric band                    
+parm.nGs.x                      = [0];                          % NGSs x cartesian position in arcsec
+parm.nGs.y                      = [0];                          % NGSs y cartesian position in arcsec                   
+parm.dm.pitch                   = 0.5;                          % dm pitch
+parm.dm.nActuators              = 16; 
+parm.cam.pixelScale             = 20;                          % Pixel scale in mas                         
+parm.cam.resolution             = 64;                          % Detector resolution
+parm.cam.ron                    = 20;
+parm.cam.centralWavelength      = 2.2e-6;
+parm.cam.spectralWidth          = 0e-9;
