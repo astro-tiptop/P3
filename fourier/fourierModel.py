@@ -425,6 +425,15 @@ class fourierModel:
         #self.resAO    = int(1/np.min(self.pitchs_dm)/self.PSDstep)
         self.resAO    = int(2*self.kc/self.PSDstep)
         
+        #%% Additionnal jitter
+        self.jitterX = self.jitterY = self.jitterXY = 0.0    
+        if config.has_option('telescope', 'jitterX'):
+            self.jitterX = eval(config['telescope']['jitterX'])[0]
+        if config.has_option('telescope', 'jitterY'):
+            self.jitterY = eval(config['telescope']['jitterY'])[0]
+        if config.has_option('telescope', 'jitterY'):
+            self.corXY   = eval(config['telescope']['corXY'])[0]
+            
         #%% instantiating sub-classes
         
         # Telescope
@@ -1098,6 +1107,17 @@ class fourierModel:
         self.atm.wvl    = wvl
         self.atm_mod.wvl= wvl
         
+        U, V = np.mgrid[0:self.fovInPixel,0:self.fovInPixel].astype(float)
+        U = (U-self.fovInPixel/2) * 2/self.fovInPixel
+        V = (V-self.fovInPixel/2) * 2/self.fovInPixel
+                
+        # DEFINING THE RESIDUAL JITTER KERNEL
+        if self.jitterX or self.jitterY:
+            Djitter = (self.jitterX**2 * U**2 + self.jitterY**2 * V**2 + 2*self.corXY * self.jitterX * self.jitterY * U*V)
+            self.Kjitter   = np.exp(-0.5 * Djitter * (np.sqrt(2)/self.psInMas)**2)
+        else:
+            self.Kjitter = 1
+            
         if self.loopGain == 0: #open-loop-case
             self.PSF = np.zeros((self.fovInPixel,self.fovInPixel,self.nWvl))
 
@@ -1107,7 +1127,7 @@ class fourierModel:
             sf       = (2*cov.max() - cov - np.conj(cov))
             
             for j in range(self.nWvl):
-                otfTurb  = np.exp(-0.5*sf * (self.wvlRef/self.wvlSrc[j])**2)
+                otfTurb  = np.exp(-0.5*sf * (self.wvlRef/self.wvlSrc[j])**2) * self.Kjitter
                 otfTot   = otfTurb * self.otfTel
                 self.SR  = 1e2*np.abs(otfTot).sum(axis=(0,1))/self.otfTel.sum()
                 # PSF
@@ -1140,14 +1160,11 @@ class fourierModel:
             # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
             if fftphasor:
                 # FOURIER PHASOR
-                U, V = np.mgrid[0:self.fovInPixel,0:self.fovInPixel].astype(float)
-                U = (U-self.fovInPixel/2) * 2/self.fovInPixel
-                V = (V-self.fovInPixel/2) * 2/self.fovInPixel
                 self.fftPhasor = np.exp(0.5*np.pi*complex(0,1)*(U + V))
             else:
                 self.fftPhasor = 1
                 
-            kernel = self.otfTel * self.fftPhasor      
+            kernel = self.otfTel * self.fftPhasor * self.Kjitter      
             kernel = np.repeat(kernel[:,:,np.newaxis],self.nSrc,axis=2)     
             S     = self.otfTel.sum()
         
