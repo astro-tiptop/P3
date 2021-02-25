@@ -254,7 +254,7 @@ class psfao21:
           bounds_up   = list(np.inf * np.ones(self.atm.nL))          
           # PSD Parameters
           bounds_down += [0,0,_EPSILON,_EPSILON,-np.pi,1+_EPSILON]
-          bounds_up   += [np.inf,np.inf,np.inf,np.inf,np.inf,np.pi]         
+          bounds_up   += [np.inf,np.inf,np.inf,np.inf,np.pi,np.inf]         
           # Jitter
           bounds_down += [0,0,-1]
           bounds_up   += [np.inf,np.inf,1]
