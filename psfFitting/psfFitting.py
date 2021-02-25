@@ -145,7 +145,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
     result        = evaluateFittingQuality(result,psfModelInst)
     
     # 95% confidence interval
-    result.xerr   = mini2input(confidence_interval(result.fun,result.jac))
+    result.xerr   = mini2input(confidence_interval(result.fun,result.jac),forceZero=True)
     return result
 
 
