@@ -123,7 +123,7 @@ class fourierModel:
     def __init__(self,file,calcPSF=True,verbose=False,display=True,displayContour=False,aoFilter='circle',\
                  getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,getEncircledEnergy=False,\
                  extraPSFsDirections=None,cartPointingCoords=None,kcExt=None,\
-                 overSampling=1,pitchScaling=1,path_pupil='',path_static='',addChromatism=False):
+                 overSampling=1,pitchScaling=1,path_pupil='',path_static='',addChromatism=False,fftphasor=False):
         
         tstart = time.time()
         # PARSING INPUTS
@@ -218,7 +218,7 @@ class fourierModel:
                 
                 if calcPSF:
                     self.getPSF(verbose=verbose,getErrorBreakDown=getErrorBreakDown,\
-                                getFWHM=getFWHM,getEnsquaredEnergy=getEnsquaredEnergy,getEncircledEnergy=getEncircledEnergy)
+                                getFWHM=getFWHM,getEnsquaredEnergy=getEnsquaredEnergy,getEncircledEnergy=getEncircledEnergy,fftphasor=fftphasor)
                     if display:
                         self.displayResults(displayContour=displayContour)
                 else:
@@ -1140,11 +1140,13 @@ class fourierModel:
             # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
             if fftphasor:
                 # FOURIER PHASOR
-                uu =  fft.fftshift(fft.fftfreq(self.fovInPixel))  
-                ux,uy = np.meshgrid(uu,uu)
-                self.fftPhasor = np.exp(-complex(0,1)*np.pi*(ux + uy))
+                U, V = np.mgrid[0:self.fovInPixel,0:self.fovInPixel].astype(float)
+                U = (U-self.fovInPixel/2) * 2/self.fovInPixel
+                V = (V-self.fovInPixel/2) * 2/self.fovInPixel
+                self.fftPhasor = np.exp(0.5*np.pi*complex(0,1)*(U + V))
             else:
                 self.fftPhasor = 1
+                
             kernel = self.otfTel * self.fftPhasor      
             kernel = np.repeat(kernel[:,:,np.newaxis],self.nSrc,axis=2)     
             S     = self.otfTel.sum()
