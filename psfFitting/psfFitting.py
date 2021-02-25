@@ -160,7 +160,7 @@ def evaluateFittingQuality(result,psfModelInst):
     def meanErrors(sky,fit):
         mse = 1e2*np.sqrt(np.sum((sky-fit)**2))/sky.sum()
         mae = 1e2*np.sum(abs(sky-fit))/sky.sum()
-        fvu = 1e2*np.sqrt(np.sum((sky-fit)**2))/sky.var()
+        fvu = 1e2*np.sum((sky-fit)**2))/sky.var()
         return mse,mae,fvu
     
     result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.tel.pupil,psfModelInst.samp)
