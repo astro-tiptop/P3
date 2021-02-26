@@ -126,7 +126,8 @@ class psfao21:
                 self.Dani_l = None
                 self.Kaniso = np.ones((self.src.nSrc,self.nWvl))
                 self.isAniso = False
-            
+                if fitCn2 == False: 
+                    self.atm = atmosphere(self.atm.wvl,self.atm.r0,[1],[0],self.atm.wSpeed.mean(),self.atm.wDir.mean(),self.atm.L0)  
             
             # ONE OF SEVERAL FRAMES
             self.isCube = any(rad2mas * self.src.direction[0]/self.psInMas > self.nPix) \
@@ -177,7 +178,7 @@ class psfao21:
             print('%%%%%%%% ERROR %%%%%%%%')
             print('The number of atmospheric layers is not consistent in the parameters file\n')
             return 0
-        self.atm = atmosphere(wvlAtm,r0,weights,heights,wSpeed,wDir,L0)            
+        self.atm = atmosphere(wvlAtm,r0,weights,heights/np.cos(zenithAngle*np.pi/180),wSpeed,wDir,L0)            
         
         #%% Sampling and field of view
         self.psInMas = eval(config['PSF_DIRECTIONS']['psInMas'])

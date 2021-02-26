@@ -92,7 +92,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
         def __init__(self):
             self.iter = 0
         def __call__(self,y):
-            if (self.iter%3)==0 and (method=='lm' or verbose !=2): print("-",end="")
+            if (self.iter%3)==0 and (method=='lm' or verbose == 0 or verbose == 1): print("-",end="")
             self.iter += 1
             psf = psfModelInst(mini2input(y))
             return (sqW * (psf - image)).reshape(-1)
@@ -133,10 +133,10 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
     # PERFORMING MINIMIZATION WITH CONSTRAINS AND BOUNDS
     if method == 'trf':
         result = least_squares(cost,input2mini(x0),method='trf',bounds=get_bounds(psfModelInst),\
-                               ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=verbose)
+                               ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0))
     else:
         result = least_squares(cost,input2mini(x0),method='lm',\
-                               ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=verbose)
+                               ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0))
 
     # update parameters
     result.x      =  mini2input(result.x)
@@ -160,7 +160,7 @@ def evaluateFittingQuality(result,psfModelInst):
     def meanErrors(sky,fit):
         mse = 1e2*np.sqrt(np.sum((sky-fit)**2))/sky.sum()
         mae = 1e2*np.sum(abs(sky-fit))/sky.sum()
-        fvu = 1e2*np.sum((sky-fit)**2)/sky.var()
+        fvu = 1e2*np.sum((sky-fit)**2)/np.sum((sky-sky.mean())**2)
         return mse,mae,fvu
     
     result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.tel.pupil,psfModelInst.samp)
