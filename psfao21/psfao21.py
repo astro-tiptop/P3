@@ -80,7 +80,7 @@ class psfao21:
         self.psdKolmo_ =  0.0229 * self.mskOut_* ((1.0 /self.atm.L0**2) + self.k2_) ** (-11/6)
         
     # INIT
-    def __init__(self,file,circularAOarea='circle',antiAlias=False,aliasPSD=False,pathStat=None):
+    def __init__(self,file,circularAOarea='circle',antiAlias=False,aliasPSD=False,pathStat=None,fitCn2=False):
         
         tstart = time.time()
         
@@ -111,10 +111,23 @@ class psfao21:
             if any(self.atm.heights) and any(self.src.zenith):
                 self.Dani_l = self.instantiateAnisoplanatism(self.nPix*self.k_,self.samp)
                 self.isAniso = True
+                if fitCn2 == False: 
+                    self.Kaniso = np.zeros((self.src.nSrc,self.nWvl,self.nPix*self.k_,self.nPix*self.k_))
+                    Cn2  = self.atm.r0**(-5/3) * (self.atm.wvl/self.wvlRef)**2  * self.atm.weights
+                    for l in range(self.nWvl):
+                        wvl_l             = self.wvl[l]
+                        wvlRatio          = (self.wvlRef/wvl_l) ** 2
+                        for iSrc in range(self.src.nSrc):   
+                            Dani                = (self.Dani_l[iSrc].T * Cn2 * wvlRatio).sum(axis=2)
+                            self.Kaniso[iSrc,l] = np.exp(-0.5 * Dani)
+                    self.atm = atmosphere(self.atm.wvl,self.atm.r0,[1],[0],self.atm.wSpeed.mean(),self.atm.wDir.mean(),self.atm.L0)   
+                    self.isAniso = False
             else:
                 self.Dani_l = None
+                self.Kaniso = np.ones((self.src.nSrc,self.nWvl))
                 self.isAniso = False
-                
+            
+            
             # ONE OF SEVERAL FRAMES
             self.isCube = any(rad2mas * self.src.direction[0]/self.psInMas > self.nPix) \
             or all(rad2mas * self.src.direction[1]/self.psInMas > self.nPix)
@@ -226,6 +239,7 @@ class psfao21:
                 for k in range(self.nModes):
                     self.statModes[:,:,k] = FourierUtils.interpolateSupport(tmp[:,:,k],self.nPup,kind='linear')
                 self.isStatic = True
+        
         #%% Guide stars
         wvlGs      = np.unique(np.array(eval(config['SENSOR_HO']['SensingWavelength_HO'])))
         zenithGs   = np.array(eval(config['GUIDESTARS_HO']['GuideStarZenith_HO']))
@@ -309,7 +323,7 @@ class psfao21:
         otfStat = FourierUtils.pupil2otf(self.tel.pupil * self.apodizer,phaseStat,samp)
         return FourierUtils.interpolateSupport(otfStat,nOtf)
     
-    def __call__(self,x0,xdata=None,nPix=None):
+    def __call__(self,x0,nPix=None):
         
         # INSTANTIATING
         if nPix == None:
@@ -371,11 +385,12 @@ class psfao21:
             for iSrc in range(self.src.nSrc): # LOOP ON SOURCES
                 
                 # ANISOPLANATISM
-                Kaniso = 1
                 if self.isAniso and len(Cn2) == self.Dani_l.shape[1]:
                     Dani = (self.Dani_l[iSrc].T * Cn2 * wvlRatio).sum(axis=2)
                     Kaniso = np.exp(-0.5 * Dani)
-                
+                else:
+                    Kaniso = self.Kaniso[iSrc,l]
+                    
                 # Stellar parameters
                 if len(x0_stellar):
                     F   = x0_stellar[iSrc]
@@ -479,12 +494,12 @@ class psfao21:
         
         nSrc    = self.src.nSrc
         nLayer  = self.atm.nL
-        
+        Hs      = self.atm.heights * self.tel.airmass
         if method == 'psd':   
             # PSD METHOD : FASTER PSD METHOD WORKING FOR ANGULAR ANISOPLANATISM        
             Dani_l = np.zeros((nSrc,nLayer,nPix,nPix))
             L  = (self.tel.D * self.samp)**2
-            Hs = self.atm.heights
+            
             cte  = (24*ssp.gamma(6/5)/5)**(5/6)*(ssp.gamma(11/6)**2./(2.*np.pi**(11/3)))
             kern = cte * ((1.0 /self.atm.L0**2) + self.k2_) ** (-11/6)
             kern = self.pistonFilter_ * kern
@@ -527,8 +542,8 @@ class psfao21:
                 thy = ay[iSrc]            
                 if thx !=0 or thy !=0:
                     for l  in range(nLayer):
-                        zl    = self.atm.heights[l]
-                        if zl !=0:
+                        zl    = Hs[l]
+                        if zl !=0: 
                             I2    = Ialpha(f0*zl*thx,f0*zl*thy)
                             I3    = Ialpha(f0 * (U + zl*thx) , f0 * (V + zl*thy))
                             I4    = Ialpha(f0 * (U - zl*thx) , f0 * (V - zl*thy))
