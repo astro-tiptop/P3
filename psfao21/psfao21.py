@@ -199,7 +199,7 @@ class psfao21:
         self.wvl     = np.asarray([wvlSrc])
         self.nWvl    = len(self.wvl)
         self.wvlRef  = self.wvl.min()
-        self.nPup    = 2*int(np.ceil(self.nPix*self.k_/self.samp/2))
+        self.nPup    = 2*2*int(np.ceil(self.nPix*self.k_/self.samp/2))
         self.nAct    = np.floor(self.D/np.array(eval(config['DM']['DmPitchs']))+1)
         self.src     = source(wvlSrc,zenithSrc,azimuthSrc,types="SCIENTIFIC STAR",verbose=True)   
         
@@ -233,7 +233,10 @@ class psfao21:
                 self.statModes = fits.getdata(self.path_statModes)
                 s1,s2,s3 = self.statModes.shape
                 if s1 != s2: # mode on first dimension
-                    tmp = np.transpose(self.statModes,(1,2,0))
+                    tmp = np.transpose(self.statModes,(1,2,0))  
+                else:
+                    tmp = self.statModes
+                    
                 self.nModes = tmp.shape[-1]
                 self.statModes = np.zeros((self.nPup,self.nPup,self.nModes))
                 
