@@ -19,7 +19,7 @@ from psfFitting.confidenceInterval import confidence_interval
 
 #%%
 def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
-               ftol=1e-8,xtol=1e-8,gtol=1e-8,max_nfev=1000,verbose=0):
+               ftol=1e-8,xtol=1e-8,gtol=1e-8,max_nfev=1000,verbose=0,getMetrics=False):
     """Fit a PSF with a parametric model solving the least-square problem
        epsilon(x) = SUM_pixel { weights * (amp * Model(x) + bck - psf)² }
     
@@ -163,8 +163,8 @@ def evaluateFittingQuality(result,psfModelInst):
         fvu = 1e2*np.sum((sky-fit)**2)/np.sum((sky-sky.mean())**2)
         return mse,mae,fvu
     
-    result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.tel.pupil,psfModelInst.samp)
-    result.SR_fit   = FourierUtils.getStrehl(result.im_fit,psfModelInst.tel.pupil,psfModelInst.samp)
+    result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.tel.pupil,psfModelInst.sampCen)
+    result.SR_fit   = FourierUtils.getStrehl(result.im_fit,psfModelInst.tel.pupil,psfModelInst.sampCen)
     result.FWHMx_sky , result.FWHMy_sky = FourierUtils.getFWHM(result.im_sky,psfModelInst.psInMas,nargout=2)
     result.FWHMx_fit , result.FWHMy_fit = FourierUtils.getFWHM(result.im_fit,psfModelInst.psInMas,nargout=2)
     result.mse, result.mae , result.fvu = meanErrors(result.im_sky,result.im_fit)

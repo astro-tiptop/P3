@@ -37,6 +37,21 @@ class psfao21:
     def wvl(self,val):
         self.__wvl = val
         self.samp  = val* rad2mas/(self.psInMas*self.D)
+    @property
+    def wvlRef(self):
+        return self.__wvlRef
+    @wvlRef.setter
+    def wvlRef(self,val):
+        self.__wvlRef = val
+        self.sampRef  = val* rad2mas/(self.psInMas*self.D)
+    
+    @property
+    def wvlCen(self):
+        return self.__wvlCen
+    @wvlCen.setter
+    def wvlCen(self,val):
+        self.__wvlCen = val
+        self.sampCen  = val* rad2mas/(self.psInMas*self.D)
         
     # SAMPLING
     @property
@@ -44,22 +59,31 @@ class psfao21:
         return self.__samp
     @samp.setter
     def samp(self,val):
-        if val >=2:
-            self.k_ = 1;
-        else:
-            self.k_ = int(np.ceil(2.0/val)) # works for oversampling
-            
-        self.__samp  = self.k_ * val
-        self.kxky_  = self.freq_array(self.nPix*self.k_,self.__samp,self.D)
-        self.k2_    = self.kxky_[0]**2 + self.kxky_[1]**2            
-        
+        self.k_      = np.ceil(2.0/val).astype('int') # works for oversampling
+        self.__samp  = self.k_ * val     
+    @property
+    def sampCen(self):
+        return self.__sampCen
+    @sampCen.setter
+    def sampCen(self,val):
+        self.kCen_      = int(np.ceil(2.0/val))# works for oversampling
+        self.__sampCen  = self.kCen_ * val  
+    @property
+    def sampRef(self):
+        return self.__sampRef
+    @sampRef.setter
+    def sampRef(self,val):
+        self.kRef_      = int(np.ceil(2.0/val)) # works for oversampling
+        self.__sampRef  = self.kRef_ * val
+        self.kxky_      = self.freq_array(self.nPix*self.kRef_,self.__sampRef,self.D)
+        self.k2_        = self.kxky_[0]**2 + self.kxky_[1]**2                   
         #piston filter
         if hasattr(self,'Dcircle'):
             D  = self.Dcircle
         else:
-            D = self.D
-            
+            D = self.D          
         self.pistonFilter_= 1 - 4*self.sombrero(1, np.pi*D*np.sqrt(self.k2_)) ** 2
+        self.pistonFilter_[self.nPix*self.kRef_//2,self.nPix*self.kRef_//2] = 0
             
     # CUT-OFF FREQUENCY
     @property
@@ -92,13 +116,13 @@ class psfao21:
         
         if self.status:
             # DEFINING THE DOMAIN ANGULAR FREQUENCIES
-            self.U_,self.V_  = self.shift_array(self.nPix*self.k_,self.nPix*self.k_,fact = 2)     
+            self.nOtf        = self.nPix * self.kRef_
+            self.U_,self.V_  = self.shift_array(self.nOtf,self.nOtf,fact = 2)     
             self.U2_         = self.U_**2
             self.V2_         = self.V_**2
             self.UV_         = self.U_*self.V_
-            self.otfDL       = self.getStaticOTF(self.nPix*self.k_,self.samp,self.tel.obsRatio,self.wvl)
+            self.otfDL       = self.getStaticOTF(self.nOtf,self.sampRef,self.tel.obsRatio,self.wvlRef)
             self.otfStat     = self.otfDL
-            self.nOtf        = self.otfDL.shape[0]
             
             # ALIASING PSD
             self.aliasPSD = aliasPSD
@@ -109,14 +133,14 @@ class psfao21:
                 
             # ANISOPLANATISM
             if any(self.atm.heights) and any(self.src.zenith):
-                self.Dani_l = self.instantiateAnisoplanatism(self.nPix*self.k_,self.samp)
+                self.Dani_l = self.instantiateAnisoplanatism(self.nOtf,self.sampRef)
                 self.isAniso = True
                 if fitCn2 == False: 
-                    self.Kaniso = np.zeros((self.src.nSrc,self.nWvl,self.nPix*self.k_,self.nPix*self.k_))
+                    self.Kaniso = np.zeros((self.src.nSrc,self.nWvl,self.nOtf,self.nOtf))
                     Cn2  = self.atm.r0**(-5/3) * (self.atm.wvl/self.wvlRef)**2  * self.atm.weights
                     for l in range(self.nWvl):
-                        wvl_l             = self.wvl[l]
-                        wvlRatio          = (self.wvlRef/wvl_l) ** 2
+                        wvl_l     = self.wvl[l]
+                        wvlRatio  = (self.wvlRef/wvl_l) ** 2
                         for iSrc in range(self.src.nSrc):   
                             Dani                = (self.Dani_l[iSrc].T * Cn2 * wvlRatio).sum(axis=2)
                             self.Kaniso[iSrc,l] = np.exp(-0.5 * Dani)
@@ -196,10 +220,38 @@ class psfao21:
             print('The number of scientific sources is not consistent in the parameters file\n')
             return 0
         
-        self.wvl     = np.asarray([wvlSrc])
-        self.nWvl    = len(self.wvl)
-        self.wvlRef  = self.wvl.min()
-        self.nPup    = 2*2*int(np.ceil(self.nPix*self.k_/self.samp/2))
+        # MANAGING WAVELENGTHS
+        if config.has_option('POLYCHROMATISM','spectralBandwidth'):
+            self.wvl_bw = eval(config['POLYCHROMATISM']['spectralBandwidth'])
+        else:
+            self.wvl_bw = 0
+        
+        if self.wvl_bw != 0:
+            # CASE 1: SINGLE POLYCHROMATIC PSF
+            self.wvl_dpx = eval(config['POLYCHROMATISM']['dispersionX'])
+            self.wvl_dpy = eval(config['POLYCHROMATISM']['dispersionY'])
+            self.wvl_tr  = eval(config['POLYCHROMATISM']['transmittance'])
+            if (len(self.wvl_dpx) == len(self.wvl_dpx)) and (len(self.wvl_dpx) == len(self.wvl_tr)):
+                self.nWvl    = len(self.wvl_tr)
+                self.wvlRef  = wvlSrc - self.wvl_bw/2
+                self.wvlMax  = wvlSrc + self.wvl_bw/2
+                self.wvl     = np.linspace(self.wvlRef,self.wvlMax,self.nWvl)
+            else:
+                print('%%%%%%%% ERROR %%%%%%%%')
+                print('The number of spectral bins are not consistent in the parameters file\n')
+                return 0
+        else:
+            # CASE 2 : DATA CUBE OF MONOCHROMATIC PSF
+            self.wvl     = np.unique(wvlSrc)
+            self.nWvl    = len(self.wvl)
+            self.wvlRef  = self.wvl.min()
+        self.wvlCen = np.mean(self.wvl)
+        #PUPIL RESOLUTION
+        if config.has_option('telescope','resolution'):
+            self.nPup = eval(config['telescope']['resolution'])
+        else:
+            self.nPup = 2*int(np.ceil(self.nPix*self.kRef_/self.samp.min()/2))
+                
         self.nAct    = np.floor(self.D/np.array(eval(config['DM']['DmPitchs']))+1)
         self.src     = source(wvlSrc,zenithSrc,azimuthSrc,types="SCIENTIFIC STAR",verbose=True)   
         
@@ -218,7 +270,7 @@ class psfao21:
         if path_static != [] and ospath.isfile(path_static) == True:
              if  re.search(".fits",path_static)!=None :
                 self.opdMap_ext = fits.getdata(path_static)
-                self.opdMap_ext = FourierUtils.interpolateSupport(self.opdMap_ext,self.nPup,kind='linear')
+                self.opdMap_ext = self.tel.pupil*FourierUtils.interpolateSupport(self.opdMap_ext,self.nPup,kind='linear')
         
         # STATIC ABERRATIONS
         self.statModes = None
@@ -228,6 +280,7 @@ class psfao21:
             self.path_statModes = eval(config['telescope']['path_statModes'])
         else:
             self.path_statModes = []
+            
         if self.path_statModes:
             if ospath.isfile(self.path_statModes) == True and re.search(".fits",self.path_statModes)!=None:                
                 self.statModes = fits.getdata(self.path_statModes)
@@ -241,7 +294,7 @@ class psfao21:
                 self.statModes = np.zeros((self.nPup,self.nPup,self.nModes))
                 
                 for k in range(self.nModes):
-                    self.statModes[:,:,k] = FourierUtils.interpolateSupport(tmp[:,:,k],self.nPup,kind='linear')
+                    self.statModes[:,:,k] = self.tel.pupil * FourierUtils.interpolateSupport(tmp[:,:,k],self.nPup,kind='linear')
                 self.isStatic = True
         
         #%% Guide stars
@@ -256,10 +309,6 @@ class psfao21:
             return 0
         self.gs = source(wvlGs,zenithGs,azimuthGs,height=heightGs,types="GUIDE STAR",verbose=True)   
 
-        #%% CHROMATISM
-        self.dispersion     = np.array(eval(config['POLYCHROMATISM']['dispersion']))
-        self.transmittance  = np.array(eval(config['POLYCHROMATISM']['transmittance']))
-        self.bandwidth      = np.array(eval(config['POLYCHROMATISM']['transmittance']))
         self.t_getParam = 1000*(time.time() - tstart)
         return 1
     
@@ -272,7 +321,7 @@ class psfao21:
           bounds_up   = list(np.inf * np.ones(self.atm.nL))          
           # PSD Parameters
           bounds_down += [0,0,_EPSILON,_EPSILON,-np.pi,1+_EPSILON]
-          bounds_up   += [np.inf,np.inf,np.inf,np.inf,np.pi,np.inf]         
+          bounds_up   += [np.inf,np.inf,np.inf,np.inf,np.pi,5]         
           # Jitter
           bounds_down += [0,0,-1]
           bounds_up   += [np.inf,np.inf,1]
@@ -283,17 +332,17 @@ class psfao21:
           bounds_down += list(-self.nPix//2 * np.ones(2*self.src.nSrc))
           bounds_up   += list( self.nPix//2 * np.ones(2*self.src.nSrc))
           # Background
-          bounds_down += [-np.inf,-np.inf,-np.inf]
-          bounds_up   += [np.inf,np.inf,np.inf]
+          bounds_down += [-np.inf]
+          bounds_up   += [np.inf]
           # Static aberrations
-          bounds_down += list(-self.wvlRef/2 * np.ones(self.nModes))
-          bounds_up   += list(self.wvlRef/2 * np.ones(self.nModes))
+          bounds_down += list(-self.wvlRef/2*1e9 * np.ones(self.nModes))
+          bounds_up   += list(self.wvlRef/2 *1e9 * np.ones(self.nModes))
           return (bounds_down,bounds_up)
         
         
     def getPSD(self,x0):
         # Get the moffat PSD
-        pix2freq = 1/(self.tel.D * self.samp)
+        pix2freq = 1/(self.tel.D * self.sampRef)
         psd = self.moffat(self.kxky_,list(x0[3:])+[0,0])
         # Piston filtering
         psd = self.pistonFilter_ * psd
@@ -301,8 +350,8 @@ class psfao21:
         # Combination
         psd = x0[0] * (self.psdAlias+self.psdKolmo_) + self.mskIn_ * (x0[1] + psd/psd.sum() * x0[2]/pix2freq**2 )
         # Wavefront error
-        self.wfe = np.sqrt(psd.sum()) * pix2freq * self.wvl*1e9/2/np.pi
-        self.wfe_fit = np.sqrt(x0[0] * self.psdKolmo_.sum()) * pix2freq * self.wvl*1e9/2/np.pi
+        self.wfe = np.sqrt(psd.sum()) * pix2freq * self.wvlRef*1e9/2/np.pi
+        self.wfe_fit = np.sqrt(x0[0] * self.psdKolmo_.sum()) * pix2freq * self.wvlRef*1e9/2/np.pi
         return psd
     
     def getStaticOTF(self,nOtf,samp,cobs,wvl,xStat=[]):
@@ -345,46 +394,46 @@ class psfao21:
         # Jitter
         x0_jitter = list(xall[nL+6:nL+9])
         # Astrometry/Photometry/Background
-        x0_stellar = list(xall[nL+9:nL+9+3*self.src.nSrc+1])
+        x0_stellar = list(xall[nL+9:nL+10+3*self.src.nSrc])
         # Static aberrations
         if self.isStatic:
             x0_stat = list(xall[nL+10+3*self.src.nSrc:])
         else:
             x0_stat = []    
         
-        # GETTING THE PSD
-        psd_ref = self.getPSD([r053]+ x0_psd)
-        
+        # GETTING THE PHASE STRUCTURE FUNCTION
+        self.psd = self.getPSD([r053]+ x0_psd)
+        if self.antiAlias:
+            	self.psd = np.pad(self.psd,(self.nOtf//2,self.nOtf//2)) 
+        #covariance map
+        Bphi        = fft.fft2(fft.fftshift(self.psd)) / (self.tel.D * self.sampRef)**2       
+        # phase structure function
+        self.Dphi   = fft.fftshift(np.real(2*(Bphi.max() - Bphi)))
+        if self.antiAlias:
+            	self.Dphi   = FourierUtils.interpolateSupport(self.Dphi,self.nOtf)    
+
+        # ADDITIONAL JITTER
+        if len(x0_jitter) and (x0_jitter[0]!=0 or x0_jitter[1]!=0): # note sure about the normalization
+            self.Djitter = (x0_jitter[0]**2 * self.U2_ + x0_jitter[1]**2 * self.V2_+ \
+                    2*x0_jitter[0] * x0_jitter[1] * x0_jitter[2] * self.UV_)
+            Kjitter = np.exp(-0.5 * self.Djitter * (np.sqrt(2)/self.psInMas)**2)
+        else:
+            	Kjitter = 1
+                               
         for l in range(self.nWvl): # LOOP ON WAVELENGTH
             
-            # PHASE STRUCTURE FUNCTION
+            # WAVELENGTH
             wvl_l       = self.wvl[l]
-            wvlRatio    = (self.wvlRef/wvl_l) ** 2
-            
-            self.psd    = psd_ref * wvlRatio
-            if self.antiAlias:
-                self.psd    = np.pad(self.psd,(self.nOtf//2,self.nOtf//2))           
-            Bphi        = fft.fft2(fft.fftshift(self.psd)) / (self.tel.D * self.samp)**2       
-            self.Dphi   = fft.fftshift(np.real(2*(Bphi.max() - Bphi)))
-            if self.antiAlias:
-                self.Dphi   = FourierUtils.interpolateSupport(self.Dphi,self.nOtf)    
-                
-            # ADDITIONAL JITTER
-            if len(x0_jitter): # note sure about the normalization
-                self.Djitter = (x0_jitter[0]**2 * self.U2_ + x0_jitter[1]**2 * self.V2_+ \
-                    2*x0_jitter[0] * x0_jitter[1] * x0_jitter[2] * self.UV_)
-                Kjitter   = np.exp(-0.5 * self.Djitter * (np.sqrt(2)/self.psInMas)**2)
-            else:
-                Kjitter = 1
+            wvlRatio    = (self.wvlRef/wvl_l) ** 2           
             
             # STATIC OTF
             if len(x0_stat) or self.nWvl > 1:
-                self.otfStat = self.getStaticOTF(self.nPix*self.k_,self.samp,self.tel.obsRatio,wvl_l,xStat=x0_stat)
+                self.otfStat = self.getStaticOTF(int(self.nPix*self.k_[l]),self.samp[l],self.tel.obsRatio,wvl_l,xStat=x0_stat)
             else:
                 self.otfStat = self.otfDL
               
             # ON-AXIS OTF
-            otfOn = self.otfStat * np.exp(-0.5*self.Dphi)
+            otfOn = self.otfStat * np.exp(-0.5*self.Dphi * wvlRatio)
             
             for iSrc in range(self.src.nSrc): # LOOP ON SOURCES
                 
@@ -421,7 +470,7 @@ class psfao21:
                 if nPix != self.nPix:
                     psf_i = FourierUtils.cropSupport(psf_i,nPix/self.nPix)
                 # SCALING
-                psf[iSrc] += F * psf_i
+                psf[iSrc] += F * psf_i/psf_i.sum()
         
         # DEFINING THE OUTPUT FORMAT
         if self.isCube:
@@ -502,7 +551,7 @@ class psfao21:
         if method == 'psd':   
             # PSD METHOD : FASTER PSD METHOD WORKING FOR ANGULAR ANISOPLANATISM        
             Dani_l = np.zeros((nSrc,nLayer,nPix,nPix))
-            L  = (self.tel.D * self.samp)**2
+            L  = (self.tel.D * self.sampRef)**2
             
             cte  = (24*ssp.gamma(6/5)/5)**(5/6)*(ssp.gamma(11/6)**2./(2.*np.pi**(11/3)))
             kern = cte * ((1.0 /self.atm.L0**2) + self.k2_) ** (-11/6)
@@ -531,7 +580,7 @@ class psfao21:
             Dani_l = np.zeros((nSrc,nLayer,nPix,nPix))
 
             # Angular frequencies
-            U,V = self.shift_array(nPix,nPix,fact=D*self.samp)
+            U,V = self.shift_array(nPix,nPix,fact=D*self.sampRef)
        
             # Instantiation
             I0      = 3/5

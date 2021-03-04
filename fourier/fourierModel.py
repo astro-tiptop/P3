@@ -100,7 +100,8 @@ class fourierModel:
         if self.kcExt.any():
             return self.kcExt
         else:
-            return 1/(2*max(self.pitchs_dm.min(),self.pitchs_wfs.min()))
+            #return 1/(2*max(self.pitchs_dm.min(),self.pitchs_wfs.min()))
+            return 1/(2*self.pitchs_dm)
     
     @property
     def kcDM(self):
@@ -169,18 +170,17 @@ class fourierModel:
             id2                 = np.floor(self.fovInPixel/2 + self.tel.resolution/2).astype(int)
             P[id1:id2,id1:id2]  = self.tel.pupil
             if self.path_static != []:
-                obj = fits.open(self.path_static)
-                im  = obj[0].data
-                obj.close()
+                im = fits.getdata(self.path_static)
                 im[np.where(im!=im)] = 0
                 im              = FourierUtils.interpolateSupport(im,self.resolution,kind='linear')
                 self.staticMap  = np.zeros((self.fovInPixel,self.fovInPixel))
                 self.staticMap[id1:id2,id1:id2]  = im
-                P               = P*np.exp(-2*complex(0,1)*np.pi*self.staticMap/self.wvlSrc)
+                P               = P*np.exp(-2*complex(0,1)*np.pi*self.staticMap/self.wvlRef)
             
-            self.otfTel         = np.real(fft.fftshift(FourierUtils.fftCorrel(P,P)))
-            self.otfTel         = self.otfTel/self.otfTel.max()
-            
+            self.otfStat = np.real(fft.fftshift(FourierUtils.fftCorrel(P,P)))
+            self.otfStat = self.otfStat/self.otfStat.max()
+            self.otfTel  = np.real(fft.fftshift(FourierUtils.fftCorrel(abs(P),abs(P))))
+            self.otfTel  = self.otfTel/self.otfTel.max()
             
             # INIT OUTPUTS
             self.PSF = []
@@ -320,7 +320,6 @@ class fourierModel:
             
             self.nSrc = self.nSrc + self.nExtraSrc
           
-            
         # ----- verification
         self.src = []
         if len(self.zenithSrc) == len(self.azimuthSrc):
@@ -403,36 +402,39 @@ class fourierModel:
         
         #%% Sampling and field of view
         self.psf_FoV        = eval(config['PSF_DIRECTIONS']['psf_FoV'])
-        lonD                = rad2mas*self.wvlRef/self.D
+        lonD                = rad2mas*self.wvlSrc/self.D
         self.psInMas        = eval(config['PSF_DIRECTIONS']['psInMas'])
         if self.psInMas == 0:
+            self.shannon    = True
             self.psInMas    = lonD/2
+        else:
+            self.psInMas    = self.psInMas * np.ones(self.nWvl)
+            self.shannon    = False
           
         self.samp       = lonD/self.psInMas/2
-        if self.samp > 0.98 and self.samp < 1.02:
-            self.samp   = 1.0
-            
-        if self.samp >=1:
-            self.fovInPixel = int(max(self.psf_FoV,round(self.resolution*self.samp*2)))
+        self.samp[self.samp > 0.98] = 1.0
+        self.samp[self.samp<1.02]   = 1.0
+        if np.any(self.samp >=1):
+            self.fovInPixel = int(max(self.psf_FoV,round(self.resolution*self.samp.max()*2)))
         else:
-            self.fovInPixel = int(max(self.psf_FoV,round(2*self.resolution/self.samp)))
+            self.fovInPixel = int(max(self.psf_FoV,round(2*self.resolution/self.samp.min())))
         
         if self.verbose:
             print('.Field of view:\t\t%4.2f arcsec\n.Pixel scale:\t\t%4.2f mas\n.Over-sampling:\t\t%4.2f'%(self.fovInPixel*self.psInMas/1e3,self.psInMas,self.samp))
             print('\n-------------------------------------------\n')
         
-        self.PSDstep  = self.psInMas/self.wvlRef/rad2mas
+        self.PSDstep  = np.min(self.psInMas/self.wvlSrc/rad2mas)
         #self.resAO    = int(1/np.min(self.pitchs_dm)/self.PSDstep)
         self.resAO    = int(2*self.kc/self.PSDstep)
         
         #%% Additionnal jitter
-        self.jitterX = self.jitterY = self.jitterXY = 0.0    
+        self.jitterX = self.jitterY = self.thetaJitter = 0.0    
         if config.has_option('telescope', 'jitterX'):
             self.jitterX = eval(config['telescope']['jitterX'])[0]
         if config.has_option('telescope', 'jitterY'):
             self.jitterY = eval(config['telescope']['jitterY'])[0]
         if config.has_option('telescope', 'jitterY'):
-            self.corXY   = eval(config['telescope']['corXY'])[0]
+            self.thetaJitter   = eval(config['telescope']['thetaJitter'])[0]
             
         #%% instantiating sub-classes
         
@@ -463,7 +465,8 @@ class fourierModel:
         # Atmosphere
         self.atm = atmosphere(self.wvlAtm,self.r0,self.weights,self.heights,self.wSpeed,self.wDir,self.L0)
         self.atm_mod = atmosphere(self.wvlAtm,self.r0_mod,self.weights_mod,self.heights_mod,self.wSpeed_mod,self.wDir_mod,self.L0_mod)
-        self.atm.wvl = self.wvlRef
+        #updating the atmosphere wavelength !
+        self.atm.wvl     = self.wvlRef
         self.atm_mod.wvl = self.wvlRef
         
         # Scientific Sources
@@ -490,9 +493,9 @@ class fourierModel:
         i           = complex(0,1)
         d           = self.pitchs_wfs[0]               
         if self.wfstype == 'shack-hartmann':
-            Sx          = 2*i*np.pi*self.kx*d
-            Sy          = 2*i*np.pi*self.ky*d                        
-            Av          = np.sinc(d*self.kx)*np.sinc(d*self.ky)*np.exp(i*np.pi*d*(self.kx+self.ky))        
+            Sx      = 2*i*np.pi*self.kx*d
+            Sy      = 2*i*np.pi*self.ky*d                        
+            Av      = np.sinc(d*self.kx)*np.sinc(d*self.ky)*np.exp(i*np.pi*d*(self.kx + self.ky))        
         elif self.wfstype == 'pyramid':
             # forward pyramid filter (continuous) from Conan
             umod    = 1/(2*d)/(self.nLenslet_HO/2)*self.modulation
@@ -507,7 +510,8 @@ class fourierModel:
         self.SxAv  = Sx*Av
         self.SyAv  = Sy*Av
         # MMSE
-        gPSD       = abs(self.SxAv)**2 + abs(self.SyAv)**2 + MV*self.Wn/self.Wphi
+        Watm       = self.atm.spectrum(self.kxy) * (self.atm.wvl/self.wvlGs) ** 2
+        gPSD       = abs(self.SxAv)**2 + abs(self.SyAv)**2 + MV*self.Wn/Watm
         self.Rx    = np.conj(self.SxAv)/gPSD
         self.Ry    = np.conj(self.SyAv)/gPSD
         # Manage NAN value if any   
@@ -659,21 +663,19 @@ class fourierModel:
         delay       = np.floor(td/Ts)
                    
         # Instantiation
-        h1          = np.zeros((nPts,nPts))
+        h1          = np.zeros((nPts,nPts),dtype=complex)
         h2          = np.zeros((nPts,nPts))
         hn          = np.zeros((nPts,nPts))
-        h1buf       = np.zeros((nPts,nPts,nTh))*(1+i)
+        h1buf       = np.zeros((nPts,nPts,nTh),dtype=complex)
         h2buf       = np.zeros((nPts,nPts,nTh))
         hnbuf       = np.zeros((nPts,nPts,nTh))
         
         # Get the noise propagation factor
-        #import pdb
-        #pdb.set_trace()
-        f      = np.logspace(-2,np.log10(0.5/Ts),nF)
-        z      = np.exp(-2*i*np.pi*f*Ts)
+        f           = np.logspace(-3,np.log10(0.5/Ts),nF)
+        z           = np.exp(-2*i*np.pi*f*Ts)
         self.hInt   = self.loopGain/(1.0 - z**(-1.0))
-        self.rtfInt = 1.0/(1+self.hInt*z**(-delay))
-        self.atfInt = self.hInt*z**(-delay)*self.rtfInt
+        self.rtfInt = 1.0/(1 + self.hInt * z**(-delay))
+        self.atfInt = self.hInt * z**(-delay) * self.rtfInt
         
         if self.loopGain == 0:
             self.ntfInt = 1
@@ -681,38 +683,31 @@ class fourierModel:
             self.ntfInt = self.atfInt/z
                 
         self.noiseGain = np.trapz(abs(self.ntfInt)**2,f)*2*Ts
-        
-        
+             
         # Get transfer functions                                        
         for l in range(self.atm.nL):
             for iTheta in range(nTh):
                 fi      = -vx[l]*self.kx*costh[iTheta] - vy[l]*self.ky*costh[iTheta]
-                idx     = abs(fi) <1e-7;
+                #idx     = abs(fi) <1e-7;
+                #fi[idx] = 1e-8*np.sign(fi[idx])
                 z       = np.exp(-2*i*np.pi*fi*Ts)
-                fi[idx] = 1e-8*np.sign(fi[idx])
-                hInt    = self.loopGain/(1-z**(-1))
-                rtfInt  = 1/(1+hInt*z**(-delay))
-                atfInt  = hInt*z**(-delay)*rtfInt
+                hInt    = self.loopGain/(1.0 - z**(-1.0))
+                rtfInt  = 1.0/(1.0 + hInt * z**(-delay))
+                atfInt  = hInt * z**(-delay) * rtfInt
                 
-                # ao transfer function
-                MAG               = abs(atfInt)                
-                MAG[fi == 0]      = 1
-                PH                = np.angle(atfInt)                
-                h2buf[:,:,iTheta] = abs(MAG*np.exp(i*PH))**2
-                h1buf[:,:,iTheta] = MAG*np.exp(i*PH)
+                # AO transfer function
+                h2buf[:,:,iTheta] = abs(atfInt)**2
+                h1buf[:,:,iTheta] = atfInt
                 # noise transfer function
                 if self.loopGain == 0:
                     ntfInt = 1
                 else:
                     ntfInt = atfInt/z
-                MAG = ntfInt           
-                MAG[fi == 0] = 1
-                PH  = np.angle(ntfInt)  
-                hnbuf[:,:,iTheta] = abs(MAG*np.exp(i*PH))**2
+                hnbuf[:,:,iTheta] = abs(ntfInt)**2
                 
-            h1 = h1 + weights[l]*np.sum(h1buf,axis=2)/nTh
-            h2 = h2 + weights[l]*np.sum(h2buf,axis=2)/nTh
-            hn = hn + weights[l]*np.sum(hnbuf,axis=2)/nTh
+            h1 += weights[l]*np.sum(h1buf,axis=2)/nTh
+            h2 += weights[l]*np.sum(h2buf,axis=2)/nTh
+            hn += weights[l]*np.sum(hnbuf,axis=2)/nTh
         
         self.h1 = h1
         self.h2 = h2
@@ -788,6 +783,7 @@ class fourierModel:
         """NOISEPSD Noise error power spectrum density
         """
         tstart  = time.time()
+        psd     = np.zeros((self.resAO,self.resAO))
         if self.noiseVariance[0] > 0:
             if self.nGs < 2:        
                 psd = abs(self.Rx**2 + self.Ry**2)
@@ -802,7 +798,7 @@ class fourierModel:
                     tmp     = np.matmul(PW,np.matmul(self.Cb,PW_t))
                     psd[:,:,j] = self.mskIn_ * tmp[:,:,0,0]*self.pistonFilterIn_
         
-        self.t_noisePSD = 1000*(time.time() - tstart)
+            self.t_noisePSD = 1000*(time.time() - tstart)
         # NOTE: the noise variance is the same for all WFS
         return  psd*self.noiseGain * np.mean(self.noiseVariance)
     
@@ -814,12 +810,12 @@ class fourierModel:
         if hasattr(self, 'Rx') == False:
             self.reconstructionFilter()
 
-        F = self.Rx*self.SxAv+ self.Ry*self.SyAv     
+        F = self.Rx*self.SxAv + self.Ry*self.SyAv     
         Watm = self.Wphi * self.pistonFilterIn_       
         if (self.loopGain == 0):
-            psd = abs(1-F)**2*Watm
+            psd = abs(1-F)**2 * Watm
         else:
-            psd = (1 + abs(F)**2*self.h2 - 2*np.real(F*self.h1))*Watm
+            psd = (1.0 + abs(F)**2*self.h2 - 2*np.real(F*self.h1))*Watm
         
         self.t_servoLagPSD = 1000*(time.time() - tstart)
         return self.mskIn_ * psd
@@ -834,7 +830,7 @@ class fourierModel:
         Hs  = self.heights
         Ws  = self.atm.weights
         nK  = self.resAO
-        deltaT  = self.latency+self.samplingTime
+        deltaT  = self.latency + self.samplingTime
         
         Watm = self.Wphi * self.pistonFilterIn_      
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
@@ -850,9 +846,9 @@ class fourierModel:
                     A = np.ones((self.resAO,self.resAO))
           
                 if (self.loopGain == 0):  
-                    psd[:,:,s] = abs(1-F)**2*Watm
+                    psd[:,:,s] = abs(1-F)**2 * Watm
                 else:
-                    psd[:,:,s] = self.mskIn_ * (1 + abs(F)**2*self.h2- 2*np.real(F*self.h1*A))*Watm                   
+                    psd[:,:,s] = self.mskIn_ * (1 + abs(F)**2*self.h2 - 2*np.real(F*self.h1*A))*Watm                   
             else:    
                 # tomographic case
                 Beta = [self.src[s].direction[0],self.src[s].direction[1]]
@@ -1058,20 +1054,27 @@ class fourierModel:
         self.wfeChrom  = np.sqrt(self.psdChromatism.sum(axis=(0,1)))* rad2nm
         self.wfeTot = np.sqrt(self.wfeFit**2 + self.wfeAl**2 + self.wfeST**2 + self.wfeN**2)
         self.SRmar  = 100*np.exp(-(self.wfeTot*2*np.pi*1e-9/self.wvlSrc)**2)
-        
+        # bonus
+        self.psdS = self.servoLagPSD()
+        self.wfeS = np.sqrt(self.psdS.sum()) * rad2nm
+        if self.nGs == 1:
+            self.psdAni = self.anisoplanatismPSD()
+            self.wfeAni = np.sqrt(self.psdAni.sum(axis=(0,1))) * rad2nm
+        else:
+            self.wfeTomo = np.sqrt(self.wfeST**2 - self.wfeS**2)
+                
         # Print
         if self.verbose == True:
             print('\n_____ ERROR BREAKDOWN  ON-AXIS_____')
             print('------------------------------------------')
             idCenter = self.zenithSrc.argmin()
-            if len(fao.SR):
+            if len(self.SR):
                 print('.Image Strehl at %4.2fmicron:\t%4.2f%s'%(self.wvlRef*1e6,self.SR[idCenter,0],'%'))
             print('.Maréchal Strehl at %4.2fmicron:\t%4.2f%s'%(self.atm.wvl*1e6,self.SRmar[idCenter],'%'))
             print('.Residual wavefront error:\t%4.2fnm'%self.wfeTot[idCenter])
             print('.Fitting error:\t\t\t%4.2fnm'%self.wfeFit)
             print('.Differential refraction:\t%4.2fnm'%self.wfeDiffRef[idCenter])
             print('.Chromatic error:\t\t%4.2fnm'%self.wfeChrom[idCenter])
-            np.sqrt(self.psdDiffRef.sum(axis=(0,1)))* rad2nm
             print('.Aliasing error:\t\t%4.2fnm'%self.wfeAl)
             if self.nGs == 1:
                 print('.Noise error:\t\t\t%4.2fnm'%self.wfeN)
@@ -1079,16 +1082,11 @@ class fourierModel:
                 print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[idCenter])
             print('.Spatio-temporal error:\t\t%4.2fnm'%self.wfeST[idCenter])
             print('-------------------------------------------')
-            self.psdS = self.servoLagPSD()
-            self.wfeS = np.sqrt(self.psdS.sum()) * rad2nm
             print('.Sole servoLag error:\t\t%4.2fnm'%self.wfeS)
             print('-------------------------------------------')            
             if self.nGs == 1:
-                self.psdAni = self.anisoplanatismPSD()
-                self.wfeAni = np.sqrt(self.psdAni.sum(axis=(0,1))) * rad2nm
                 print('.Sole anisoplanatism error:\t%4.2fnm'%self.wfeAni[idCenter])
             else:
-                self.wfeTomo = np.sqrt(self.wfeST**2 - self.wfeS**2)
                 print('.Sole tomographic error:\t%4.2fnm'%self.wfeTomo[idCenter])
             print('-------------------------------------------')
         self.t_errorBreakDown = 1000*(time.time() - tstart)
@@ -1108,35 +1106,51 @@ class fourierModel:
         self.atm_mod.wvl= wvl
         
         U, V = np.mgrid[0:self.fovInPixel,0:self.fovInPixel].astype(float)
-        U = (U-self.fovInPixel/2) * 2/self.fovInPixel
-        V = (V-self.fovInPixel/2) * 2/self.fovInPixel
-                
+        U = (U - self.fovInPixel/2) * 2/self.fovInPixel
+        V = (V - self.fovInPixel/2) * 2/self.fovInPixel
+            
         # DEFINING THE RESIDUAL JITTER KERNEL
         if self.jitterX or self.jitterY:
-            Djitter = (self.jitterX**2 * U**2 + self.jitterY**2 * V**2 + 2*self.corXY * self.jitterX * self.jitterY * U*V)
-            self.Kjitter   = np.exp(-0.5 * Djitter * (np.sqrt(2)/self.psInMas)**2)
+            # geometry
+            th = self.thetaJitter * np.pi/180
+            U2 = np.cos(th) * U + np.sin(th) * V
+            V2 = np.cos(th) * V - np.sin(th) * U
+            # Gaussian kernel
+            # note 1 : Umax = self.samp*self.tel.D/self.wvlRef/(3600*180*1e3/np.pi) = 1/(2*psInMas)
+            # note 2 : the 1.16 factor is needed to get FWHM=jitter for jitter-limited PSF; needed to be figured out
+            Umax         = self.samp*self.tel.D/self.wvlSrc/(3600*180*1e3/np.pi)
+            ff_jitter    = 1.16
+            normFact     = ff_jitter*np.max(Umax)**2 *(2 * np.sqrt(2*np.log(2)))**2 #1.16
+            Djitter      = normFact * (self.jitterX**2 * U2**2  + self.jitterY**2 * V2**2)
+            self.Kjitter = np.exp(-0.5 * Djitter)
         else:
             self.Kjitter = 1
             
-        if self.loopGain == 0: #open-loop-case
-            self.PSF = np.zeros((self.fovInPixel,self.fovInPixel,self.nWvl))
-
+        # ---------------- OPEN-LOOP CASE
+        
+        if self.loopGain == 0:
+            self.PSF = np.zeros((self.fovInPixel,self.fovInPixel,self.nSrc,self.nWvl))
+            self.SR  = np.zeros((self.nSrc,self.nWvl))
             # Von-Kármánn PSD
             self.PSD = self.atm.spectrum(self.kExtxy) * FourierUtils.pistonFilter(self.tel.D,self.kExtxy) * (2*self.kc/self.resAO)**2 
             cov      = fft.fftshift(fft.fft2(fft.fftshift(self.PSD)))
-            sf       = (2*cov.max() - cov - np.conj(cov))
+            sf       = 2*np.real(cov.max() - cov)
             
             for j in range(self.nWvl):
-                otfTurb  = np.exp(-0.5*sf * (self.wvlRef/self.wvlSrc[j])**2) * self.Kjitter
-                otfTot   = otfTurb * self.otfTel
-                self.SR  = 1e2*np.abs(otfTot).sum(axis=(0,1))/self.otfTel.sum()
+                if self.shannon == True and self.nWvl > 1 and (self.jitterX or self.jitterY):
+                    normFact2 = ff_jitter*(self.samp[j]*self.tel.D/self.wvlSrc[j]/(3600*180*1e3/np.pi))**2 *(2 * np.sqrt(2*np.log(2)))**2
+                    self.Kjitter   = np.exp(-0.5 * Djitter * normFact2/normFact)
+                     
+                otfTurb    = np.exp(-0.5*sf * (self.wvlRef/self.wvlSrc[j])**2) * self.Kjitter
+                otfTot     = otfTurb * self.otfTel
+                self.SR[:,j] = 1e2*np.abs(otfTot).sum(axis=(0,1))/self.otfTel.sum() * np.ones(self.nSrc)
                 # PSF
                 psf      = np.real(fft.fftshift(fft.ifft2(fft.fftshift(otfTot))))
             
-                if self.samp <1:
-                    self.PSF[:,:,j] = FourierUtils.interpolateSupport(psf,int(round(self.resolution*2*self.samp)))
+                if self.samp[j] <1:
+                    self.PSF[:,:,:,j] = np.repeat(FourierUtils.interpolateSupport(psf,int(round(self.resolution*2*self.samp)))[:,:,np.newaxis],self.nSrc,axis=2)
                 else:
-                    self.PSF[:,:,j] = psf  
+                    self.PSF[:,:,:,j] = np.repeat(psf[:,:,np.newaxis],self.nSrc,axis=2)  
                 
                 if self.overSampling > 1:
                     idx1 = self.fovInPixel//2 - self.fovInPixel//2//self.overSampling
@@ -1144,14 +1158,11 @@ class fourierModel:
                     self.PSF = self.PSF[idx1:idx2,idx1:idx2,:]
                 
             # GET METRICS
-            if getFWHM == True:
-                self.FWHM  = FourierUtils.getFWHM(self.PSF,self.psInMas,rebin=1,method='contour',nargout=2)
-            if getEnsquaredEnergy==True:
-                self.EnsqE   = 1e2*FourierUtils.getEnsquaredEnergy(self.PSF)
-            if getEncircledEnergy==True:
-                rr,radialprofile = FourierUtils.radial_profile(self.PSF[:,:,0,0])
-                self.EncE   = 1e2*FourierUtils.getEncircledEnergy(self.PSF)
-    
+            if getFWHM == True or getEnsquaredEnergy==True or getEncircledEnergy==True:
+                self.getPsfMetrics(getEnsquaredEnergy=getEnsquaredEnergy,getEncircledEnergy=getEncircledEnergy,getFWHM=getFWHM)
+        
+        # ---------------- CLOSED-LOOP CASE
+        
         else:
             self.PSD   = self.powerSpectrumDensity() 
             self.PSF = np.zeros((self.fovInPixel,self.fovInPixel,self.nSrc,self.nWvl))
@@ -1164,25 +1175,47 @@ class fourierModel:
             else:
                 self.fftPhasor = 1
                 
-            kernel = self.otfTel * self.fftPhasor * self.Kjitter      
+            kernel = self.otfStat * self.fftPhasor * self.Kjitter    
             kernel = np.repeat(kernel[:,:,np.newaxis],self.nSrc,axis=2)     
             S     = self.otfTel.sum()
-        
+            
+            if self.path_static !=[]:
+                P0                  = np.zeros((self.fovInPixel,self.fovInPixel))
+                id1                 = np.floor(self.fovInPixel/2 - self.tel.resolution/2).astype(int)
+                id2                 = np.floor(self.fovInPixel/2 + self.tel.resolution/2).astype(int)
+                P0[id1:id2,id1:id2] = self.tel.pupil
+            S = self.otfTel.sum()
             # GET THE AO RESIDUAL PHASE STRUCTURE FUNCTION    
             cov = fft.fftshift(fft.fftn(fft.fftshift(self.PSD,axes=(0,1)),axes=(0,1)),axes=(0,1))
-            sf  = (2*cov.max(axis=(0,1)) - cov - np.conj(cov))
+            sf  = 2*np.real(cov.max(axis=(0,1)) - cov)
         
             # LOOP ON WAVELENGTHS   
             for j in range(self.nWvl):
-                # GET THE AO RESIDUAL OTF
+                
+                # UPDATE THE INSTRUMENTAL OTF
+                if self.path_static != []:
+                    P            = P0*np.exp(-2*complex(0,1)*np.pi*self.staticMap/self.wvlSrc[j])
+                    self.otfStat = np.real(fft.fftshift(FourierUtils.fftCorrel(P,P)))
+                    self.otfStat = self.otfStat/self.otfStat.max()  
+                    kernel       = self.otfStat * self.fftPhasor * self.Kjitter    
+                    kernel       = np.repeat(kernel[:,:,np.newaxis],self.nSrc,axis=2) 
+                
+                # UPDATE THE RESIDUAL JITTER
+                if self.shannon == True and self.nWvl > 1 and (self.jitterX or self.jitterY):
+                    normFact2    = ff_jitter*(self.samp[j]*self.tel.D/self.wvlSrc[j]/(3600*180*1e3/np.pi))**2  * (2 * np.sqrt(2*np.log(2)))**2
+                    self.Kjitter = np.exp(-0.5 * Djitter * normFact2/normFact)
+                    kernel       = self.otfStat * self.fftPhasor * self.Kjitter    
+                    kernel       = np.repeat(kernel[:,:,np.newaxis],self.nSrc,axis=2)     
+                    
+                # OTF
                 otfTurb     = np.exp(-0.5*sf*(2*np.pi*1e-9/self.wvlSrc[j])**2)
                 otfTot      = fft.fftshift(otfTurb * kernel,axes=(0,1))
                 self.SR[:,j]= 1e2*np.abs(otfTot).sum(axis=(0,1))/S
                 
                 # GET THE FINAL PSF
                 psf = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
-                if self.samp <1:
-                    self.PSF[:,:,:,j] = FourierUtils.interpolateSupport(psf,round(self.resolution*2*self.samp).astype('int'))
+                if self.samp[j] <1:
+                    self.PSF[:,:,:,j] = FourierUtils.interpolateSupport(psf,round(self.resolution*2*self.samp[j]).astype('int'))
                 else:
                     self.PSF[:,:,:,j] = psf           
     
@@ -1204,6 +1237,7 @@ class fourierModel:
     def getPsfMetrics(self,getEnsquaredEnergy=False,getEncircledEnergy=False,getFWHM=False):
         tstart  = time.time()
         self.FWHM = np.zeros((2,self.nSrc,self.nWvl))
+                    
         if getEnsquaredEnergy==True:
             self.EnsqE   = np.zeros((int(self.fovInPixel/2)+1,self.nSrc,self.nWvl))
         if getEncircledEnergy==True:
@@ -1212,7 +1246,7 @@ class fourierModel:
         for n in range(self.nSrc):
             for j in range(self.nWvl):
                 if getFWHM == True:
-                    self.FWHM[:,n,j]  = FourierUtils.getFWHM(self.PSF[:,:,n,j],self.psInMas,rebin=1,method='contour',nargout=2)
+                    self.FWHM[:,n,j]  = FourierUtils.getFWHM(self.PSF[:,:,n,j],self.psInMas[j],rebin=1,method='contour',nargout=2)
                 if getEnsquaredEnergy == True:
                     self.EnsqE[:,n,j] = 1e2*FourierUtils.getEnsquaredEnergy(self.PSF[:,:,n,j])
                 if getEncircledEnergy == True:

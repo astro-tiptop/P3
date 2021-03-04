@@ -10,8 +10,8 @@ Created on Thu Jan 21 13:27:18 2021
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from _utils.interpolateSupport import interpolateSupport
-from _utils.inpolygon import inpolygon
+from utils.interpolateSupport import interpolateSupport
+from utils.inpolygon import inpolygon
 from distutils.spawn import find_executable
 
 #%% DISPLAY FEATURES

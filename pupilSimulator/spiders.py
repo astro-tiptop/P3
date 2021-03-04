@@ -10,8 +10,8 @@ Created on Thu Jan 21 17:34:19 2021
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from _utils.inpolygon import inpolygon
-from _utils.interpolateSupport import interpolateSupport
+from utils.inpolygon import inpolygon
+from utils.interpolateSupport import interpolateSupport
 from distutils.spawn import find_executable
 from scipy.ndimage import label
 
@@ -36,7 +36,7 @@ def keckSpiderMask(display=False):
     cobs         = 0.2375
     widthInMeter = 0.0254
     
-    sp = spiders([0,60,120],widthInMeter,600,symetric=True,D=D,cobs=cobs,unit='m',mskPup=True) 
+    sp = spiders([0,60,120],widthInMeter,600,symetric=True,D=D,cobs=cobs,mskPup=True) 
     if display:
         plt.close('all')
         sp.displaySpiders()
@@ -67,14 +67,14 @@ class spiders:
         """"""
         return self.D/self.nPixels
     
-    def __init__(self,spidersAngle, spidersWidth, spidersInitCoor= [], D=1, cobs=0, \
+    def __init__(self,spidersAngle, spidersWidth, spidersInitCoor=[], D=1, cobs=0, \
                  mskPup = False, symetric = False, nPixels= 0 ):
         
         # PARSING INPUTS
         self.nSpiders        = 0  
         self.spidersAngle    = np.asarray(spidersAngle) * np.pi/180
         self.spidersWidth    = spidersWidth
-        self.spidersInitCoor = np.asarray(spidersInitCoor)
+        self.spidersInitCoor = np.array(spidersInitCoor)
         self.D               = D
         self.cobs            = cobs
         self.mskPup          = mskPup
