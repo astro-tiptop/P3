@@ -10,7 +10,7 @@ from astropy.io import fits
 import matplotlib.pyplot as plt
 import re
 import fourier.FourierUtils as FourierUtils
-
+from scipy.ndimage import rotate
     
 class Attribute(object):
     pass
@@ -52,7 +52,7 @@ class telescope:
         return 1/np.cos(self.zenith_angle*np.pi/180)
     
     # CONSTRUCTOR
-    def __init__(self,D,zenith_angle,obsRatio,resolution,file = [],obj=[],verbose=True):
+    def __init__(self,D,zenith_angle,obsRatio,resolution,pupilAngle=0,file = [],obj=[],verbose=True):
         
         # PARSING INPUTS
         self.D         = D          # in meter
@@ -60,6 +60,7 @@ class telescope:
         self.obsRatio  = obsRatio   # Ranges from 0 to 1
         self.resolution= resolution # In pixels
         self.verbose   = verbose
+        self.pupilAngle= pupilAngle
         self.file      = file
         # PUPIL DEFINITION        
         import os.path as ospath
@@ -69,15 +70,19 @@ class telescope:
             self.verb = True
             if  re.search(".fits",file)!=None :
                 pupil = fits.getdata(file)
-                #pupil = pupil * (pupil>=1)
+                if self.pupilAngle !=0:
+                    pupil = rotate(pupil,self.pupilAngle,reshape=False)
                 if pupil.shape[0] != resolution:
                     pupil = FourierUtils.interpolateSupport(pupil,resolution,kind='nearest')
                 self.pupil = pupil
         
         if len(pupil) ==0:
+            th  = self.pupilAngle*np.pi/180
             x   = np.linspace(-D/2,D/2,resolution)
             X,Y = np.meshgrid(x,x)
-            R   = np.hypot(X,Y)
+            Xr  = X*np.cos(th) + Y*np.sin(th)
+            Yr  = Y*np.cos(th) - X*np.sin(th)
+            R   = np.hypot(Xr,Yr)
             P   = (R <= self.R) * (R > self.R*self.obsRatio)
             self.pupil = P
             self.verb = False

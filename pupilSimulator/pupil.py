@@ -15,10 +15,10 @@ import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
 import os
 
-from _utils.interpolateSupport import interpolateSupport
-from segment import segment
-from spiders import spiders
-from zernike import zernike
+from utils.interpolateSupport import interpolateSupport
+from pupilSimulator.segment import segment
+from pupilSimulator.spiders import spiders
+from aoSystem.zernike import zernike
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
 
@@ -192,8 +192,8 @@ class pupil:
         segI  = self.segList[indSeg]
         sx,sy = segI.matrix.shape
                         
-        Ax = self.centerX + [-sx/2,sx/2]
-        Ay = self.centerY + [-sy/2,sy/2]
+        Ax = self.centerX + np.array([-sx/2,sx/2])
+        Ay = self.centerY + np.array([-sy/2,sy/2])
         # pupil-centered domain
         posy = np.ceil(Ax + self.pixelRatio*(segI.posX + segI.posXError)).astype('int')
         posx = np.ceil(Ay + self.pixelRatio*(segI.posY + segI.posYError)).astype('int')

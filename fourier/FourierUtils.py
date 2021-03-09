@@ -23,9 +23,9 @@ def fftCorrel(x,y):
     nPts = x.shape
     
     if len(nPts) == 1:
-        out =  fft.ifft(fft.fft(x)*np.conjugate(fft.fft(y)))/nPts
+        out =  fft.ifft(fft.fft(x)*np.conj(fft.fft(y)))/nPts
     elif len(nPts) == 2:
-        out =  fft.ifft2(fft.fft2(x)*np.conjugate(fft.fft2(y)))/(nPts[0]*nPts[1])
+        out =  fft.ifft2(fft.fft2(x)*np.conj(fft.fft2(y)))/(nPts[0]*nPts[1])
     return out
 
 def fftsym(x):
@@ -123,7 +123,7 @@ def pupil2otf(pupil,phase,overSampling):
     P    = enlargeSupport(pupil,overSampling)
     phi  = enlargeSupport(phase,overSampling)
     E    = P*np.exp(1*complex(0,1)*phi)    
-    otf  = np.real(fft.fftshift(fftCorrel(E,E)))
+    otf  = fft.fftshift(fftCorrel(E,E))
     return otf/otf.max()
 
 def pupil2psf(pupil,phase,overSampling):    
@@ -235,7 +235,6 @@ def interpolateSupport(image,nRes,kind='spline'):
             return tmpReal
     else:        
         
-        
         # Initial frequencies grid    
         if nx%2 == 0:
             uinit = np.linspace(-nx/2,nx/2-1,nx)*2/nx
@@ -262,10 +261,12 @@ def interpolateSupport(image,nRes,kind='spline'):
             # Surprinsingly v and u vectors must be shifted when using
             # RectBivariateSpline. See:https://github.com/scipy/scipy/issues/3164
             tmpReal = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.real(image))
-            tmpImag = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.imag(image))
+            if np.any(np.iscomplex(image)):
+                tmpImag = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.imag(image))
         else:
             tmpReal = interp.interp2d(uinit, vinit, np.real(image),kind=kind)
-            tmpImag = interp.interp2d(uinit, vinit, np.imag(image),kind=kind)
+            if np.any(np.iscomplex(image)):
+                tmpImag = interp.interp2d(uinit, vinit, np.imag(image),kind=kind)
     
         if np.any(np.iscomplex(image)):
             return tmpReal(unew,vnew) + complex(0,1)*tmpImag(unew,vnew)

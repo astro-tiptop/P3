@@ -15,6 +15,7 @@ import os.path as ospath
 from configparser import ConfigParser
 import scipy.special as ssp
 import re
+from scipy.ndimage import rotate
 
 from astropy.io import fits
 
@@ -101,8 +102,8 @@ class psfao21:
         else:
             self.mskOut_   = np.logical_or(abs(self.kxky_[0]) >= self.kc_, abs(self.kxky_[1]) >= self.kc_)
             self.mskIn_    = np.logical_and(abs(self.kxky_[0]) < self.kc_, abs(self.kxky_[1]) < self.kc_)
-        self.psdKolmo_ =  0.0229 * self.mskOut_* ((1.0 /self.atm.L0**2) + self.k2_) ** (-11/6)
-        
+        self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.atm.L0**2) + self.k2_) ** (-11.0/6.0)
+        self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kxky_[1][0]),self.kxky_[1][0]))
     # INIT
     def __init__(self,file,circularAOarea='circle',antiAlias=False,aliasPSD=False,pathStat=None,fitCn2=False):
         
@@ -182,12 +183,34 @@ class psfao21:
         
         #%% Telescope
         self.D         = eval(config['telescope']['TelescopeDiameter'])
-        obsRatio       = eval(config['telescope']['obscurationRatio'])
-        zenithAngle    = eval(config['telescope']['zenithAngle'])
-        path_pupil     = eval(config['telescope']['path_pupil'])
-        path_static    = eval(config['telescope']['path_static'])
-        path_apodizer  = eval(config['telescope']['path_apodizer'])
-        self.Dcircle   = eval(config['telescope']['CircleDiameter'])
+        if config.has_option('telescope','obscurationRatio'):
+            obsRatio = eval(config['telescope']['obscurationRatio'])
+        else:
+            obsRatio = 0.0
+        if config.has_option('telescope','zenithAngle'):
+            zenithAngle = eval(config['telescope']['zenithAngle'])
+        else:
+            zenithAngle = 0.0
+        if config.has_option('telescope','path_pupil'):
+            path_pupil     = eval(config['telescope']['path_pupil'])
+        else:
+            path_pupil = []
+        if config.has_option('telescope','path_static'):
+            path_static = eval(config['telescope']['path_static'])
+        else:
+            path_static = []         
+        if config.has_option('telescope','path_apodizer'):
+            path_apodizer  = eval(config['telescope']['path_apodizer'])
+        else:
+            path_apodizer = []           
+        if config.has_option('telescope','CircleDiameter'):
+            self.Dcircle = eval(config['telescope']['CircleDiameter'])
+        else:
+            self.Dcircle = self.D          
+        if config.has_option('telescope','pupilAngle'):
+            self.pupilAngle= eval(config['telescope']['pupilAngle'])
+        else:
+            self.pupilAngle= 0.0
     
         #%% Atmosphere
         wvlAtm         = eval(config['atmosphere']['atmosphereWavelength']) 
@@ -228,9 +251,9 @@ class psfao21:
         
         if self.wvl_bw != 0:
             # CASE 1: SINGLE POLYCHROMATIC PSF
-            self.wvl_dpx = eval(config['POLYCHROMATISM']['dispersionX'])
-            self.wvl_dpy = eval(config['POLYCHROMATISM']['dispersionY'])
-            self.wvl_tr  = eval(config['POLYCHROMATISM']['transmittance'])
+            self.wvl_dpx = np.array(eval(config['POLYCHROMATISM']['dispersionX']))
+            self.wvl_dpy = np.array(eval(config['POLYCHROMATISM']['dispersionY']))
+            self.wvl_tr  = np.array(eval(config['POLYCHROMATISM']['transmittance']))
             if (len(self.wvl_dpx) == len(self.wvl_dpx)) and (len(self.wvl_dpx) == len(self.wvl_tr)):
                 self.nWvl    = len(self.wvl_tr)
                 self.wvlRef  = wvlSrc - self.wvl_bw/2
@@ -244,7 +267,12 @@ class psfao21:
             # CASE 2 : DATA CUBE OF MONOCHROMATIC PSF
             self.wvl     = np.unique(wvlSrc)
             self.nWvl    = len(self.wvl)
+            self.wvl_tr  = np.ones(self.nWvl)
+            self.wvl_dpx = np.zeros(self.nWvl)
+            self.wvl_dpy = np.zeros(self.nWvl)
             self.wvlRef  = self.wvl.min()
+            
+            
         self.wvlCen = np.mean(self.wvl)
         #PUPIL RESOLUTION
         if config.has_option('telescope','resolution'):
@@ -256,7 +284,7 @@ class psfao21:
         self.src     = source(wvlSrc,zenithSrc,azimuthSrc,types="SCIENTIFIC STAR",verbose=True)   
         
         #%% UPDATING PUPIL RESOLUTION
-        self.tel     = telescope(self.D,zenithAngle,obsRatio,self.nPup,file=path_pupil)                     
+        self.tel     = telescope(self.D,zenithAngle,obsRatio,self.nPup,pupilAngle = self.pupilAngle,file=path_pupil)                     
     
         # APODIZER
         self.apodizer = 1
@@ -294,7 +322,10 @@ class psfao21:
                 self.statModes = np.zeros((self.nPup,self.nPup,self.nModes))
                 
                 for k in range(self.nModes):
-                    self.statModes[:,:,k] = self.tel.pupil * FourierUtils.interpolateSupport(tmp[:,:,k],self.nPup,kind='linear')
+                    mode = FourierUtils.interpolateSupport(tmp[:,:,k],self.nPup,kind='linear')
+                    if self.pupilAngle !=0:
+                        mode = rotate(mode,self.pupilAngle,reshape=False)
+                    self.statModes[:,:,k] = self.tel.pupil * mode
                 self.isStatic = True
         
         #%% Guide stars
@@ -346,12 +377,12 @@ class psfao21:
         psd = self.moffat(self.kxky_,list(x0[3:])+[0,0])
         # Piston filtering
         psd = self.pistonFilter_ * psd
-        psd[self.nPix*self.k_//2,self.nPix*self.k_//2] = 0
         # Combination
         psd = x0[0] * (self.psdAlias+self.psdKolmo_) + self.mskIn_ * (x0[1] + psd/psd.sum() * x0[2]/pix2freq**2 )
+
         # Wavefront error
-        self.wfe = np.sqrt(psd.sum()) * pix2freq * self.wvlRef*1e9/2/np.pi
-        self.wfe_fit = np.sqrt(x0[0] * self.psdKolmo_.sum()) * pix2freq * self.wvlRef*1e9/2/np.pi
+        self.wfe = np.sqrt( np.trapz(np.trapz(psd,self.kxky_[1][0]),self.kxky_[1][0]) ) * self.wvlRef*1e9/2/np.pi
+        self.wfe_fit = np.sqrt(x0[0]) * self.wfe_fit_norm  * self.wvlRef*1e9/2/np.pi
         return psd
     
     def getStaticOTF(self,nOtf,samp,cobs,wvl,xStat=[]):
@@ -362,7 +393,7 @@ class psfao21:
         # ADDING STATIC MAP
         phaseStat = np.zeros((nPup,nPup))
         if np.any(self.opdMap_ext):
-            phaseStat = 2*np.pi*1e-9/wvl * self.opdMap_ext
+            phaseStat = (2*np.pi*1e-9/wvl) * self.opdMap_ext
             
         # ADDING USER-SPECIFIED STATIC MODES
         xStat = np.asarray(xStat)
@@ -373,8 +404,10 @@ class psfao21:
                 phaseStat += self.phaseMap
                 
         # OTF
-        otfStat = FourierUtils.pupil2otf(self.tel.pupil * self.apodizer,phaseStat,samp)
-        return FourierUtils.interpolateSupport(otfStat,nOtf)
+        otfStat = FourierUtils.pupil2otf(self.tel.pupil * self.apodizer,self.tel.pupil*phaseStat,samp)
+        otfStat = FourierUtils.interpolateSupport(otfStat,nOtf)
+        otfStat/= otfStat.max()
+        return otfStat
     
     def __call__(self,x0,nPix=None):
         
@@ -429,6 +462,7 @@ class psfao21:
             # STATIC OTF
             if len(x0_stat) or self.nWvl > 1:
                 self.otfStat = self.getStaticOTF(int(self.nPix*self.k_[l]),self.samp[l],self.tel.obsRatio,wvl_l,xStat=x0_stat)
+                self.otfStat/= self.otfStat.max()
             else:
                 self.otfStat = self.otfDL
               
@@ -446,14 +480,14 @@ class psfao21:
                     
                 # Stellar parameters
                 if len(x0_stellar):
-                    F   = x0_stellar[iSrc]
-                    dx  = x0_stellar[iSrc + self.src.nSrc]
-                    dy  = x0_stellar[iSrc + 2*self.src.nSrc]
+                    F   = x0_stellar[iSrc] * self.wvl_tr[l]
+                    dx  = x0_stellar[iSrc + self.src.nSrc] + self.wvl_dpx[l]
+                    dy  = x0_stellar[iSrc + 2*self.src.nSrc] + self.wvl_dpy[l]
                     bkg = x0_stellar[3*self.src.nSrc]
                 else:
-                    F   = 1
-                    dx  = 0
-                    dy  = 0
+                    F   = self.wvl_tr[l]
+                    dx  = self.wvl_dpx[l]
+                    dy  = self.wvl_dpy[l]
                     bkg = 0
                 
                 # Phasor
@@ -464,11 +498,17 @@ class psfao21:
                     
                 # Get the total OTF
                 self.otfTot = otfOn * fftPhasor * Kaniso * Kjitter
+                
                 # Get the PSF
                 psf_i = np.real(fft.fftshift(fft.ifft2(fft.fftshift(self.otfTot))))
+                
                 # CROPPING
+                if self.k_[l]> 1:
+                        psf_i = FourierUtils.interpolateSuport(psf_i,nPix);            
+                    
                 if nPix != self.nPix:
                     psf_i = FourierUtils.cropSupport(psf_i,nPix/self.nPix)
+                
                 # SCALING
                 psf[iSrc] += F * psf_i/psf_i.sum()
         

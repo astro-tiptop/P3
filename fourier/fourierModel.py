@@ -647,7 +647,7 @@ class fourierModel:
         self.t_finalReconstructor = 1000*(time.time() - tstart)
         
 #%% CONTROLLER DEFINITION
-    def  controller(self,nTh=1,nF=500):
+    def  controller(self,nTh=1,nF=1000):
         """
         """
         tstart  = time.time()
@@ -666,9 +666,6 @@ class fourierModel:
         h1          = np.zeros((nPts,nPts),dtype=complex)
         h2          = np.zeros((nPts,nPts))
         hn          = np.zeros((nPts,nPts))
-        h1buf       = np.zeros((nPts,nPts,nTh),dtype=complex)
-        h2buf       = np.zeros((nPts,nPts,nTh))
-        hnbuf       = np.zeros((nPts,nPts,nTh))
         
         # Get the noise propagation factor
         f           = np.logspace(-3,np.log10(0.5/Ts),nF)
@@ -686,10 +683,11 @@ class fourierModel:
              
         # Get transfer functions                                        
         for l in range(self.atm.nL):
+            h1buf = np.zeros((nPts,nPts,nTh),dtype=complex)
+            h2buf = np.zeros((nPts,nPts,nTh))
+            hnbuf = np.zeros((nPts,nPts,nTh))
             for iTheta in range(nTh):
                 fi      = -vx[l]*self.kx*costh[iTheta] - vy[l]*self.ky*costh[iTheta]
-                #idx     = abs(fi) <1e-7;
-                #fi[idx] = 1e-8*np.sign(fi[idx])
                 z       = np.exp(-2*i*np.pi*fi*Ts)
                 hInt    = self.loopGain/(1.0 - z**(-1.0))
                 rtfInt  = 1.0/(1.0 + hInt * z**(-delay))
