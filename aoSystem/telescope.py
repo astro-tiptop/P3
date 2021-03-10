@@ -52,7 +52,7 @@ class telescope:
         return 1/np.cos(self.zenith_angle*np.pi/180)
     
     # CONSTRUCTOR
-    def __init__(self,D,zenith_angle,obsRatio,resolution,pupilAngle=0,file = [],obj=[],verbose=True):
+    def __init__(self,D,zenith_angle,obsRatio,resolution,pupilAngle = 0.0,file = [],obj=[],verbose=True):
         
         # PARSING INPUTS
         self.D         = D          # in meter
@@ -70,13 +70,13 @@ class telescope:
             self.verb = True
             if  re.search(".fits",file)!=None :
                 pupil = fits.getdata(file)
-                if self.pupilAngle !=0:
+                if self.pupilAngle !=0.0:
                     pupil = rotate(pupil,self.pupilAngle,reshape=False)
                 if pupil.shape[0] != resolution:
                     pupil = FourierUtils.interpolateSupport(pupil,resolution,kind='nearest')
                 self.pupil = pupil
         
-        if len(pupil) ==0:
+        if len(pupil) == 0:
             th  = self.pupilAngle*np.pi/180
             x   = np.linspace(-D/2,D/2,resolution)
             X,Y = np.meshgrid(x,x)

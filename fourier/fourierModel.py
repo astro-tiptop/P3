@@ -439,7 +439,7 @@ class fourierModel:
         #%% instantiating sub-classes
         
         # Telescope
-        self.tel = telescope(self.D,self.zenith_angle,self.obsRatio,self.resolution,self.path_pupil)
+        self.tel = telescope(self.D,self.zenith_angle,self.obsRatio,self.resolution,file=self.path_pupil)
         
         # Strechning factor (LGS case)      
         self.r0       = self.r0*self.tel.airmass**(-3/5)
