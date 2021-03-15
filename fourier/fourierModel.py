@@ -433,7 +433,7 @@ class fourierModel:
             self.jitterX = eval(config['telescope']['jitterX'])[0]
         if config.has_option('telescope', 'jitterY'):
             self.jitterY = eval(config['telescope']['jitterY'])[0]
-        if config.has_option('telescope', 'jitterY'):
+        if config.has_option('telescope', 'thetaJitter'):
             self.thetaJitter   = eval(config['telescope']['thetaJitter'])[0]
             
         #%% instantiating sub-classes

@@ -232,14 +232,11 @@ class atmosphere:
         else:
             cov = 0            
         
-        if atm.nL >1:
-            for l in np.arange(0,atm.nL):
-                atmSlab = atm.slab(l)
-                tmp = atmSlab.covariance(atmSlab.layer.height[0]*np.tan(theta))
-                cov = cov + tmp
-        else:
-            cov = atm.covariance(atm.layer.height[0]*np.tan(theta))
-            
+        for l in np.arange(0,atm.nL):
+            atmSlab = atm.slab(l)
+            atmSlab.r0 = atm.r0 * (atm.weights[l])**(-3.0/5.0)
+            tmp     = atmSlab.covariance(atmSlab.heights*np.tan(theta))
+            cov    += tmp
         return cov    
                         
     def angularStructureFunction(atm,theta):
@@ -253,12 +250,9 @@ class atmosphere:
         else:
             sf = 0                       
         
-        if atm.nL >1:
-            for l in np.arange(0,atm.nL):
-                atmSlab = atm.slab(l)                
-                tmp = atmSlab.covariance(atm.layer[l].height*np.tan(theta))
-                sf = sf + 2*( atmSlab.variance() - tmp)  
-        else:
-            sf = 2*(atm.variance() - atm.covariance(atm.layer.height[0]*np.tan(theta)))
-            
+        for l in np.arange(0,atm.nL):
+            atmSlab = atm.slab(l)        
+            atmSlab.r0 = atm.r0 * (atm.weights[l])**(-3.0/5.0)
+            tmp     = atmSlab.covariance(atmSlab.heights*np.tan(theta))
+            sf      = sf + 2*( atmSlab.variance() - tmp)  
         return sf

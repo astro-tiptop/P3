@@ -47,7 +47,7 @@ class source:
         
         
          # PARSING INPUTS
-        self.wvl       = wvl        # Wavelength value in meter             
+        self.wvl       = wvl       # Wavelength value in meter             
         self.zenith    = zenith     # Zenith angle in arcsec
         self.azimuth   = azimuth    # Azimuth angle in degree
         self.height    = height     # Source height in meter
@@ -69,7 +69,7 @@ class source:
             self.nSrc    = len(zenith)           
        
         # Vectorizes source properties
-        test= lambda x: (x.size != self.nSrc)
+        test= lambda x: (np.array(x).size != self.nSrc)
         if test(wvl):
             print('Vectorize the wavelength value to cope with the number of sources')
             self.wvl = self.wvl[0]*np.ones(self.nSrc)

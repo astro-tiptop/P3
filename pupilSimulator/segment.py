@@ -115,7 +115,6 @@ class segment:
                 return [[],[]]   
         else:
             phase = modesCube * self.modesCoeffs
-        
         matrix = self.segShape * self.reflexivity * np.exp(1*complex(0,1)*phase)
         return [matrix, phase]
               

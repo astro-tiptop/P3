@@ -392,7 +392,6 @@ class pupil:
     
         # REMOVING SEGMENT
         self.removeSegment(indSeg)
-
         # APPLYING THE PHASE
         for k in range(nSeg):
             tmp = self.segList[indSeg[k]]
