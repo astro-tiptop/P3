@@ -247,9 +247,9 @@ class psfao21:
         if config.has_option('POLYCHROMATISM','spectralBandwidth'):
             self.wvl_bw = eval(config['POLYCHROMATISM']['spectralBandwidth'])
         else:
-            self.wvl_bw = 0
+            self.wvl_bw = [0]
         
-        if self.wvl_bw != 0:
+        if self.wvl_bw != [0]:
             # CASE 1: SINGLE POLYCHROMATIC PSF
             self.wvl_dpx = np.array(eval(config['POLYCHROMATISM']['dispersionX']))
             self.wvl_dpy = np.array(eval(config['POLYCHROMATISM']['dispersionY']))
