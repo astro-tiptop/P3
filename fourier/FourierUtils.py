@@ -736,7 +736,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5):
     # Get the Diffraction-limit OTF
     nX,nY   = pupil.shape
     pup_pad = enlargeSupport(pupil,samp)
-    otfDL   = fft.fftshift(abs(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2)/pupil.sum()))
+    otfDL   = fft.fftshift(abs(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2)))
     otfDL   = interpolateSupport(otfDL,notf)
     otfDL   = otfDL/otfDL.max()
     
