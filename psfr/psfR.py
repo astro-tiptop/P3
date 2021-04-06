@@ -5,107 +5,223 @@ Created on Sat Aug 18 22:20:28 2018
 
 @author: omartin
 """
+#%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
 import numpy.fft as fft
-import p3utils
-import spatialFrequency
-from STORM.psfmodel import ParametricPSF
+import time
+import sys as sys
 
-class psfModel(ParametricPSF):
+import fourier.fourierModel as fourierModel
+import fourier.FourierUtils as FourierUtils
+from aoSystem.defineAoSystem import defineAoSystem
+
+#%%
+rad2mas = 3600 * 180 * 1000 / np.pi
+rad2arc = rad2mas / 1000
+
+class psfR:
     """
     """
-    # CONSTRUCTOR
-    def __init__(self,trs,tel,atm,src,psInMas,fovInArcsec,modes=0,ncpaMap=0,ncpaWvl=0):
-        """
-        """
-        # READ PARFILE
+    # WAVELENGTH
+    @property
+    def wvl(self):
+        return self.__wvl
+    @wvl.setter
+    def wvl(self,val):
+        self.__wvl = val
+        self.samp  = val* rad2mas/(self.psInMas*self.D)
+    @property
+    def wvlRef(self):
+        return self.__wvlRef
+    @wvlRef.setter
+    def wvlRef(self,val):
+        self.__wvlRef = val
+        self.sampRef  = val* rad2mas/(self.psInMas*self.D)
+    
+    @property
+    def wvlCen(self):
+        return self.__wvlCen
+    @wvlCen.setter
+    def wvlCen(self,val):
+        self.__wvlCen = val
+        self.sampCen  = val* rad2mas/(self.psInMas*self.D)
         
-        #PARSING INPUTS
-        self.tel = tel
-        self.atm = atm
-        self.src = src
-        self.fao = fao
-        self.ncpaMap = ncpaMap
-        self.ncpaWvl = ncpaWvl                         
-        # Set the otf/psf resolution regarding the deisred PSF FOV/pixel scale
-        fovInPixel  = int((np.ceil(2e3*fovInArcsec/psInMas))/2)
-        fovInPixel  = max([fovInPixel,2*self.resAO])
-        self.nTimes = int(np.round(fovInPixel/self.resAO))
-        self.nPh    = 2*self.nActu+1
-        self.nOtf   = self.nPh*self.nTimes
-        self.pitch  = tel.D/(self.nPh-1)     
-        # Define the influence function
-        if np.isscalar(modes):
-            modes = 1
+    # SAMPLING
+    @property
+    def samp(self):
+        return self.__samp
+    @samp.setter
+    def samp(self,val):
+        self.k_      = np.ceil(2.0/val).astype('int') # works for oversampling
+        self.__samp  = self.k_ * val     
+    @property
+    def sampCen(self):
+        return self.__sampCen
+    @sampCen.setter
+    def sampCen(self,val):
+        self.kCen_      = int(np.ceil(2.0/val))# works for oversampling
+        self.__sampCen  = self.kCen_ * val  
+    @property
+    def sampRef(self):
+        return self.__sampRef
+    @sampRef.setter
+    def sampRef(self,val):
+        self.kRef_      = int(np.ceil(2.0/val)) # works for oversampling
+        self.__sampRef  = self.kRef_ * val
+        self.kxky_      = FourierUtils.freq_array(self.nPix*self.kRef_,self.__sampRef,self.D)
+        self.k2_        = self.kxky_[0]**2 + self.kxky_[1]**2                   
+        #piston filtering
+        if hasattr(self,'Dcircle'):
+            D  = self.Dcircle
         else:
-            self.modes = modes
+            D = self.D          
+        self.pistonFilter_ = FourierUtils.pistonFilter(D,self.k2_)
+        #self.pistonFilter_= 1 - 4*self.sombrero(1, np.pi*D*np.sqrt(self.k2_)) ** 2
+        self.pistonFilter_[self.nPix*self.kRef_//2,self.nPix*self.kRef_//2] = 0
             
-        self.pupLR   = p3utils.interpolateSupport(tel.pupil,self.nPh)
-        self.idxVal  = self.pupLR.astype('bool')                         
-        # Grab telemetry        
-        self.wavefront = trs.wavefront
-        self.volt2meter= trs.volt2meter
-        self.tipTilt   = trs.tipTilt
-        self.tilt2meter= trs.tilt2meter
-        # Set up the spatialFrequency class
-        self.fao = spatialFrequency(self.tel,self.atm,self.src,self.nActu,\
-                               self.noiseVariance,self.loopGain,self.samplingTime\
-                               ,self.latency,self.nPh)
-        # Get OTFs
-        self.otfDL(iSrc=0)
-        self.otfNCPA(iSrc=0)
-        self.otfPerpendicular(iSrc=0)
-        self.otfParallel(iSrc=0)
-        self.otfTipTilt(iSrc=0)
-        
-    def otfDL(self,iSrc=0):
-        """
-        """
-        C0 = np.zeros((self.nPh**2,self.nPh**2)) 
-        self.otfDL = p3utils.zonalCovarianceToOtf(C0,self.nOtf,self.tel.D,\
-                                                  self.pitch,self.idxVal)
-
-    def otfNCPA(self,iSrc=0):
-        if np.isscalar(self.ncpaMap):
-            self.otfNCPA =1
+    # CUT-OFF FREQUENCY
+    @property
+    def nAct(self):
+        return self.__nAct    
+    @nAct.setter
+    def nAct(self,val):
+        self.__nAct = val
+        # redefining the ao-corrected area
+        self.kc_= (val-1)/(2.0*self.D)
+        kc2     = self.kc_**2
+        if self.circularAOarea:
+            self.mskOut_   = (self.k2_ >= kc2)
+            self.mskIn_    = (self.k2_ < kc2)
         else:
-            ncpaMap     = self.ncpaMap*(self.wvlNcpa/self.src.wvl[iSrc])
-            E           = p3utils.enlargeSupport(self.pupLR*np.exp(complex(0,1)*ncpaMap),2)
-            otfNCPA     = fft.fftshift(p3utils.fftCorrel(E,E))
-            otfNCPA     = p3utils.interpolateSupport(otfNCPA,self.nOtf)
-            self.otfNCPA= otfNCPA/otfNCPA.max()    
+            self.mskOut_   = np.logical_or(abs(self.kxky_[0]) >= self.kc_, abs(self.kxky_[1]) >= self.kc_)
+            self.mskIn_    = np.logical_and(abs(self.kxky_[0]) < self.kc_, abs(self.kxky_[1]) < self.kc_)
+        self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.atm.L0**2) + self.k2_) ** (-11.0/6.0)
+        self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kxky_[1][0]),self.kxky_[1][0]))
+    
+    # INIT
+    def __init__(self,file,trs):
+        """
+        """
+        # READ PARFILE        
+        tstart = time.time()
+        
+        # PARSING INPUTS
+        self.file   = file
+        self.status = defineAoSystem(self,file,circularAOarea='circle',Dcircle=None)
+        self.trs    = trs
+        
+        if self.status:
+            
+            #INSTANTIATING THE ANGULAR FREQUENCIES
+            self.nOtf = self.nPix * self.kRef_
+            self.U_, self.V_, self.U2_, self.V2_, self.UV_, self.otfDL =\
+            FourierUtils.instantiateAngularFrequencies(self.tel,self.nOtf,self.sampRef,self.wvlRef)
+            
+            # DEFINING BOUNDS
+            self.bounds = self.defineBounds()
+        
+            # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
+            self.otfStat, _ =\
+            FourierUtils.getStaticOTF(self.tel,self.nOtf,self.sampRef,self.wvlRef,\
+                                      apodizer=self.apodizer,opdMap_ext=self.opdMap_ext)
+            
+            
+            # INSTANTIATING THE FOURIER MODEL
+            self.fao = fourierModel(file)
+            
+            # INSTANTIATING THE FITTING PHASE STRUCTURE FUNCTION
+            self.dphi_fit = self.fittingPhaseStructureFunction(self.atm.r0)
+            
+            # INSTANTIATING THE ALIASING PHASE STRUCTURE FUNCTION
+            self.dphi_alias = self.aliasingPhaseStructureFunction(self.atm.r0)
+            
+            # INSTANTIATING THE AO RESIDUAL PHASE STRUCTURE FUNCTION 
+            
+            # INSTANTIATING THE TT RESIDUAL PHASE STRUCTURE FUNCTION IN LGS MODE
+            
+            # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
+            
+            # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION
+            
+            
+        self.t_init = 1000*(time.time()  - tstart)
+    
+    def _repr__(self):
+        return 'PSF-Reconstruction model'
+    
+    def defineBounds(self):
+          #r0, gao, gtt, F , dx , dy , bg , stat
+          _EPSILON = np.sqrt(sys.float_info.epsilon)
+          
+          # Bounds on r0
+          bounds_down = list(np.ones(self.atm.nL)*_EPSILON)
+          bounds_up   = list(np.inf * np.ones(self.atm.nL))            
+          # optical gains 
+          bounds_down += [0,0]
+          bounds_up   += [np.inf,np.inf]         
+          # Photometry
+          bounds_down += list(np.zeros(self.src.nSrc))
+          bounds_up   += list(np.inf*np.ones(self.src.nSrc))
+          # Astrometry
+          bounds_down += list(-self.nPix//2 * np.ones(2*self.src.nSrc))
+          bounds_up   += list( self.nPix//2 * np.ones(2*self.src.nSrc))
+          # Background
+          bounds_down += [-np.inf]
+          bounds_up   += [np.inf]
+          # Static aberrations
+          bounds_down += list(-self.wvlRef/2*1e9 * np.ones(self.nModes))
+          bounds_up   += list(self.wvlRef/2 *1e9 * np.ones(self.nModes))
+          return (bounds_down,bounds_up)
+      
 
-    def otfPerpendicular(self,iSrc=0):
-        """
-        """
-        self.fao.atm.wvl = self.src.wvl[iSrc]              
-        # Get PSDs
-        dk          = 2*self.fao.kc/self.fao.resAO        
-        pFit        = self.fao.fittingPSD(self.fao.kx,self.fao.ky,aoFilter='circle')
-        pAl         = self.fao.aliasingPSD(self.fao.kx,self.fao.ky,aoFilter='circle')
-        pAl         = p3utils.enlargeSupport(pAl,self.nTimes)        
-        self.psdPerp= pFit + pAl
-        # Get OTFs
-        otfPerp      = fft.fftshift(p3utils.psd2otf(self.psdPerp,dk))
-        otfPerp      = p3utils.interpolateSupport(otfPerp,self.nOtf)
-        self.otfPerp = otfPerp/otfPerp.max()
-        otfFit       = fft.fftshift(p3utils.psd2otf(pFit,dk))
-        otfFit       = p3utils.interpolateOtf(otfFit,self.nOtf)
-        self.otfFit  = otfFit/otfFit.max()
-        otfAl        = fft.fftshift(p3utils.psd2otf(pAl,dk))
-        otfAl        = p3utils.interpolateSupport(otfAl,self.nOtf)
-        self.otfAl   = otfAl/otfAl.max()
+    def fittingPhaseStructureFunction(self,r0):
+        return r0**(-5/3) * FourierUtils.cov2sf(FourierUtils.psd2cov(self.psdKolmo_))
+    
+    def aliasingPhaseStructureFunction(self,r0):
+        self.psdAlias_ = self.fao.aliasingPSD()
+        return r0**(-5/3) * FourierUtils.cov2sf(FourierUtils.psd2cov(self.psdAlias_))
+    
+#    def otfNCPA(self,iSrc=0):
+#        if np.isscalar(self.ncpaMap):
+#            self.otfNCPA =1
+#        else:
+#            ncpaMap     = self.ncpaMap*(self.wvlNcpa/self.src.wvl[iSrc])
+#            E           = FourierUtils.enlargeSupport(self.pupLR*np.exp(complex(0,1)*ncpaMap),2)
+#            otfNCPA     = fft.fftshift(FourierUtils.fftCorrel(E,E))
+#            otfNCPA     = FourierUtils.interpolateSupport(otfNCPA,self.nOtf)
+#            self.otfNCPA= otfNCPA/otfNCPA.max()    
+#
+#    def otfPerpendicular(self,iSrc=0):
+#        """
+#        """
+#        self.fao.atm.wvl = self.src.wvl[iSrc]              
+#        # Get PSDs
+#        dk          = 2*self.fao.kc/self.fao.resAO        
+#        pFit        = self.fao.fittingPSD(self.fao.kx,self.fao.ky,aoFilter='circle')
+#        pAl         = self.fao.aliasingPSD(self.fao.kx,self.fao.ky,aoFilter='circle')
+#        pAl         = FourierUtils.enlargeSupport(pAl,self.nTimes)        
+#        self.psdPerp= pFit + pAl
+#        # Get OTFs
+#        otfPerp      = fft.fftshift(FourierUtils.psd2otf(self.psdPerp,dk))
+#        otfPerp      = FourierUtils.interpolateSupport(otfPerp,self.nOtf)
+#        self.otfPerp = otfPerp/otfPerp.max()
+#        otfFit       = fft.fftshift(FourierUtils.psd2otf(pFit,dk))
+#        otfFit       = FourierUtils.interpolateOtf(otfFit,self.nOtf)
+#        self.otfFit  = otfFit/otfFit.max()
+#        otfAl        = fft.fftshift(p3utils.psd2otf(pAl,dk))
+#        otfAl        = FourierUtils.interpolateSupport(otfAl,self.nOtf)
+#        self.otfAl   = otfAl/otfAl.max()
                 
                         
     def otfParallel(self,iSrc=0):
         """
         """
         u     = self.waveFront*self.volt2meter
-        Cnn   = p3utils.getNoiseVariance(u,nshift=1)
+        Cnn   = FourierUtils.getNoiseVariance(u,nshift=1)
         Cuu   = u*u.T/u.shape[1] - Cnn
         Cphi  = Cuu*(2*np.pi/self.src.wvl[iSrc])**2
         Cphi  = self.modes*Cphi*self.modes
-        otfDM = p3utils.zonalCovarianceToOtf(Cphi,self.nOtf,self.pitch,self.idxVal)
+        otfDM = FourierUtils.zonalCovarianceToOtf(Cphi,self.nOtf,self.pitch,self.idxVal)
         self.otfDM = otfDM/self.otfDL
     
     def otfTipTilt(self,iSrc=0):
@@ -113,7 +229,7 @@ class psfModel(ParametricPSF):
         """
         utt   = self.tipTilt*self.tilt2meter
         utt   = utt - np.mean(utt,axis=1)
-        Cnnt  = p3utils.getNoiseVariance(utt,nshift=1)
+        Cnnt  = FourierUtils.getNoiseVariance(utt,nshift=1)
         Ctt   = utt*utt.T/utt.shape[1] - Cnnt
         Cuut  = Ctt*(2*np.pi/self.src.wvl[iSrc])**2
         # Get tip-tilt phase structure function
@@ -123,27 +239,27 @@ class psfModel(ParametricPSF):
         
         self.otfTT = np.exp(-Dtt*self.tel.D**2/16)
                                    
-    def model(self):
+    def __call__(self):
         otfTot = self.otfNCPA*self.otfParallel*self.otfTipTilt*self.otfPerpendicular
         
         if self.nqSmpl == 1:            
             # Interpolate the OTF to set the PSF FOV
-            otfTot = p3utils.interpolateSupport(otfTot,self.fovInPixel)
+            otfTot = FourierUtils.interpolateSupport(otfTot,self.fovInPixel)
             otfTot = otfTot/otfTot.max()
-            psf    = p3utils.otf2psf(otfTot)
+            psf    = FourierUtils.otf2psf(otfTot)
         elif self.nqSmpl >1:
             # Zero-pad the OTF to set the PSF pixel scale
-            otfTot = p3utils.enlargeSupport(otfTot,self.nqSmpl)
+            otfTot = FourierUtils.enlargeSupport(otfTot,self.nqSmpl)
             # Interpolate the OTF to set the PSF FOV
-            otfTot = p3utils.interpolateSupport(otfTot,self.fovInPixel)
+            otfTot = FourierUtils.interpolateSupport(otfTot,self.fovInPixel)
             otfTot = otfTot/otfTot.max()
-            psf    = p3utils.otf2psf(otfTot)
+            psf    = FourierUtils.otf2psf(otfTot)
         else:
             # Interpolate the OTF at high resolution to set the PSF FOV
-            otfTot = p3utils.interpolateSupport(otfTot,int(np.round(self.fovInPixel/self.nqSmpl)))
+            otfTot = FourierUtils.interpolateSupport(otfTot,int(np.round(self.fovInPixel/self.nqSmpl)))
             otfTot = otfTot/otfTot.max()
-            psf    = p3utils.otf2psf(otfTot)
+            psf    = FourierUtils.otf2psf(otfTot)
             # Interpolate the PSF to set the PSF pixel scale
-            psf    = p3utils.interpolateSupport(psf,self.fovInPixel)
+            psf    = FourierUtils.interpolateSupport(psf,self.fovInPixel)
                    
         return psf

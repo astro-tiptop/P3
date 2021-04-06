@@ -11,18 +11,11 @@ import numpy as np
 import numpy.fft as fft
 import time
 import sys as sys
-import os.path as ospath
-from configparser import ConfigParser
 import scipy.special as ssp
-import re
-from scipy.ndimage import rotate
-
-from astropy.io import fits
 
 import fourier.FourierUtils as FourierUtils
-from aoSystem.telescope import telescope
 from aoSystem.atmosphere import atmosphere
-from aoSystem.source import source
+from aoSystem.defineAoSystem import defineAoSystem
 
 #%%
 rad2mas = 3600 * 180 * 1000 / np.pi
@@ -76,14 +69,15 @@ class psfao21:
     def sampRef(self,val):
         self.kRef_      = int(np.ceil(2.0/val)) # works for oversampling
         self.__sampRef  = self.kRef_ * val
-        self.kxky_      = self.freq_array(self.nPix*self.kRef_,self.__sampRef,self.D)
+        self.kxky_      = FourierUtils.freq_array(self.nPix*self.kRef_,self.__sampRef,self.D)
         self.k2_        = self.kxky_[0]**2 + self.kxky_[1]**2                   
-        #piston filter
+        #piston filtering
         if hasattr(self,'Dcircle'):
             D  = self.Dcircle
         else:
             D = self.D          
-        self.pistonFilter_= 1 - 4*self.sombrero(1, np.pi*D*np.sqrt(self.k2_)) ** 2
+        self.pistonFilter_ = FourierUtils.pistonFilter(D,self.k2_)
+        #self.pistonFilter_= 1 - 4*self.sombrero(1, np.pi*D*np.sqrt(self.k2_)) ** 2
         self.pistonFilter_[self.nPix*self.kRef_//2,self.nPix*self.kRef_//2] = 0
             
     # CUT-OFF FREQUENCY
@@ -105,7 +99,7 @@ class psfao21:
         self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.atm.L0**2) + self.k2_) ** (-11.0/6.0)
         self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kxky_[1][0]),self.kxky_[1][0]))
     # INIT
-    def __init__(self,file,circularAOarea='circle',antiAlias=False,aliasPSD=False,pathStat=None,fitCn2=False):
+    def __init__(self,file,circularAOarea='circle',antiAlias=False,pathStat=None,fitCn2=False):
         
         tstart = time.time()
         
@@ -113,24 +107,21 @@ class psfao21:
         self.file      = file
         self.antiAlias = antiAlias
         self.pathStat  = pathStat
-        self.status = self.parameters(self.file,circularAOarea=circularAOarea)
+        #self.status = self.parameters(self.file,circularAOarea=circularAOarea)
+        self.status = defineAoSystem(self,file,circularAOarea='circle',Dcircle=None)
         
         if self.status:
             # DEFINING THE DOMAIN ANGULAR FREQUENCIES
+#            self.nOtf        = self.nPix * self.kRef_
+#            self.U_,self.V_  = FourierUtils.shift_array(self.nOtf,self.nOtf,fact = 2)     
+#            self.U2_         = self.U_**2
+#            self.V2_         = self.V_**2
+#            self.UV_         = self.U_*self.V_
+#            self.otfDL       = self.getStaticOTF(self.nOtf,self.sampRef,self.tel.obsRatio,self.wvlRef)
+#            self.otfStat     = self.otfDL
             self.nOtf        = self.nPix * self.kRef_
-            self.U_,self.V_  = self.shift_array(self.nOtf,self.nOtf,fact = 2)     
-            self.U2_         = self.U_**2
-            self.V2_         = self.V_**2
-            self.UV_         = self.U_*self.V_
-            self.otfDL       = self.getStaticOTF(self.nOtf,self.sampRef,self.tel.obsRatio,self.wvlRef)
-            self.otfStat     = self.otfDL
-            
-            # ALIASING PSD
-            self.aliasPSD = aliasPSD
-            if self.aliasPSD:
-                self.psdAlias = self.aliasingPSD()
-            else:
-                self.psdAlias = 0
+            self.U_, self.V_, self.U2_, self.V2_, self.UV_, self.otfDL =\
+            FourierUtils.instantiateAngularFrequencies(self.tel,self.nOtf,self.sampRef,self.wvlRef)
                 
             # ANISOPLANATISM
             if any(self.atm.heights) and any(self.src.zenith):
@@ -165,190 +156,12 @@ class psfao21:
     def _repr__(self):
         return 'PSFAO21 model'
     
-    
-    def parameters(self,file,circularAOarea='circle',Dcircle=None):
-                    
-        tstart = time.time() 
-    
-        # verify if the file exists
-        if ospath.isfile(file) == False:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The .ini file does not exist\n')
-            return 0
-        
-        # open the .ini file
-        config = ConfigParser()
-        config.optionxform = str
-        config.read(file)
-        
-        #%% Telescope
-        self.D         = eval(config['telescope']['TelescopeDiameter'])
-        if config.has_option('telescope','obscurationRatio'):
-            obsRatio = eval(config['telescope']['obscurationRatio'])
-        else:
-            obsRatio = 0.0
-        if config.has_option('telescope','zenithAngle'):
-            zenithAngle = eval(config['telescope']['zenithAngle'])
-        else:
-            zenithAngle = 0.0
-        if config.has_option('telescope','path_pupil'):
-            path_pupil     = eval(config['telescope']['path_pupil'])
-        else:
-            path_pupil = []
-        if config.has_option('telescope','path_static'):
-            path_static = eval(config['telescope']['path_static'])
-        else:
-            path_static = []         
-        if config.has_option('telescope','path_apodizer'):
-            path_apodizer  = eval(config['telescope']['path_apodizer'])
-        else:
-            path_apodizer = []           
-        if config.has_option('telescope','CircleDiameter'):
-            self.Dcircle = eval(config['telescope']['CircleDiameter'])
-        else:
-            self.Dcircle = self.D          
-        if config.has_option('telescope','pupilAngle'):
-            self.pupilAngle= eval(config['telescope']['pupilAngle'])
-        else:
-            self.pupilAngle= 0.0
-    
-        #%% Atmosphere
-        wvlAtm         = eval(config['atmosphere']['atmosphereWavelength']) 
-        r0             = 0.976*wvlAtm/eval(config['atmosphere']['seeing'])*3600*180/np.pi 
-        L0             = eval(config['atmosphere']['L0']) 
-        weights        = np.array(eval(config['atmosphere']['Cn2Weights']) )
-        heights        = np.array(eval(config['atmosphere']['Cn2Heights']) )
-        wSpeed         = np.array(eval(config['atmosphere']['wSpeed']) )
-        wDir           = np.array(eval(config['atmosphere']['wDir']) )
-        #-----  verification
-        if not (len(weights) == len(heights) == len(wSpeed) == len(wDir)):
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The number of atmospheric layers is not consistent in the parameters file\n')
-            return 0
-        self.atm = atmosphere(wvlAtm,r0,weights,heights/np.cos(zenithAngle*np.pi/180),wSpeed,wDir,L0)            
-        
-        #%% Sampling and field of view
-        self.psInMas = eval(config['PSF_DIRECTIONS']['psInMas'])
-        self.circularAOarea= circularAOarea
-        self.nPix    = eval(config['PSF_DIRECTIONS']['psf_FoV'])
-        
-        #%% PSF directions
-        wvlSrc         = np.array(eval(config['PSF_DIRECTIONS']['ScienceWavelength']))
-        zenithSrc      = np.array(np.array(eval(config['PSF_DIRECTIONS']['ScienceZenith'])))
-        azimuthSrc     = np.array(np.array(eval(config['PSF_DIRECTIONS']['ScienceAzimuth'])))        
-        # ----- verification
-        self.src = []
-        if len(zenithSrc) != len(azimuthSrc):
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The number of scientific sources is not consistent in the parameters file\n')
-            return 0
-        
-        # MANAGING WAVELENGTHS
-        if config.has_option('POLYCHROMATISM','spectralBandwidth'):
-            self.wvl_bw = eval(config['POLYCHROMATISM']['spectralBandwidth'])
-        else:
-            self.wvl_bw = [0]
-        
-        if self.wvl_bw != [0]:
-            # CASE 1: SINGLE POLYCHROMATIC PSF
-            self.wvl_dpx = np.array(eval(config['POLYCHROMATISM']['dispersionX']))
-            self.wvl_dpy = np.array(eval(config['POLYCHROMATISM']['dispersionY']))
-            self.wvl_tr  = np.array(eval(config['POLYCHROMATISM']['transmittance']))
-            if (len(self.wvl_dpx) == len(self.wvl_dpx)) and (len(self.wvl_dpx) == len(self.wvl_tr)):
-                self.nWvl    = len(self.wvl_tr)
-                self.wvlRef  = wvlSrc - self.wvl_bw/2
-                self.wvlMax  = wvlSrc + self.wvl_bw/2
-                self.wvl     = np.linspace(self.wvlRef,self.wvlMax,self.nWvl)
-            else:
-                print('%%%%%%%% ERROR %%%%%%%%')
-                print('The number of spectral bins are not consistent in the parameters file\n')
-                return 0
-        else:
-            # CASE 2 : DATA CUBE OF MONOCHROMATIC PSF
-            self.wvl     = np.unique(wvlSrc)
-            self.nWvl    = len(self.wvl)
-            self.wvl_tr  = np.ones(self.nWvl)
-            self.wvl_dpx = np.zeros(self.nWvl)
-            self.wvl_dpy = np.zeros(self.nWvl)
-            self.wvlRef  = self.wvl.min()
-            
-            
-        self.wvlCen = np.mean(self.wvl)
-        #PUPIL RESOLUTION
-        if config.has_option('telescope','resolution'):
-            self.nPup = eval(config['telescope']['resolution'])
-        else:
-            self.nPup = 2*int(np.ceil(self.nPix*self.kRef_/self.samp.min()/2))
-                
-        self.nAct    = np.floor(self.D/np.array(eval(config['DM']['DmPitchs']))+1)
-        self.src     = source(wvlSrc,zenithSrc,azimuthSrc,types="SCIENTIFIC STAR",verbose=True)   
-        
-        #%% UPDATING PUPIL RESOLUTION
-        self.tel     = telescope(self.D,zenithAngle,obsRatio,self.nPup,pupilAngle = self.pupilAngle,file=path_pupil)                     
-    
-        # APODIZER
-        self.apodizer = 1
-        if path_apodizer != [] and ospath.isfile(path_apodizer) == True:
-             if  re.search(".fits",path_apodizer)!=None :
-                self.apodizer = fits.getdata(path_apodizer)
-                self.apodizer = FourierUtils.interpolateSupport(self.apodizer,self.nPup,kind='linear')
-                
-        # EXTERNAL STATIC MAP
-        self.opdMap_ext = 0
-        if path_static != [] and ospath.isfile(path_static) == True:
-             if  re.search(".fits",path_static)!=None :
-                self.opdMap_ext = fits.getdata(path_static)
-                self.opdMap_ext = self.tel.pupil*FourierUtils.interpolateSupport(self.opdMap_ext,self.nPup,kind='linear')
-        
-        # STATIC ABERRATIONS
-        self.statModes = None
-        self.nModes = 1
-        self.isStatic = False
-        if config.has_option('telescope', 'path_statModes'):
-            self.path_statModes = eval(config['telescope']['path_statModes'])
-        else:
-            self.path_statModes = []
-            
-        if self.path_statModes:
-            if ospath.isfile(self.path_statModes) == True and re.search(".fits",self.path_statModes)!=None:                
-                self.statModes = fits.getdata(self.path_statModes)
-                s1,s2,s3 = self.statModes.shape
-                if s1 != s2: # mode on first dimension
-                    tmp = np.transpose(self.statModes,(1,2,0))  
-                else:
-                    tmp = self.statModes
-                    
-                self.nModes = tmp.shape[-1]
-                self.statModes = np.zeros((self.nPup,self.nPup,self.nModes))
-                
-                for k in range(self.nModes):
-                    mode = FourierUtils.interpolateSupport(tmp[:,:,k],self.nPup,kind='linear')
-                    if self.pupilAngle !=0:
-                        mode = rotate(mode,self.pupilAngle,reshape=False)
-                    self.statModes[:,:,k] = self.tel.pupil * mode
-                self.isStatic = True
-        
-        #%% Guide stars
-        wvlGs      = np.unique(np.array(eval(config['SENSOR_HO']['SensingWavelength_HO'])))
-        zenithGs   = np.array(eval(config['GUIDESTARS_HO']['GuideStarZenith_HO']))
-        azimuthGs  = np.array(eval(config['GUIDESTARS_HO']['GuideStarAzimuth_HO']))
-        heightGs   = eval(config['GUIDESTARS_HO']['GuideStarHeight_HO'])
-        # ----- verification
-        if len(zenithGs) != len(azimuthGs):
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The number of guide stars for high-order sensing is not consistent in the parameters file\n')
-            return 0
-        self.gs = source(wvlGs,zenithGs,azimuthGs,height=heightGs,types="GUIDE STAR",verbose=True)   
-
-        self.t_getParam = 1000*(time.time() - tstart)
-        return 1
-    
     def defineBounds(self):
-          #Cn2 , C , A , ax , p , theta , beta , sx , sy , sxy , F , dx , dy , bg , stat
+          #Cn2/r0 , C , A , ax , p , theta , beta , sx , sy , sxy , F , dx , dy , bg , stat
           _EPSILON = np.sqrt(sys.float_info.epsilon)
           
-          # Bounds on Cn2
-          bounds_down = list(np.zeros(self.atm.nL))
+          # Bounds on r0
+          bounds_down = list(np.ones(self.atm.nL)*_EPSILON)
           bounds_up   = list(np.inf * np.ones(self.atm.nL))          
           # PSD Parameters
           bounds_down += [0,0,_EPSILON,_EPSILON,-np.pi,1+_EPSILON]
@@ -378,36 +191,36 @@ class psfao21:
         # Piston filtering
         psd = self.pistonFilter_ * psd
         # Combination
-        psd = x0[0]**(-5/3) * (self.psdAlias+self.psdKolmo_) + self.mskIn_ * (x0[1] + psd/psd.sum() * x0[2]/pix2freq**2 )
+        psd = x0[0]**(-5/3) * self.psdKolmo_ + self.mskIn_ * (x0[1] + psd/psd.sum() * x0[2]/pix2freq**2 )
 
         # Wavefront error
         self.wfe = np.sqrt( np.trapz(np.trapz(psd,self.kxky_[1][0]),self.kxky_[1][0]) ) * self.wvlRef*1e9/2/np.pi
         self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * self.wfe_fit_norm  * self.wvlRef*1e9/2/np.pi
         return psd
     
-    def getStaticOTF(self,nOtf,samp,cobs,wvl,xStat=[]):
-        
-        # DEFINING THE RESOLUTION/PUPIL
-        nPup = self.tel.pupil.shape[0]
-        
-        # ADDING STATIC MAP
-        phaseStat = np.zeros((nPup,nPup))
-        if np.any(self.opdMap_ext):
-            phaseStat = (2*np.pi*1e-9/wvl) * self.opdMap_ext
-            
-        # ADDING USER-SPECIFIED STATIC MODES
-        xStat = np.asarray(xStat)
-        self.phaseMap = 0
-        if self.isStatic:
-            if self.statModes.shape[2]==len(xStat):
-                self.phaseMap = 2*np.pi*1e-9/wvl * np.sum(self.statModes*xStat,axis=2)
-                phaseStat += self.phaseMap
-                
-        # OTF
-        otfStat = FourierUtils.pupil2otf(self.tel.pupil * self.apodizer,self.tel.pupil*phaseStat,samp)
-        otfStat = FourierUtils.interpolateSupport(otfStat,nOtf)
-        otfStat/= otfStat.max()
-        return otfStat
+#    def getStaticOTF(self,nOtf,samp,cobs,wvl,xStat=[]):
+#        
+#        # DEFINING THE RESOLUTION/PUPIL
+#        nPup = self.tel.pupil.shape[0]
+#        
+#        # ADDING STATIC MAP
+#        phaseStat = np.zeros((nPup,nPup))
+#        if np.any(self.opdMap_ext):
+#            phaseStat = (2*np.pi*1e-9/wvl) * self.opdMap_ext
+#            
+#        # ADDING USER-SPECIFIED STATIC MODES
+#        xStat = np.asarray(xStat)
+#        self.phaseMap = 0
+#        if self.isStatic:
+#            if self.statModes.shape[2]==len(xStat):
+#                self.phaseMap = 2*np.pi*1e-9/wvl * np.sum(self.statModes*xStat,axis=2)
+#                phaseStat += self.phaseMap
+#                
+#        # OTF
+#        otfStat = FourierUtils.pupil2otf(self.tel.pupil * self.apodizer,self.tel.pupil*phaseStat,samp)
+#        otfStat = FourierUtils.interpolateSupport(otfStat,nOtf)
+#        otfStat/= otfStat.max()
+#        return otfStat
     
     def __call__(self,x0,nPix=None):
         
@@ -420,8 +233,12 @@ class psfao21:
         xall = x0       
         # Cn2 profile
         nL   = self.atm.nL
-        Cn2  = np.asarray(x0[0:nL])
-        r0   = np.sum(Cn2)**(-3/5)
+        if nL > 1: # fit the Cn2 profile
+            Cn2  = np.asarray(x0[0:nL])
+            r0   = np.sum(Cn2)**(-3/5)
+        else: #fit the r0
+            r0 = x0[0]
+            
         # PSD
         x0_psd = list(xall[nL:nL+6])
         # Jitter
@@ -461,8 +278,9 @@ class psfao21:
             
             # STATIC OTF
             if len(x0_stat) or self.nWvl > 1:
-                self.otfStat = self.getStaticOTF(int(self.nPix*self.k_[l]),self.samp[l],self.tel.obsRatio,wvl_l,xStat=x0_stat)
-                self.otfStat/= self.otfStat.max()
+                #self.otfStat = self.getStaticOTF(int(self.nPix*self.k_[l]),self.samp[l],self.tel.obsRatio,wvl_l,xStat=x0_stat)
+                #self.otfStat/= self.otfStat.max()
+                self.otfStat, self.phaseMap = FourierUtils.getStaticOTF(self.tel,int(self.nPix*self.k_[l]),self.samp[l],wvl_l,xStat=x0_stat,apodizer=self.apodizer,statModes=self.statModes,opdMap_ext=self.opdMap_ext)
             else:
                 self.otfStat = self.otfDL
               
@@ -543,131 +361,32 @@ class psfao21:
         u = Rxx * (XY[0] - dx)**2 + Rxy * (XY[0] - dx)* (XY[1] - dy) + Ryy * (XY[1] - dy)**2
         return (1.0 + u) ** (-beta)
         
-    def freq_array(self,nX,samp,D):
-        k2D = np.mgrid[0:nX, 0:nX].astype(float)
-        k2D[0] -= nX//2
-        k2D[1] -= nX//2
-        k2D *= 1.0/(D*samp)
-        return k2D
-
-    def shift_array(self,nX,nY,fact=2*np.pi*complex(0,1)):    
-        X, Y = np.mgrid[0:nX,0:nY].astype(float)
-        X = (X-nX/2) * fact/nX
-        Y = (Y-nY/2) * fact/nY
-        return X,Y
+#    def freq_array(self,nX,samp,D):
+#        k2D = np.mgrid[0:nX, 0:nX].astype(float)
+#        k2D[0] -= nX//2
+#        k2D[1] -= nX//2
+#        k2D *= 1.0/(D*samp)
+#        return k2D
+#
+#    def shift_array(self,nX,nY,fact=2*np.pi*complex(0,1)):    
+#        X, Y = np.mgrid[0:nX,0:nY].astype(float)
+#        X = (X-nX/2) * fact/nX
+#        Y = (Y-nY/2) * fact/nY
+#        return X,Y
+#    
+#    def sombrero(self,n,x):
+#        x = np.asarray(x)
+#        if n==0:
+#            return ssp.jv(0,x)/x
+#        else:
+#            if n>1:
+#                out = np.zeros(x.shape)
+#            else:
+#                out = 0.5*np.ones(x.shape)
+#                
+#            out = np.zeros_like(x)
+#            idx = x!=0
+#            out[idx] = ssp.j1(x[idx])/x[idx]
+#            return out
+        
     
-    def sombrero(self,n,x):
-        x = np.asarray(x)
-        if n==0:
-            return ssp.jv(0,x)/x
-        else:
-            if n>1:
-                out = np.zeros(x.shape)
-            else:
-                out = 0.5*np.ones(x.shape)
-                
-            out = np.zeros_like(x)
-            idx = x!=0
-            out[idx] = ssp.j1(x[idx])/x[idx]
-            return out
-        
-    def instantiateAnisoplanatism(self,nPix,samp,method='psd'):
-        
-        def mcDonald(x):
-            out = 3/5 * np.ones_like(x)
-            idx  = x!=0
-            if np.any(idx==False):
-                out[idx] = x[idx] ** (5/6) * ssp.kv(5/6,x[idx])/(2**(5/6) * ssp.gamma(11/6))
-            else:
-                out = x ** (5/6) * ssp.kv(5/6,x)/(2**(5/6) * ssp.gamma(11/6))
-            return out
-        
-        def Ialpha(x,y):
-            return mcDonald(np.hypot(x,y))
-        
-        nSrc    = self.src.nSrc
-        nLayer  = self.atm.nL
-        Hs      = self.atm.heights * self.tel.airmass
-        if method == 'psd':   
-            # PSD METHOD : FASTER PSD METHOD WORKING FOR ANGULAR ANISOPLANATISM        
-            Dani_l = np.zeros((nSrc,nLayer,nPix,nPix))
-            L  = (self.tel.D * self.sampRef)**2
-            
-            cte  = (24*ssp.gamma(6/5)/5)**(5/6)*(ssp.gamma(11/6)**2./(2.*np.pi**(11/3)))
-            kern = cte * ((1.0 /self.atm.L0**2) + self.k2_) ** (-11/6)
-            kern = self.pistonFilter_ * kern
-            kern[self.nOtf//2,self.nOtf//2] = 0
-            for s in range(nSrc):
-                ax = self.src.direction[0] - self.gs.direction[0]
-                ay = self.src.direction[1] - self.gs.direction[1]
-                for iSrc in range(nSrc):
-                    thx = ax[iSrc]
-                    thy = ay[iSrc]            
-                    if thx !=0 or thy !=0:
-                        for l  in range(nLayer):
-                            zl = Hs[l]
-                            if zl !=0:
-                                psd = 2*self.mskIn_*kern*(1 - np.cos(2*np.pi*zl*(self.kxky_[0]*thx + self.kxky_[1]*thy)))    
-                                cov = fft.fftshift(fft.fft2(fft.fftshift(psd)))/L
-                                Dani_l[iSrc,l] = np.real(2*(cov.max()-cov))
-        else:        
-            # FLICKER'S MODEL - need to be generalize to focal anisoplanatism + anisokitenism
-            #1\ Defining the spatial filters
-            D       = self.tel.D
-            f0      = 2*np.pi/self.atm.L0
-
-            #2\ SF Calculation
-            Dani_l = np.zeros((nSrc,nLayer,nPix,nPix))
-
-            # Angular frequencies
-            U,V = self.shift_array(nPix,nPix,fact=D*self.sampRef)
-       
-            # Instantiation
-            I0      = 3/5
-            I1      = Ialpha(f0*U,f0*V)
-            cte     = 0.12184*0.06*(2*np.pi)**2*self.atm.L0**(5/3)
-
-            # Anisoplanatism Structure Function
-            ax = self.src.direction[0] - self.gs.direction[0]
-            ay = self.src.direction[1] - self.gs.direction[1]
-            for iSrc in range(nSrc):
-                thx = ax[iSrc]
-                thy = ay[iSrc]            
-                if thx !=0 or thy !=0:
-                    for l  in range(nLayer):
-                        zl    = Hs[l]
-                        if zl !=0: 
-                            I2    = Ialpha(f0*zl*thx,f0*zl*thy)
-                            I3    = Ialpha(f0 * (U + zl*thx) , f0 * (V + zl*thy))
-                            I4    = Ialpha(f0 * (U - zl*thx) , f0 * (V - zl*thy))
-                            Dani_l[iSrc,l]  = cte*(2*I0 - 2*I1 - 2*I2  + I3  + I4)
-            
-        return Dani_l
-    
-    def aliasingPSD(self,nTimes=2):
-        """
-        """
-        psd = np.zeros((self.nPix*self.k_,self.nPix*self.k_))
-        d   = self.tel.D/(self.nAct-1)
-        i   = complex(0,1)
-        Sx  = 2*i*np.pi*self.kxky_[0]*d
-        Sy  = 2*i*np.pi*self.kxky_[1]*d                        
-        Av  = np.sinc(d*self.kxky_[0])*np.sinc(d*self.kxky_[1])*np.exp(i*np.pi*d*(self.kxky_[0]+self.kxky_[1]))  
-        SxAv  = Sx*Av
-        SyAv  = Sy*Av
-        gPSD  = abs(SxAv)**2 + abs(SyAv)**2 + 1e-10
-        Rx    = np.conj(SxAv)/gPSD
-        Ry    = np.conj(SyAv)/gPSD
-        
-        for mi in range(-nTimes,nTimes):
-            for ni in range(-nTimes,nTimes):
-                if (mi!=0) | (ni!=0):
-                    km   = self.kxky_[0] - mi/d
-                    kn   = self.kxky_[1] - ni/d
-                    PR   = FourierUtils.pistonFilter(self.tel.D,np.hypot(km,kn),fm=mi/d,fn=ni/d)
-                    W_mn = (km**2 + kn**2 + 1/self.atm.L0**2)**(-11/6)     
-                    Q    = (Rx*km + Ry*kn) * (np.sinc(d*km)*np.sinc(d*kn))
-                    psd = psd + PR*W_mn *abs(Q)**2
-        
-        psd[self.nPix*self.k_//2,self.nPix*self.k_//2] = 0
-        return abs(self.pistonFilter_*self.mskIn_ * psd* 0.0229) 

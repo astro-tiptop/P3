@@ -13,6 +13,7 @@ from astropy.modeling import models, fitting
 import matplotlib as mpl
 import scipy.interpolate as interp        
 import scipy.ndimage as scnd
+import scipy.special as ssp
 
 #%%  FOURIER TOOLS
 
@@ -47,7 +48,49 @@ def fftsym(x):
         return out
     elif x.ndim ==1:
         return fft.fftshift(x)
+
+def freq_array(nX,samp,D):
+    k2D = np.mgrid[0:nX, 0:nX].astype(float)
+    k2D[0] -= nX//2
+    k2D[1] -= nX//2
+    k2D *= 1.0/(D*samp)
+    return k2D
+
+def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],opdMap_ext=0,apodizer=1,statModes=0):
+        
+        # DEFINING THE RESOLUTION/PUPIL
+        nPup = tel.pupil.shape[0]
+        
+        # ADDING STATIC MAP
+        phaseStat = np.zeros((nPup,nPup))
+        if np.any(opdMap_ext):
+            phaseStat = (2*np.pi*1e-9/wvl) * opdMap_ext
             
+        # ADDING USER-SPECIFIED STATIC MODES
+        xStat = np.asarray(xStat)
+        phaseMap = 0
+        if np.any(statModes):
+            if statModes.shape[2]==len(xStat):
+                phaseMap = 2*np.pi*1e-9/wvl * np.sum(statModes*xStat,axis=2)
+                phaseStat += phaseMap
+                
+        # OTF
+        otfStat = pupil2otf(tel.pupil * apodizer,tel.pupil*phaseStat,samp)
+        otfStat = interpolateSupport(otfStat,nOtf)
+        otfStat/= otfStat.max()
+        
+        return otfStat, phaseMap
+
+def instantiateAngularFrequencies(tel,nOtf,samp,wvl):
+    # DEFINING THE DOMAIN ANGULAR FREQUENCIES
+    #self.nOtf        = self.nPix * self.kRef_
+    U_,V_  = shift_array(nOtf,nOtf,fact = 2)     
+    U2_    = U_**2
+    V2_    = V_**2
+    UV_    = U_*V_
+    otfDL  = getStaticOTF(tel,nOtf,samp,wvl)
+    return U_, V_, U2_, V2_, UV_, otfDL
+
 def otf2psf(otf):        
     nX,nY   = otf.shape
     u1d     = fft.fftshift(fft.fftfreq(nX))
@@ -95,11 +138,11 @@ def pistonFilter(D,f,fm=0,fn=0):
     else:
         F     = np.pi*D*f
         
-    out         = np.zeros_like(F)
-    idx         = F!=0
-    out[idx]    = spc.j1(F[idx])/F[idx]
-            
-    return 1 - 4 * out**2
+    #out         = np.zeros_like(F)
+    #idx         = F!=0
+    #out[idx]    = spc.j1(F[idx])/F[idx]
+    R         = sombrero(1,F)        
+    return 1 - 4 * R**2
              
 def psd2cov(psd,pixelScale):
     nPts = np.array(psd.shape)
@@ -132,6 +175,27 @@ def pupil2psf(pupil,phase,overSampling):
       
 def sf2otf(sf):
     return np.exp(-0.5 * sf)
+
+def shift_array(nX,nY,fact=2*np.pi*complex(0,1)):    
+    X, Y = np.mgrid[0:nX,0:nY].astype(float)
+    X = (X-nX/2) * fact/nX
+    Y = (Y-nY/2) * fact/nY
+    return X,Y
+    
+def sombrero(n,x):
+    x = np.asarray(x)
+    if n==0:
+        return ssp.jv(0,x)/x
+    else:
+        if n>1:
+            out = np.zeros(x.shape)
+        else:
+            out = 0.5*np.ones(x.shape)
+            
+        out = np.zeros_like(x)
+        idx = x!=0
+        out[idx] = ssp.j1(x[idx])/x[idx]
+        return out
                  
 def telescopeOtf(pupil,samp):    
     pup_pad  = enlargeSupport(pupil,samp)
@@ -147,7 +211,7 @@ def telescopePsf(pupil,samp,kind='spline'):
     else:
         otf = interpolateSupport(telescopeOtf(pupil,2),nSize//samp,kind=kind)
         return interpolateSupport(otf2psf(otf),nSize,kind=kind)
-
+  
 #%%  IMAGE PROCESSING
         
 def cropSupport(im,n):    
@@ -452,6 +516,8 @@ def createDeadPixFrame(badPixelMap):
     
     return new_frame
 
+
+#%% PSF METRICS
 def getEnsquaredEnergy(psf):            
     
     S     = psf.sum()
