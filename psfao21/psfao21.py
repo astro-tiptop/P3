@@ -247,9 +247,9 @@ class psfao21:
         if config.has_option('POLYCHROMATISM','spectralBandwidth'):
             self.wvl_bw = eval(config['POLYCHROMATISM']['spectralBandwidth'])
         else:
-            self.wvl_bw = 0
+            self.wvl_bw = [0]
         
-        if self.wvl_bw != 0:
+        if self.wvl_bw != [0]:
             # CASE 1: SINGLE POLYCHROMATIC PSF
             self.wvl_dpx = np.array(eval(config['POLYCHROMATISM']['dispersionX']))
             self.wvl_dpy = np.array(eval(config['POLYCHROMATISM']['dispersionY']))
@@ -378,11 +378,11 @@ class psfao21:
         # Piston filtering
         psd = self.pistonFilter_ * psd
         # Combination
-        psd = x0[0] * (self.psdAlias+self.psdKolmo_) + self.mskIn_ * (x0[1] + psd/psd.sum() * x0[2]/pix2freq**2 )
+        psd = x0[0]**(-5/3) * (self.psdAlias+self.psdKolmo_) + self.mskIn_ * (x0[1] + psd/psd.sum() * x0[2]/pix2freq**2 )
 
         # Wavefront error
         self.wfe = np.sqrt( np.trapz(np.trapz(psd,self.kxky_[1][0]),self.kxky_[1][0]) ) * self.wvlRef*1e9/2/np.pi
-        self.wfe_fit = np.sqrt(x0[0]) * self.wfe_fit_norm  * self.wvlRef*1e9/2/np.pi
+        self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * self.wfe_fit_norm  * self.wvlRef*1e9/2/np.pi
         return psd
     
     def getStaticOTF(self,nOtf,samp,cobs,wvl,xStat=[]):
@@ -421,7 +421,7 @@ class psfao21:
         # Cn2 profile
         nL   = self.atm.nL
         Cn2  = np.asarray(x0[0:nL])
-        r053 = np.sum(Cn2)
+        r0   = np.sum(Cn2)**(-3/5)
         # PSD
         x0_psd = list(xall[nL:nL+6])
         # Jitter
@@ -435,7 +435,7 @@ class psfao21:
             x0_stat = []    
         
         # GETTING THE PHASE STRUCTURE FUNCTION
-        self.psd = self.getPSD([r053]+ x0_psd)
+        self.psd = self.getPSD([r0]+ x0_psd)
         if self.antiAlias:
             	self.psd = np.pad(self.psd,(self.nOtf//2,self.nOtf//2)) 
         #covariance map

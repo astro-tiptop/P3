@@ -153,7 +153,7 @@ def evaluateFittingQuality(result,psfModelInst):
     
     # DERIVING THE OPTIMAL MODEL
     result.im_fit = psfModelInst(result.x)
-    result.im_fit = result.im_fit
+    #result.im_fit = result.im_fit
     #result.psf    = psfModelInst(list(result.x[0:-3]) + [1,0,0,0])
     
     # ESTIMATING IMAGE-BASED METRICS
