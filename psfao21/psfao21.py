@@ -118,8 +118,8 @@ class psfao21:
 #            self.otfDL       = self.getStaticOTF(self.nOtf,self.sampRef,self.tel.obsRatio,self.wvlRef)
 #            self.otfStat     = self.otfDL
             self.nOtf        = self.nPix * self.kRef_
-            self.U_, self.V_, self.U2_, self.V2_, self.UV_, self.otfDL =\
-            FourierUtils.instantiateAngularFrequencies(self.tel,self.nOtf,self.sampRef,self.wvlRef)
+            self.U_, self.V_, self.U2_, self.V2_, self.UV_, self.otfDL, self.otfNCPA =\
+            FourierUtils.instantiateAngularFrequencies(self.tel,self.nOtf,self.sampRef,self.wvlRef,opdMap_ext=self.opdMap_ext)
                 
             # ANISOPLANATISM
             if any(self.atm.heights) and any(self.src.zenith):
@@ -280,7 +280,7 @@ class psfao21:
                 #self.otfStat/= self.otfStat.max()
                 self.otfStat, self.phaseMap = FourierUtils.getStaticOTF(self.tel,int(self.nPix*self.k_[l]),self.samp[l],wvl_l,xStat=x0_stat,apodizer=self.apodizer,statModes=self.statModes,opdMap_ext=self.opdMap_ext)
             else:
-                self.otfStat = self.otfDL
+                self.otfStat = self.otfNCPA
               
             # ON-AXIS OTF
             otfOn = self.otfStat * np.exp(-0.5*self.Dphi * wvlRatio)
