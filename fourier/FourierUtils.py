@@ -81,10 +81,10 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],opdMap_ext=0,apodizer=1,statModes=0)
         
         return otfStat, phaseMap
 
-def instantiateAngularFrequencies(tel,nOtf,samp,wvl):
+def instantiateAngularFrequencies(tel,nOtf,samp,wvl,fact=2):
     # DEFINING THE DOMAIN ANGULAR FREQUENCIES
     #self.nOtf        = self.nPix * self.kRef_
-    U_,V_  = shift_array(nOtf,nOtf,fact = 2)     
+    U_,V_  = shift_array(nOtf,nOtf,fact = fact)     
     U2_    = U_**2
     V2_    = V_**2
     UV_    = U_*V_

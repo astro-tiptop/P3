@@ -280,7 +280,10 @@ class fourierModel:
         self.heights        = np.array(eval(config['atmosphere']['Cn2Heights']) )
         self.wSpeed         = np.array(eval(config['atmosphere']['wSpeed']) )
         self.wDir           = np.array(eval(config['atmosphere']['wDir']) )
-        self.nLayersReconstructed = eval(config['atmosphere']['nLayersReconstructed'])
+        if config.has_option('atmosphere', 'nLayersReconstructed'):
+            self.nLayersReconstructed = eval(config['atmosphere']['nLayersReconstructed'])
+        else:
+            self.nLayersReconstructed = len(self.weights)
         #-----  verification
         if len(self.weights) == len(self.heights) == len(self.wSpeed) == len(self.wDir):
             self.nbLayers = len(self.weights)
@@ -356,12 +359,9 @@ class fourierModel:
             self.wfstype    = 'shack-hartmann'
             self.modulation = None
             self.binning    = None
-            
-        self.nLenslet_HO    = eval(config['SENSOR_HO']['nLenslet_HO'])
-        self.nph_HO         = eval(config['SENSOR_HO']['nph_HO'])
-        self.pixel_Scale_HO = eval(config['SENSOR_HO']['pixel_scale_HO'])
-        self.sigmaRON_HO    = eval(config['SENSOR_HO']['sigmaRON_HO'])
+                    
         # Note : so far, the WFSs have all the same subaperture size
+        self.nLenslet_HO    = eval(config['SENSOR_HO']['nLenslet_HO'])
         self.pitchs_wfs     = self.D/self.nLenslet_HO * np.ones(self.nGs)
         
         # Calculate the noise variance
@@ -369,11 +369,17 @@ class fourierModel:
             self.noiseVariance  = eval(config['SENSOR_HO']['noiseVariance_HO'])
             self.noiseVariance = self.noiseVariance * np.ones(self.nGs)    
         else:
-            self.Npix_per_subap_HO = eval(config['SENSOR_HO']['Npix_per_subap_HO'])#int(self.resolution/self.nLenslet_HO)
+            self.nph_HO         = eval(config['SENSOR_HO']['nph_HO'])
+            self.pixel_Scale_HO = eval(config['SENSOR_HO']['pixel_scale_HO'])
+            self.sigmaRON_HO    = eval(config['SENSOR_HO']['sigmaRON_HO'])     
+            self.Npix_per_subap_HO = eval(config['SENSOR_HO']['Npix_per_subap_HO'])
+            
             if self.pixel_Scale_HO > 1: # put the value in arcsec
                     self.pixel_Scale_HO = self.pixel_Scale_HO/1e3
+            
             self.ND = rad2arcsec * self.wvlGs/self.pitchs_wfs/self.pixel_Scale_HO #spot FWHM in pixels and without turbulence
             varRON  = np.pi**2/3*(self.sigmaRON_HO**2 /self.nph_HO**2) * (self.Npix_per_subap_HO**2/self.ND)**2
+            
             if varRON.any() > 3:
                 print('The read-out noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varRON))
                 varRON = 0
@@ -391,15 +397,27 @@ class fourierModel:
                 
             self.noiseVariance  = self.ExcessNoiseFactor_HO*(self.wvlGs/self.wvlRef)**2 * (varRON + varShot)
         #%% DM parameters
-        self.h_dm           = np.array(eval(config['DM']['DmHeights']))
-        self.pitchs_dm      = self.pitchScaling*np.array(eval(config['DM']['DmPitchs']))
-        self.zenithOpt      = np.array(eval(config['DM']['OptimizationZenith']))
-        self.azimuthOpt     = np.array(eval(config['DM']['OptimizationAzimuth']))
-        self.weightOpt      = np.array(eval(config['DM']['OptimizationWeight']))
-        self.weightOpt      = self.weightOpt/self.weightOpt.sum()
-        self.condmax_tomo   = eval(config['DM']['OptimizationConditioning'])
-        self.condmax_popt   = eval(config['DM']['OptimizationConditioning'])
+        self.pitchs_dm = self.pitchScaling*np.array(eval(config['DM']['DmPitchs']))
+
+        if config.has_option('DM', 'DmHeights'):
+            self.h_dm  = np.array(eval(config['DM']['DmHeights']))
+        else:
+            self.h_dm = np.array([0.0])
         
+        if config.has_option('DM', 'OptimizationZenith'):
+            self.zenithOpt      = np.array(eval(config['DM']['OptimizationZenith']))
+            self.azimuthOpt     = np.array(eval(config['DM']['OptimizationAzimuth']))
+            self.weightOpt      = np.array(eval(config['DM']['OptimizationWeight']))
+            self.weightOpt      = self.weightOpt/self.weightOpt.sum()
+            self.condmax_tomo   = eval(config['DM']['OptimizationConditioning'])
+            self.condmax_popt   = eval(config['DM']['OptimizationConditioning'])
+        else:
+            self.zenithOpt      = np.array([0.0])
+            self.azimuthOpt     = np.array([0.0])
+            self.weightOpt      = np.array([1.0])
+            self.condmax_tomo   = 1e2
+            self.condmax_popt   = 1e2
+            
         #%% Sampling and field of view
         self.psf_FoV        = eval(config['PSF_DIRECTIONS']['psf_FoV'])
         lonD                = rad2mas*self.wvlSrc/self.D

@@ -11,7 +11,6 @@ import numpy as np
 import numpy.fft as fft
 import time
 import sys as sys
-import scipy.special as ssp
 
 import fourier.FourierUtils as FourierUtils
 from aoSystem.atmosphere import atmosphere
@@ -107,7 +106,6 @@ class psfao21:
         self.file      = file
         self.antiAlias = antiAlias
         self.pathStat  = pathStat
-        #self.status = self.parameters(self.file,circularAOarea=circularAOarea)
         self.status = defineAoSystem(self,file,circularAOarea='circle',Dcircle=None)
         
         if self.status:
