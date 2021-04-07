@@ -110,13 +110,6 @@ class psfao21:
         
         if self.status:
             # DEFINING THE DOMAIN ANGULAR FREQUENCIES
-#            self.nOtf        = self.nPix * self.kRef_
-#            self.U_,self.V_  = FourierUtils.shift_array(self.nOtf,self.nOtf,fact = 2)     
-#            self.U2_         = self.U_**2
-#            self.V2_         = self.V_**2
-#            self.UV_         = self.U_*self.V_
-#            self.otfDL       = self.getStaticOTF(self.nOtf,self.sampRef,self.tel.obsRatio,self.wvlRef)
-#            self.otfStat     = self.otfDL
             self.nOtf        = self.nPix * self.kRef_
             self.U_, self.V_, self.U2_, self.V2_, self.UV_, self.otfDL, self.otfNCPA =\
             FourierUtils.instantiateAngularFrequencies(self.tel,self.nOtf,self.sampRef,self.wvlRef,opdMap_ext=self.opdMap_ext)
@@ -196,30 +189,6 @@ class psfao21:
         self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * self.wfe_fit_norm  * self.wvlRef*1e9/2/np.pi
         return psd
     
-#    def getStaticOTF(self,nOtf,samp,cobs,wvl,xStat=[]):
-#        
-#        # DEFINING THE RESOLUTION/PUPIL
-#        nPup = self.tel.pupil.shape[0]
-#        
-#        # ADDING STATIC MAP
-#        phaseStat = np.zeros((nPup,nPup))
-#        if np.any(self.opdMap_ext):
-#            phaseStat = (2*np.pi*1e-9/wvl) * self.opdMap_ext
-#            
-#        # ADDING USER-SPECIFIED STATIC MODES
-#        xStat = np.asarray(xStat)
-#        self.phaseMap = 0
-#        if self.isStatic:
-#            if self.statModes.shape[2]==len(xStat):
-#                self.phaseMap = 2*np.pi*1e-9/wvl * np.sum(self.statModes*xStat,axis=2)
-#                phaseStat += self.phaseMap
-#                
-#        # OTF
-#        otfStat = FourierUtils.pupil2otf(self.tel.pupil * self.apodizer,self.tel.pupil*phaseStat,samp)
-#        otfStat = FourierUtils.interpolateSupport(otfStat,nOtf)
-#        otfStat/= otfStat.max()
-#        return otfStat
-    
     def __call__(self,x0,nPix=None):
         
         # INSTANTIATING
@@ -276,8 +245,6 @@ class psfao21:
             
             # STATIC OTF
             if len(x0_stat) or self.nWvl > 1:
-                #self.otfStat = self.getStaticOTF(int(self.nPix*self.k_[l]),self.samp[l],self.tel.obsRatio,wvl_l,xStat=x0_stat)
-                #self.otfStat/= self.otfStat.max()
                 self.otfStat, self.phaseMap = FourierUtils.getStaticOTF(self.tel,int(self.nPix*self.k_[l]),self.samp[l],wvl_l,xStat=x0_stat,apodizer=self.apodizer,statModes=self.statModes,opdMap_ext=self.opdMap_ext)
             else:
                 self.otfStat = self.otfNCPA
@@ -358,33 +325,3 @@ class psfao21:
             
         u = Rxx * (XY[0] - dx)**2 + Rxy * (XY[0] - dx)* (XY[1] - dy) + Ryy * (XY[1] - dy)**2
         return (1.0 + u) ** (-beta)
-        
-#    def freq_array(self,nX,samp,D):
-#        k2D = np.mgrid[0:nX, 0:nX].astype(float)
-#        k2D[0] -= nX//2
-#        k2D[1] -= nX//2
-#        k2D *= 1.0/(D*samp)
-#        return k2D
-#
-#    def shift_array(self,nX,nY,fact=2*np.pi*complex(0,1)):    
-#        X, Y = np.mgrid[0:nX,0:nY].astype(float)
-#        X = (X-nX/2) * fact/nX
-#        Y = (Y-nY/2) * fact/nY
-#        return X,Y
-#    
-#    def sombrero(self,n,x):
-#        x = np.asarray(x)
-#        if n==0:
-#            return ssp.jv(0,x)/x
-#        else:
-#            if n>1:
-#                out = np.zeros(x.shape)
-#            else:
-#                out = 0.5*np.ones(x.shape)
-#                
-#            out = np.zeros_like(x)
-#            idx = x!=0
-#            out[idx] = ssp.j1(x[idx])/x[idx]
-#            return out
-        
-    
