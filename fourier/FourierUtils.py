@@ -88,7 +88,7 @@ def instantiateAngularFrequencies(tel,nOtf,samp,wvl,fact=2):
     U2_    = U_**2
     V2_    = V_**2
     UV_    = U_*V_
-    otfDL  = getStaticOTF(tel,nOtf,samp,wvl)
+    otfDL,_  = getStaticOTF(tel,nOtf,samp,wvl)
     return U_, V_, U2_, V2_, UV_, otfDL
 
 def otf2psf(otf):        
