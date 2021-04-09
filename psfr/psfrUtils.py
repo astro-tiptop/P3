@@ -231,52 +231,53 @@ def mkotf_indpts(nU1d,nPh,u1D,loc,dp):
             
     return indptsc,indptsc2
 
-def modes2Otf(Cmm,modes,pupil,npsf,overSampling=1,basis='Vii'):            
+def modes2Otf(Cmm,modes,pupil,nOtf,samp=2,basis='Vii'):            
     #Autocorrelation of the pupil expressed in pupil
-    nPx        = np.sqrt(modes.shape[0])
-    pupExtended= FourierUtils.enlargeSupport(pupil,2*overSampling)
+    nPx        = int(np.sqrt(modes.shape[0]))
+    pupExtended= FourierUtils.enlargeSupport(pupil,samp)
     fftPup     = fft.fft2(pupExtended)
     conjPupFft = np.conjugate(fftPup)
     G          = fft.fftshift(np.real(fft.fft2(fftPup*conjPupFft)))
     #Defining the inverse
     den        = np.zeros(np.array(G.shape))
     msk        = G/G.max() > 1e-7
-    den[msk]   = 1/G(msk)
+    den[msk]   = 1/G[msk]
             
             
-    if np.any(Cmm[:]) & basis == 'Vii':
+    if (np.any(Cmm)) & (basis == 'Vii'):
         # Diagonalizing the Cvv matrix
-        [U,S]   = np.linalgsvd(Cmm)
-        s       = np.diag(S)
+        #import pdb
+        #pdb.set_trace()
+        U,s,V   = np.linalg.svd(Cmm)
         nModes  = len(s)
-        M       = modes * U
+        M       = np.matmul(modes,U)
         #loop on actuators                
-        buf     = np.zeros(np.array(pupExtended.shape))
+        buf     = np.zeros_like(pupExtended)
                 
-        for k in sp.arange(1,nModes,1):
-            Mk   = np.reshape(M[:,k],nPx,nPx)
-            Mk   = FourierUtils.enlargeSupport(Mk,2*overSampling)
+        for k in np.arange(1,nModes,1):
+            Mk   = np.reshape(M[:,k],(nPx,nPx))
+            Mk   = FourierUtils.enlargeSupport(Mk,samp)
             # Vii computation
-            Vk   = np.real(fft.fft2(Mk**2*pupExtended)*conjPupFft) - abs(fft.fft2(Mk*pupExtended))**2
+            Vk   = np.real(fft.fft2(Mk**2 *pupExtended)*conjPupFft) - abs(fft.fft2(Mk*pupExtended))**2
             # Summing modes into dm basis
-            buf  = buf + s[k] * Vk
+            buf += s[k] * Vk
                         
         dphi     = den*fft.fftshift(np.real(fft.fft2(2*buf)))
         otf      = G*np.exp(-0.5*dphi)
                 
                 
-    elif np.any(Cmm[:]) & basis == 'Uij':
+    elif (np.any(Cmm)) & (basis == 'Uij'):
         nm   = modes.shape[1]
         dphi = 0*pupExtended
                 
         #Double loops on modes
         for i in np.arange(1,nm,1):
-            Mi = np.reshape(modes[:,i],nPx,nPx)
-            Mi = FourierUtils.enlargeSupport(Mi,2*overSampling)
+            Mi = np.reshape(modes[:,i],(nPx,nPx))
+            Mi = FourierUtils.enlargeSupport(Mi,samp)
             for j in np.arange(1,i,1):
                 #Getting modes + interpolation to twice resolution
-                Mj    = np.reshape(modes[:,j],nPx,nPx)
-                Mj    = FourierUtils.enlargeSupport(Mj,2*overSampling)
+                Mj    = np.reshape(modes[:,j],(nPx,nPx))
+                Mj    = FourierUtils.enlargeSupport(Mj,samp)
                 term1 = np.real(fft.fft2(Mi*Mj*pupExtended)*conjPupFft)
                 term2 = np.real(fft.fft2(Mi*pupExtended)*np.conjugate(fft.fft2(Mj*pupExtended)))
                 # Uij computation
@@ -285,18 +286,19 @@ def modes2Otf(Cmm,modes,pupil,npsf,overSampling=1,basis='Vii'):
                 fact = np.double(i!=j) + 1
                 dphi = dphi + fact*Cmm[i,j]*Uij                
                 dphi = fft.fftshift(2*dphi)*den*msk
-                otf  = G*np.exp(-0.5*dphi)
+        otf  = G*np.exp(-0.5*dphi)
     else:
         #Diffraction-limit case
         G    = G/G.max()
-        otf  = G;
+        otf  = G
         
             
     # Interpolation of the OTF => determination of the PSF fov
     otf = otf*(G>1e-5)
-    otf = FourierUtils.interpolateSupport(otf,npsf)
+    otf = FourierUtils.interpolateSupport(otf,nOtf)
+    dphi= FourierUtils.interpolateSupport(dphi,nOtf)
     otf = otf/otf.max()
-    return otf
+    return otf,dphi
 
 def pointWiseLocation(D,dp,idxValid):
     # Defining the point-wise locations

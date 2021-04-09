@@ -22,7 +22,7 @@ from aoSystem.atmosphere import atmosphere
 from aoSystem.source import source
 
 #INIT 
-def defineAoSystem(psfModelInst,file,circularAOarea='circle',Dcircle=None):
+def defineAoSystem(psfModelInst,file,aoFilter='circle',nLayer=None):
                     
         tstart = time.time() 
     
@@ -59,10 +59,10 @@ def defineAoSystem(psfModelInst,file,circularAOarea='circle',Dcircle=None):
             path_apodizer  = eval(config['telescope']['path_apodizer'])
         else:
             path_apodizer = []           
-        if config.has_option('telescope','CircleDiameter'):
-            psfModelInst.Dcircle = eval(config['telescope']['CircleDiameter'])
-        else:
-            psfModelInst.Dcircle = psfModelInst.D          
+        #if config.has_option('telescope','CircleDiameter'):
+        #    psfModelInst.Dcircle = eval(config['telescope']['CircleDiameter'])
+        #else:
+        #    psfModelInst.Dcircle = psfModelInst.D          
         if config.has_option('telescope','pupilAngle'):
             psfModelInst.pupilAngle= eval(config['telescope']['pupilAngle'])
         else:
@@ -81,11 +81,18 @@ def defineAoSystem(psfModelInst,file,circularAOarea='circle',Dcircle=None):
             print('%%%%%%%% ERROR %%%%%%%%')
             print('The number of atmospheric layers is not consistent in the parameters file\n')
             return 0
+        #----- compressing
+        if nLayer!=None: 
+            _,wSpeed = FourierUtils.eqLayers(weights,wSpeed,nLayer)
+            _,wDir   = FourierUtils.eqLayers(weights,wDir,nLayer,power=1)
+            weights,heights = FourierUtils.eqLayers(weights,heights,nLayer)
+            
+            
         psfModelInst.atm = atmosphere(wvlAtm,r0,weights,heights/np.cos(zenithAngle*np.pi/180),wSpeed,wDir,L0)            
         
         #%% Sampling and field of view
         psfModelInst.psInMas = eval(config['PSF_DIRECTIONS']['psInMas'])
-        psfModelInst.circularAOarea= circularAOarea
+        psfModelInst.aoFilter= aoFilter
         psfModelInst.nPix    = eval(config['PSF_DIRECTIONS']['psf_FoV'])
         
         #%% PSF directions

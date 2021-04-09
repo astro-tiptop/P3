@@ -70,12 +70,8 @@ class psfao21:
         self.__sampRef  = self.kRef_ * val
         self.kxky_      = FourierUtils.freq_array(self.nPix*self.kRef_,self.__sampRef,self.D)
         self.k2_        = self.kxky_[0]**2 + self.kxky_[1]**2                   
-        #piston filtering
-        if hasattr(self,'Dcircle'):
-            D  = self.Dcircle
-        else:
-            D = self.D          
-        self.pistonFilter_ = FourierUtils.pistonFilter(D,self.k2_)
+        #piston filtering        
+        self.pistonFilter_ = FourierUtils.pistonFilter(self.D,self.k2_)
         #self.pistonFilter_= 1 - 4*self.sombrero(1, np.pi*D*np.sqrt(self.k2_)) ** 2
         self.pistonFilter_[self.nPix*self.kRef_//2,self.nPix*self.kRef_//2] = 0
             
@@ -89,7 +85,7 @@ class psfao21:
         # redefining the ao-corrected area
         self.kc_= (val-1)/(2.0*self.D)
         kc2     = self.kc_**2
-        if self.circularAOarea:
+        if self.aoFilter == 'circle':
             self.mskOut_   = (self.k2_ >= kc2)
             self.mskIn_    = (self.k2_ < kc2)
         else:
@@ -98,7 +94,7 @@ class psfao21:
         self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.atm.L0**2) + self.k2_) ** (-11.0/6.0)
         self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kxky_[1][0]),self.kxky_[1][0]))
     # INIT
-    def __init__(self,file,circularAOarea='circle',antiAlias=False,pathStat=None,fitCn2=False):
+    def __init__(self,file,aoFilter='circle',antiAlias=False,pathStat=None,fitCn2=False):
         
         tstart = time.time()
         
@@ -106,14 +102,18 @@ class psfao21:
         self.file      = file
         self.antiAlias = antiAlias
         self.pathStat  = pathStat
-        self.status = defineAoSystem(self,file,circularAOarea='circle',Dcircle=None)
+        self.status = defineAoSystem(self,file,aoFilter=aoFilter)
         
         if self.status:
             # DEFINING THE DOMAIN ANGULAR FREQUENCIES
             self.nOtf        = self.nPix * self.kRef_
-            self.U_, self.V_, self.U2_, self.V2_, self.UV_, self.otfDL, self.otfNCPA =\
-            FourierUtils.instantiateAngularFrequencies(self.tel,self.nOtf,self.sampRef,self.wvlRef,opdMap_ext=self.opdMap_ext)
-                
+            self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf,fact=2)
+              
+            # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
+            self.otfNCPA, _ = FourierUtils.getStaticOTF(self.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.apodizer,opdMap_ext=self.opdMap_ext)
+            self.otfDL,_    = FourierUtils.getStaticOTF(self.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.apodizer)
+    
+    
             # ANISOPLANATISM
             if any(self.atm.heights) and any(self.src.zenith):
                 self.Dani_l = self.instantiateAnisoplanatism(self.nOtf,self.sampRef)

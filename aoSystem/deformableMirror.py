@@ -44,16 +44,35 @@ class deformableMirror:
             
     
     def setInfluenceFunction(self,resolution):
-        """SETINFLUENCEFUNCTION    
+        """
+            SETINFLUENCEFUNCTION    
         """
         nIF = self.nActu1D 
+        # defining the spline functions
         c  = 1/np.sqrt(np.log(1/self.mechCoupling))
         df = 1e-10
         mx = np.sqrt(-np.log(df)*c**2)
-        x  = np.linspace(-mx,mx,1001)
-        f  = np.exp(-x**2/c**2)
-        spline = interp.BSpline(x*self.pitch, f,3)
-                
+        r  = np.linspace(-mx,mx,1001)
+        
+        if self.modes == 'gaussian':        
+            f  = np.exp(-r**2/c**2)
+        elif self.modes == 'xinetics':
+            # defining main parameters
+            m = 0.180267421;
+            p = np.array([2.24506, 6.28464*m**2,-18.1956*m**4,31.2025*m**6,76.9336,-39.7956,m])
+            tmp     = -150*p[6]**8 * r** 8
+            w       = np.argwhere(r**8 < 1/(3*p[6]**8))
+            mask    = 0*tmp
+            mask[w] = np.exp(tmp[w])
+            # Define sub function
+            e  = (p[0] + p[1]*r**2 + p[2]*r**4 + p[3]*r**6)*mask
+            re = (abs(r)**e) * p[6]**e
+            # Get the influence function model
+            f  = np.exp(-p[4]*re)*(1 + p[5]*re)*mask         
+              
+        spline = interp.BSpline(r*self.pitch, f,3)
+        
+        # managing the actuators positions
         if self.influenceCentre==0:
             xIF = np.linspace(-1,1,nIF)*(nIF-1)/2*self.pitch - self.offset[0]
             yIF = np.linspace(-1,1,nIF)*(nIF-1)/2*self.pitch - self.offset[1]
@@ -67,15 +86,14 @@ class deformableMirror:
             self.actuatorCoord = xIF2 + complex(0,1)*yIF2
             u0 =  np.arange(0,nIF)          
         
-
         u           = np.transpose([u0])- [xIF]
         wu          = np.zeros((resolution,nIF))
-        index_u     = (u >= -x[len(x)-1]*self.pitch) & (u <= x[len(x)-1]*self.pitch)
+        index_u     = (u >= -r[len(r)-1]*self.pitch) & (u <= r[len(r)-1]*self.pitch)
         wu[index_u] = spline(u[index_u])
                 
         v           = np.transpose([u0])- [yIF]
         wv          = np.zeros((resolution,nIF))
-        index_v     = (v >= -x[len(x)-1]*self.pitch) & (v <= x[len(x)-1]*self.pitch)
+        index_v     = (v >= -r[len(r)-1]*self.pitch) & (v <= r[len(r)-1]*self.pitch)
         wv[index_v] = spline(v[index_v])
              
         #m_modes = sparse.lil_matrix((resolution**2,self.nValidActuator))
