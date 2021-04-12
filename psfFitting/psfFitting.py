@@ -8,11 +8,6 @@ Created on Wed Feb 17 10:33:19 2021
 
 #%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
-import matplotlib.pyplot as plt
-from psfao21.psfao21 import psfao21
-from aoSystem.telescope import telescope
-from aoSystem.atmosphere import atmosphere
-from aoSystem.source import source
 from scipy.optimize import least_squares
 import fourier.FourierUtils as FourierUtils
 from psfFitting.confidenceInterval import confidence_interval

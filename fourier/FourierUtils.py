@@ -6,7 +6,6 @@ Created on Wed Jun 17 01:17:43 2020
 """
 # Libraries
 import numpy as np
-import scipy.special as spc
 import numpy.fft as fft
 import matplotlib.pyplot as plt
 from astropy.modeling import models, fitting
@@ -14,7 +13,6 @@ import matplotlib as mpl
 import scipy.interpolate as interp        
 import scipy.ndimage as scnd
 import scipy.special as ssp
-
 #%%  FOURIER TOOLS
 
 def cov2sf(cov):
@@ -56,7 +54,7 @@ def freq_array(nX,samp,D):
     k2D *= 1.0/(D*samp)
     return k2D
 
-def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],opdMap_ext=0,apodizer=1,statModes=0):
+def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],opdMap_ext=0,apodizer=1,statModes=0,theta_ext=0):
         
         # DEFINING THE RESOLUTION/PUPIL
         nPup = tel.pupil.shape[0]
@@ -64,6 +62,8 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],opdMap_ext=0,apodizer=1,statModes=0)
         # ADDING STATIC MAP
         phaseStat = np.zeros((nPup,nPup))
         if np.any(opdMap_ext):
+            if theta_ext:
+                opdMap_ext = scnd.rotate(opdMap_ext,theta_ext,reshape=False)
             phaseStat = (2*np.pi*1e-9/wvl) * opdMap_ext
             
         # ADDING USER-SPECIFIED STATIC MODES
@@ -75,7 +75,7 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],opdMap_ext=0,apodizer=1,statModes=0)
                 phaseStat += phaseMap
                 
         # OTF
-        otfStat = pupil2otf(tel.pupil * apodizer,tel.pupil*phaseStat,samp)
+        otfStat = pupil2otf(tel.pupil * apodizer,phaseStat,samp)
         otfStat = interpolateSupport(otfStat,nOtf)
         otfStat/= otfStat.max()
         

@@ -177,12 +177,14 @@ class psfao21:
         
     def getPSD(self,x0):
         # Get the moffat PSD
-        pix2freq = 1/(self.tel.D * self.sampRef)
+        #pix2freq = 1/(self.tel.D * self.sampRef)
         psd = self.moffat(self.kxky_,list(x0[3:])+[0,0])
         # Piston filtering
         psd = self.pistonFilter_ * psd
         # Combination
-        psd = x0[0]**(-5/3) * self.psdKolmo_ + self.mskIn_ * (x0[1] + psd/psd.sum() * x0[2]/pix2freq**2 )
+        #A_emp = psd.sum() * pix2freq**2
+        A_emp = np.trapz(np.trapz(psd,self.kxky_[1][0]),self.kxky_[1][0])
+        psd   = x0[0]**(-5/3) * self.psdKolmo_ + self.mskIn_ * (x0[1] + psd/A_emp * x0[2] )
 
         # Wavefront error
         self.wfe = np.sqrt( np.trapz(np.trapz(psd,self.kxky_[1][0]),self.kxky_[1][0]) ) * self.wvlRef*1e9/2/np.pi
@@ -235,7 +237,7 @@ class psfao21:
                     2*x0_jitter[0] * x0_jitter[1] * x0_jitter[2] * self.UV_)
             Kjitter = np.exp(-0.5 * self.Djitter * (np.sqrt(2)/self.psInMas)**2)
         else:
-            	Kjitter = 1
+            Kjitter = 1
                                
         for l in range(self.nWvl): # LOOP ON WAVELENGTH
             

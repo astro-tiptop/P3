@@ -8,118 +8,11 @@ Created on Fri Jun 15 14:57:49 2018
 
 # Libraries
 import numpy as np
-import scipy as sp
 import numpy.fft as fft
 import scipy.special as ssp
 import fourier.FourierUtils as FourierUtils
 
-#%%  PSF-R FACILITIES
-def anisoplanatismTransferFunction(r0,L0,cnh,v,wd,nRes,npt,theta,wvlAtm,wvlSrc,P,D,zLgs=0):    
-    '''
-    r0  = 0.6
-    L0  = 25
-    cnh = np.array([[0,5e3,10e3],[0.7,0.2,0.1]])
-    v   = np.array([5,10,15])
-    wd  = np.array([0,np.pi/4,np.pi/2])
-    nRes= 101
-    npt = 21
-    theta = np.array([10,0])/206264.8
-    wvlAtm= 1.6e-6
-    wvlSrc= 1.6e-6
-    D     = 10    
-    P     = np.ones((npt,npt))
-    x     = np.linspace(-D/2,D/2,npt)
-    X,Y   = np.meshgrid(x,x)
-    R     = np.hypot(X,Y)
-    P     = R<=5
-    P     = np.ones((npt,npt))
-    zLgs  = 0
-    '''        
-    # Grab atmospherical parameters
-    nL      = cnh.shape[1]
-    f0      = 2*np.pi/L0
-    h       = cnh[0,:]
-    fr0     = cnh[1,:]/sum(cnh[1,:])
-    fracR0  = fr0*0.06*(wvlAtm)**2*r0**(-5/3)
-    cte     = 0.12184*(2*np.pi/wvlSrc)**2
-    thx     = theta[0]
-    thy     = theta[1]
-    # Phase sample locations in the pupil
-    msk     = P.astype(bool)
-    #npt2    = np.sum(msk)
-    pitch   = D/(npt-1)
-    x       = np.arange(-D/2,D/2+pitch,pitch)
-    x1,y1   = np.meshgrid(x,x)
-    X1      = np.ones((npt**2,1))*x1.T.reshape(-1)
-    Y1      = np.tile(y1,[npt,npt])
-    # Samples separation in the pupil
-    rhoX    = np.transpose(X1.T - x1.T.reshape(-1))
-    rhoY    = Y1 - y1.T.reshape(-1)
-    # Instantiation   
-    I0      = mcDonald(0)
-    I1      = mcDonald(f0*np.hypot(rhoX,rhoY))
-    def Ialpha(x,y):
-        return mcDonald(f0*np.hypot(x,y))
-    
-    # Anisoplanatism Structure Function   
-    Dani = np.zeros((npt**2,npt**2))
-    for l in np.arange(0,nL,1):        
-        zl    = h[l]
-        if zl !=0:
-            #Strech magnification factor
-            if zLgs:
-                g     = zl/zLgs                                 
-                I2    = Ialpha(rhoX*(1-g),rhoY*(1-g))
-                I3    = Ialpha(np.transpose((1-g)*X1.T - x1.T.reshape(-1))+zl*thx,(1-g)*Y1 - y1.T.reshape(-1)+zl*thy)
-                I4    = Ialpha(g*X1-zl*thx,g*Y1-zl*thy)
-                I5    = Ialpha(g*X1.T-zl*thx,g*Y1.T-zl*thy) 
-                I6    = Ialpha(np.transpose(X1.T - (1-g)*x1.T.reshape(-1))-zl*thx,Y1 - (1-g)*y1.T.reshape(-1)-zl*thy)                 
-                Dani  = Dani + cte*L0**(5/3)*fracR0[l]*(2.*I0 - I1 - I2 + I3 - I4 - I5 + I6)                      
-            else:            
-                I2    = Ialpha(rhoX+zl*thx,rhoY+zl*thy)
-                I3    = Ialpha(zl*thx,zl*thy)
-                I4    = Ialpha(rhoX-zl*thx,rhoY-zl*thy)
-                Dani  = Dani + cte*L0**(5/3)*fracR0[l]*(2*I0 - 2*I1 + I2 - 2*I3  + I4)       
-    
-    # Tip-tilt filtering if any             
-
-    # DM filtering
-                   
-    # ATF computation
-    otfDL = zonalCovarianceToOtf(0*Dani,nRes,D,pitch,msk)
-    ATF   = zonalCovarianceToOtf(-0.5*Dani,nRes,D,pitch,msk)/otfDL
-    ATF   = ATF/ATF.max()
-    
-    return ATF    
-    
-def getNoiseVariance(s,nfit=0,nshift=1):
-                       
-    s       = s - s.mean()
-    nS,nF   = s.shape
-    out     = np.zeros(nS);
-            
-    if nfit !=0:
-        # Polynomial fitting procedure
-        delay   = np.linspace(0,1,nfit+1)
-        for i in np.arange(0,nS,1):
-            #pdb.set_trace()
-            g      = fft.ifft(fft.fft(s[i,:])*np.conjugate(fft.fft(s[i,:])))/nF
-            mx     = g.max()
-            fit    = np.polyfit(delay[1:nfit+1],g[1:nfit+1],nfit)
-            yfit   = 0*delay
-                    
-            for k in np.arange(0,nfit+1,1):
-                yfit = yfit + fit[k]*delay**(nfit-k)
-                    
-            out[i] = mx - yfit[0]
-                
-        return np.diag(out)  
-              
-    elif nshift !=0:
-        ds  = s - np.roll(s,(0,nshift))
-        out = np.dot(s,np.transpose(ds))/nF
-        return out
-            
+#%%  PSF-R FACILITIES               
 def getOLslopes(s,u,MI,dt):    
     return s + MI*(dt*np.roll(u,(-2,2)) + (1-dt)*np.roll(u,(-1,2)))
 
@@ -137,7 +30,6 @@ def getStructureFunction(phi,pupil,overSampling):
     
     return np.real(fft.fftshift(dphi * mask /corww))
           
-
 def mcDonald(x):
         out = 3/5 * np.ones_like(x)
         idx  = x!=0
@@ -149,23 +41,6 @@ def mcDonald(x):
         
 def Ialpha(x,y):
     return mcDonald(np.hypot(x,y))
-        
-#def mcDonald(x):
-#    
-#    if np.isscalar(x):
-#        if x==0:
-#            out = 0.6
-#        else:
-#            out = x**(5/6)*spc.kv(5/6,x)/(2**(5/6)*spc.gamma(11/6))
-#    else:
-#        out = 0.6*np.ones(x.shape)
-#        idx = (x.nonzero())
-#        
-#        if len(idx):
-#            out[idx] = x[idx]**(5/6)*spc.kv(5/6,x[idx])/(2**(5/6)*spc.gamma(11/6))
-#       
-#    return out
-
 
 def mkotf(indptsc,indptsc2,nU1d,ampl,dp,C_phi):            
     #Instantiation
@@ -183,7 +58,6 @@ def mkotf(indptsc,indptsc2,nU1d,ampl,dp,C_phi):
             if len(indpts)== 0:
                 otf[iu,ju] = 0
             else:
-                #pdb.set_trace()
                 msk        = np.unravel_index(C_phi_size2*indpts + indpts2, C_phipi.shape)
                 myarg      = C_phip_diag[indpts2]*C_phip_diag[indpts]*C_phipi[msk]
                 kernel     = np.dot(myarg,np.conjugate(ampl[indpts2])*ampl[indpts])
@@ -243,11 +117,8 @@ def modes2Otf(Cmm,modes,pupil,nOtf,samp=2,basis='Vii'):
     msk        = G/G.max() > 1e-7
     den[msk]   = 1/G[msk]
             
-            
     if (np.any(Cmm)) & (basis == 'Vii'):
         # Diagonalizing the Cvv matrix
-        #import pdb
-        #pdb.set_trace()
         U,s,V   = np.linalg.svd(Cmm)
         nModes  = len(s)
         M       = np.matmul(modes,U)
@@ -264,7 +135,6 @@ def modes2Otf(Cmm,modes,pupil,nOtf,samp=2,basis='Vii'):
                         
         dphi     = den*fft.fftshift(np.real(fft.fft2(2*buf)))
         otf      = G*np.exp(-0.5*dphi)
-                
                 
     elif (np.any(Cmm)) & (basis == 'Uij'):
         nm   = modes.shape[1]
@@ -292,7 +162,6 @@ def modes2Otf(Cmm,modes,pupil,nOtf,samp=2,basis='Vii'):
         G    = G/G.max()
         otf  = G
         
-            
     # Interpolation of the OTF => determination of the PSF fov
     otf = otf*(G>1e-5)
     otf = FourierUtils.interpolateSupport(otf,nOtf)
@@ -308,14 +177,12 @@ def pointWiseLocation(D,dp,idxValid):
     actuLocY             = actuLocY[idxValid]
     return np.array([actuLocX,actuLocY])
 
-
 def sr2wfe(Strehl,wvl):
     return 1e9*np.sqrt(-np.log(Strehl))*wvl/2/np.pi
     
 def wfe2sr(wfe,wvl):
     return np.exp(-(2*np.pi*wfe*1e-9/wvl)**2)
 
-       
 def zonalCovarianceToOtf(Cphi,npsf,D,dp,idxValid):            
     # Grabbing the valid actuators positions in meters
     loc  = pointWiseLocation(D,dp,idxValid)
@@ -334,8 +201,3 @@ def zonalCovarianceToOtf(Cphi,npsf,D,dp,idxValid):
     otf = FourierUtils.interpolateSupport(otf,npsf)
     otf = otf/otf.max()
     return otf
-
-        
-
-    
-                

@@ -11,10 +11,11 @@ import time
 import sys as sys
 import numpy.fft as fft
 
-from fourier.fourierModel import fourierModel
-from aoSystem.defineAoSystem import defineAoSystem
 import fourier.FourierUtils as FourierUtils
 import psfr.psfrUtils as psfrUtils
+from fourier.fourierModel import fourierModel
+from aoSystem.defineAoSystem import defineAoSystem
+from aoSystem.anisoplanatismModel import anisoplanatismStructureFunction
 
 #%%
 rad2mas = 3600 * 180 * 1000 / np.pi
@@ -95,7 +96,7 @@ class psfR:
         self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kxky_[1][0]),self.kxky_[1][0]))
     
     # INIT
-    def __init__(self,trs,nLayer=None,aoFilter='circle'):
+    def __init__(self,trs,nLayer=None,aoFilter='circle',theta_ext=0):
         """
         """
         # READ PARFILE        
@@ -107,15 +108,13 @@ class psfR:
             return
         self.file   = trs.path_ini
         self.trs    = trs
+        self.theta_ext = theta_ext
         self.status = defineAoSystem(self,self.file,aoFilter=aoFilter,nLayer=nLayer)
         
         if self.status:
             
             self.nOtf = self.nPix * self.kRef_
-            
-            #COORDINATES IN THE PUPIL
-            #self.X_,self.Y_ = FourierUtils.shift_array(self.nOtf,self.nOtf,fact=2.0) 
-            
+                        
             #INSTANTIATING THE ANGULAR FREQUENCIES
             self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf,fact= 2.0)
             
@@ -123,7 +122,7 @@ class psfR:
             self.bounds = self.defineBounds()
         
             # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
-            self.otfNCPA, _ = FourierUtils.getStaticOTF(self.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.apodizer,opdMap_ext=self.opdMap_ext)
+            self.otfNCPA, _ = FourierUtils.getStaticOTF(self.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.apodizer,opdMap_ext=self.opdMap_ext,theta_ext=self.theta_ext)
             self.otfDL,_    = FourierUtils.getStaticOTF(self.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.apodizer)
     
             # INSTANTIATING THE FOURIER MODEL
@@ -146,7 +145,7 @@ class psfR:
                 self.dphi_tt = 0
             
             # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
-            # ANISOKINETISM IS MISSING
+            self.dphi_ani = self.anisoplanatismPhaseStructureFunction()
             
             # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION
             if self.trs.tel.name != 'simulation':
@@ -189,10 +188,13 @@ class psfR:
     def aliasingPhaseStructureFunction(self,r0):
         # computing the aliasing PSD over the AO-corrected area
         self.psdAlias_ = self.fao.aliasingPSD()
+        
         # zero-padding the PSD
         self.psdAlias_ = FourierUtils.enlargeSupport(self.psdAlias_,self.nOtf/self.fao.resAO)
+       
         # computing the aliasing phase structure function
         dphi_alias = r0**(-5/3) * np.real(fft.fftshift(FourierUtils.cov2sf(FourierUtils.psd2cov(self.psdAlias_,2*self.fao.kc/self.fao.resAO))))
+        
         # interpolating the phase structure function if required
         if dphi_alias.shape[0] != self.nOtf:
             dphi_alias = FourierUtils.interpolateSupport(dphi_alias,self.nOtf,kind='spline')
@@ -207,8 +209,10 @@ class psfR:
         elif method == 'dm-based':
             du = np.diff(self.trs.dm.com,axis=0)/self.fao.loopGain    
         Cao  =  np.matmul(du.T,du)/du.shape[0]
+       
         # Unbiasing noise and accounting for the wave number
         Cao = (2*np.pi/self.wvlRef)**2 * (Cao - self.trs.noise.Cn_ao)
+        
         # Computing the phase structure function
         _,dphi_ao = psfrUtils.modes2Otf(Cao,self.trs.mat.dmIF,self.tel.pupil,self.nOtf,basis=basis,samp=self.sampCen/2)
         
@@ -219,22 +223,43 @@ class psfR:
         """
         # computing the empirical covariance matrix of the residual tip-tilt
         Ctt   =  np.matmul(self.trs.tipTilt.com.T,self.trs.tipTilt.com)/self.trs.tipTilt.nExp
+        
         # computing the coefficients of the Gaussian Kernel in rad^2
         Guu = (2*np.pi/self.wvlRef)**2 *(Ctt - self.trs.noise.Cn_tt) 
+        
         # rotating the axes
         ang = self.trs.tel.pupilAngle * np.pi/180
         Ur  = self.U_*np.cos(ang) + self.V_*np.sin(ang)
         Vr  =-self.U_*np.sin(ang) + self.V_*np.cos(ang)  
+        
         # computing the Gaussian-Kernel
         dphi_tt   = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 + Guu[0,1]*Ur*Vr.T + Guu[1,0]*Vr*Ur.T
+        
         return dphi_tt
+     
+    def anisoplanatismPhaseStructureFunction(self):
+        
+        # allocating memory
+        self.dani_ang = np.zeros((self.src.nSrc,self.nOtf,self.nOtf))
+        
+        # compute th Cn2 profile in m^(-5/3)
+        Cn2 = self.atm.weights * self.atm.r0**(-5/3)
+        
+        if self.trs.aoMode == 'NGS':
+            # NGS case : angular-anisoplanatism only
+            self.dani_ang = anisoplanatismStructureFunction(self.tel,self.atm,self.src,self.ngs,self.ngs,self.nOtf,self.sampRef)
+            return (self.dani_ang *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
+        
+        elif self.trs.aoMode == 'LGS':
+            # LGS case : focal-angular  + anisokinetism
+            self.dani_focang,self.dani_ang,self.dani_tt = anisoplanatismStructureFunction(self.tel,self.atm,self.src,self.lgs,self.ngs,self.nOtf,self.sampRef,Hfilter=self.trs.mat.Hdm)
+            return ( (self.dani_focang.T + self.dani_tt.T) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         
     def pixelOpticalTransferFunction(self):
         """
         """
-        #p = self.psInMas/rad2mas * self.sampCen*self.trs.tel.D/self.trs.cam.wvlCen/2
-        p = 0.5
-        otfPixel = np.sinc(self.U_*p)* np.sinc(self.V_*p)
+        #note : self.U_/V_ ranges ar -1 to 1
+        otfPixel = np.sinc(self.U_/2)* np.sinc(self.V_/2)
         return otfPixel
 
 
@@ -293,7 +318,7 @@ class psfR:
                 fftPhasor = 1
                         
             # Get the total OTF
-            self.otfTot = self.otfStat * np.exp(-0.5*(self.dphi)) * fftPhasor * self.otfPixel
+            self.otfTot = self.otfStat * np.exp(-0.5*(self.dphi + self.dphi_ani[iSrc])) * fftPhasor * self.otfPixel
     
             # Get the PSF
             psf_i = np.real(fft.fftshift(fft.ifft2(fft.fftshift(self.otfTot))))

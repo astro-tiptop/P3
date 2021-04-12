@@ -14,13 +14,13 @@ from astropy.io import fits
 from configparser import ConfigParser
 
 from aoSystem.deformableMirror import deformableMirror
-import psfr.keckUtils as keckUtils
-from psfr.massdimm import fetch_data
-from psfr.massdimm import DIMM
-from psfr.massdimm import MASS
-from psfr.massdimm import MASSPROF
-from psfr.massdimm import CombineMASSandDIMM
-
+import telemetry.keckUtils as keckUtils
+from telemetry.massdimm import fetch_data
+from telemetry.massdimm import DIMM
+from telemetry.massdimm import MASS
+from telemetry.massdimm import MASSPROF
+from telemetry.massdimm import CombineMASSandDIMM
+from telemetry.systemDiagnosis import systemDiagnosis
 #%%
 class structtype():
     pass
@@ -108,9 +108,11 @@ class telemetry:
         self.wfs.nSubap = 20
         self.wfs.nSl    = 608 # Number of slopes measurements within the pupil (x and y)
         self.wfs.theta  = 90
+        self.wfs.ron    = 3.0
         # tipTilt
         self.tipTilt = structtype()
         self.tipTilt.tilt2meter = 12.68e-6 # arcsec of tilt to OPD over the Keckpupil 
+        self.tipTilt.ron    = 3.0
         # dm
         self.dm = structtype()
         self.dm.volt2meter   = 0.6e-6 # conversion factor from volts to meter OPD
@@ -161,20 +163,28 @@ class telemetry:
         self.cam.psInMas = keckUtils.getScale(hdr)
         
         if self.cam.name == 'NIRC2':
-            # wavelengths and transmission
-            self.path_filter = self.path_calib + '/NIRC2_FILTERS/'
-            self.cam.wvl, self.cam.bw, self.cam.transmission, self.cam.dispersion = keckUtils.samplingFilterProfile(self.path_filter,hdr)
-            # exposure configuration
-            self.cam.ittime,self.cam.coadds,self.cam.sampmode,self.cam.nreads,self.cam.ron,self.cam.gain = keckUtils.getExposureConfig(hdr)
-            self.cam.saturation = keckUtils.getSaturationLevel(self.cam.name)
-            # NCPA
-            self.cam.path_ncpa = self.path_calib + '/NIRC2_STAT/' +  keckUtils.getNCPAstr(hdr)
             # image
-            self.cam.image = fits.getdata(self.path_img)
+            self.cam.image = fits.getdata(self.path_img) #in DN
             self.cam.fov   = self.cam.image.shape[0] #square image
             # positions
             self.cam.zenith = [0.0]
             self.cam.azimuth = [0.0]
+            
+            # wavelengths and transmission
+            self.path_filter = self.path_calib + '/NIRC2_FILTERS/'
+            self.cam.wvl, self.cam.bw, self.cam.transmission, self.cam.dispersion = keckUtils.samplingFilterProfile(self.path_filter,hdr)
+            
+            # exposure configuration
+            self.cam.ittime,self.cam.coadds,self.cam.sampmode,self.cam.nreads,self.cam.ron,self.cam.gain = keckUtils.getExposureConfig(hdr)
+            self.cam.saturation = keckUtils.getSaturationLevel(self.cam.name)
+            if self.cam.image.max() > self.cam.saturation*self.cam.coadds:
+                print('WARNING : the image is likely to be saturated')
+            # ron in e- and gain in e-/DN
+            self.cam.ronDN = np.sqrt(self.cam.coadds)*self.cam.ron/self.cam.gain
+            # NCPA
+            self.cam.path_ncpa = self.path_calib + '/NIRC2_STAT/' +  keckUtils.getNCPAstr(hdr)
+            
+            
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
             print('THE OSIRIS CASE IS NOT YET IMPLEMENTED\n')
@@ -276,7 +286,7 @@ class telemetry:
             self.tipTilt.tilt2meter= 3.2*1.268e-05
         else:
             self.tipTilt.tilt2meter = 12.68e-6
-            self.tipTilt.slopes  = trsData.A['RESIDUALWAVEFRONT'][0][:,self.dm.nCom:self.dm.nCom+1]# %angle in arcsec
+            self.tipTilt.slopes  = trsData.A['RESIDUALWAVEFRONT'][0][:,self.dm.nCom:self.dm.nCom+2]# %angle in arcsec
             self.tipTilt.com     = trsData.A['TTCOMMANDS'][0]
        
         self.tipTilt.slopes  = self.tipTilt.tilt2meter*self.tipTilt.slopes
@@ -288,9 +298,9 @@ class telemetry:
         # 3\ Get system matrices and reconstructed wavefront
         
         #3.1\ Get DM commands reconstructors from slopes
-        MC            = np.reshape(trsData['rx'],(self.wfs.nSl,self.dm.nCom+3,trsData['NREC'])) #command matrix
-        self.mat.R    = self.dm.volt2meter*np.transpose(MC[:,:self.dm.nCom,:],[1,0,2])
-        self.mat.Rtt  = self.tipTilt.tilt2meter*np.transpose(MC[:,self.dm.nCom:self.dm.nCom+1,:],[1,0,2])
+        MC            = np.reshape(trsData['rx'],(self.dm.nCom+3,self.wfs.nSl,trsData['NREC'])) #command matrix
+        self.mat.R    = self.dm.volt2meter*MC[:self.dm.nCom,:,:]
+        self.mat.Rtt  = self.tipTilt.tilt2meter*MC[self.dm.nCom:self.dm.nCom+2,:,:]
         
         #3.2\ Get the reconstructed wavefront in OPD and in the actuators space
         self.rec.res   = self.dm.volt2meter*trsData.A['RESIDUALWAVEFRONT'][0][:,0:self.dm.nCom]
@@ -324,11 +334,11 @@ class telemetry:
         
         #4.3. RTC controller HO loop
         self.holoop.gain   = trsData['DM_SERVO'][0]
-        self.holoop.tf.num = trsData['DM_SERVO'][0:3]
+        self.holoop.tf.num = trsData['DM_SERVO'][0:4]
         self.holoop.tf.den = trsData['DM_SERVO'][4:]
         self.holoop.noise  = 0.0
         self.ttloop.gain   = trsData['DT_SERVO'][0]
-        self.ttloop.tf.num = trsData['DT_SERVO'][0:3]
+        self.ttloop.tf.num = trsData['DT_SERVO'][0:4]
         self.ttloop.tf.den = trsData['DT_SERVO'][4:]
         
         

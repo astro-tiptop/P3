@@ -161,7 +161,7 @@ def defineAoSystem(psfModelInst,file,aoFilter='circle',nLayer=None):
         if path_static != [] and ospath.isfile(path_static) == True:
              if  re.search(".fits",path_static)!=None :
                 psfModelInst.opdMap_ext = fits.getdata(path_static)
-                psfModelInst.opdMap_ext = psfModelInst.tel.pupil*FourierUtils.interpolateSupport(psfModelInst.opdMap_ext,psfModelInst.nPup,kind='linear')
+                psfModelInst.opdMap_ext = FourierUtils.interpolateSupport(psfModelInst.opdMap_ext,psfModelInst.nPup,kind='linear')
         
         # STATIC ABERRATIONS
         psfModelInst.statModes = None
@@ -191,7 +191,8 @@ def defineAoSystem(psfModelInst,file,aoFilter='circle',nLayer=None):
                     psfModelInst.statModes[:,:,k] = psfModelInst.tel.pupil * mode
                 psfModelInst.isStatic = True
         
-        #%% Guide stars
+        #%% GUIDE STARS
+        
         wvlGs      = np.unique(np.array(eval(config['SENSOR_HO']['SensingWavelength_HO'])))
         zenithGs   = np.array(eval(config['GUIDESTARS_HO']['GuideStarZenith_HO']))
         azimuthGs  = np.array(eval(config['GUIDESTARS_HO']['GuideStarAzimuth_HO']))
@@ -201,7 +202,27 @@ def defineAoSystem(psfModelInst,file,aoFilter='circle',nLayer=None):
             print('%%%%%%%% ERROR %%%%%%%%')
             print('The number of guide stars for high-order sensing is not consistent in the parameters file\n')
             return 0
-        psfModelInst.gs = source(wvlGs,zenithGs,azimuthGs,height=heightGs,types="GUIDE STAR",verbose=True)   
-
+        # ----- creating the source class
+        if heightGs == 0:
+            psfModelInst.ngs = source(wvlGs,zenithGs,azimuthGs,height=heightGs,types="NGS",verbose=True)   
+            psfModelInst.lgs = None
+        else:
+            psfModelInst.lgs = source(wvlGs,zenithGs,azimuthGs,height=heightGs,types="LGS",verbose=True)   
+            if (not config.has_section('GUIDESTARS_LO')) | (not config.has_section('SENSOR_LO')):
+                print('%%%%%%%% WARNING %%%%%%%%')
+                print('No information about the tip-tilt star can be retrieved\n')
+                psfModelInst.ngs = None
+            else:
+                wvlGs      = np.unique(np.array(eval(config['SENSOR_LO']['SensingWavelength_LO'])))
+                zenithGs   = np.array(eval(config['GUIDESTARS_LO']['GuideStarZenith_LO']))
+                azimuthGs  = np.array(eval(config['GUIDESTARS_LO']['GuideStarAzimuth_LO']))
+                # ----- verification
+                if len(zenithGs) != len(azimuthGs):
+                    print('%%%%%%%% ERROR %%%%%%%%')
+                    print('The number of guide stars for high-order sensing is not consistent in the parameters file\n')
+                    return 0
+                psfModelInst.ngs = source(wvlGs,zenithGs,azimuthGs,types="NGS",verbose=True)   
+        
+        
         psfModelInst.t_getParam = 1000*(time.time() - tstart)
         return 1
