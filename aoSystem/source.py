@@ -33,7 +33,7 @@ class source:
         return 2*np.pi/self.wvl
         
     # CONSTRUCTOR
-    def __init__(self,wvl,zenith,azimuth,height=0,nSource=1,types="SOURCE",verbose=False):
+    def __init__(self,wvl,zenith,azimuth,height=0,nSource=1,tag="SOURCE",verbose=False):
        
         # Vectorizing inputs is required  
         if np.isscalar(wvl):
@@ -52,7 +52,7 @@ class source:
         self.azimuth   = azimuth    # Azimuth angle in degree
         self.height    = height     # Source height in meter
         self.nSource   = nSource
-        self.type = types
+        self.tag       = tag
         self.verbose   = verbose        
         
         
@@ -91,7 +91,7 @@ class source:
         """Display object information: prints information about the source object
         """
        
-        s = "___ " + self.type + "___\n"
+        s = "___ " + self.tag + "___\n"
         s = s + "--------------------------------------------------------------------------\n"  
         s = s +" Obj zen[arcsec] azim[deg] height[m] wavelength[micron]\n"
         for kObj in np.arange(0,self.nSrc):

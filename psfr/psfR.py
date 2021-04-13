@@ -14,7 +14,7 @@ import numpy.fft as fft
 import fourier.FourierUtils as FourierUtils
 import psfr.psfrUtils as psfrUtils
 from fourier.fourierModel import fourierModel
-from aoSystem.defineAoSystem import defineAoSystem
+from aoSystem.aoSystem import aoSystem
 from aoSystem.anisoplanatismModel import anisoplanatismStructureFunction
 
 #%%
@@ -31,14 +31,14 @@ class psfR:
     @wvl.setter
     def wvl(self,val):
         self.__wvl = val
-        self.samp  = val* rad2mas/(self.psInMas*self.D)
+        self.samp  = val* rad2mas/(self.ao.cam.psInMas*self.ao.tel.D)
     @property
     def wvlRef(self):
         return self.__wvlRef
     @wvlRef.setter
     def wvlRef(self,val):
         self.__wvlRef = val
-        self.sampRef  = val* rad2mas/(self.psInMas*self.D)
+        self.sampRef  = val* rad2mas/(self.ao.cam.psInMas*self.ao.tel.D)
     
     @property
     def wvlCen(self):
@@ -46,7 +46,7 @@ class psfR:
     @wvlCen.setter
     def wvlCen(self,val):
         self.__wvlCen = val
-        self.sampCen  = val* rad2mas/(self.psInMas*self.D)
+        self.sampCen  = val* rad2mas/(self.ao.cam.psInMas*self.ao.tel.D)
         
     # SAMPLING
     @property
@@ -70,10 +70,10 @@ class psfR:
     def sampRef(self,val):
         self.kRef_      = int(np.ceil(2.0/val)) # works for oversampling
         self.__sampRef  = self.kRef_ * val
-        self.kxky_      = FourierUtils.freq_array(self.nPix*self.kRef_,self.__sampRef,self.D)
+        self.kxky_      = FourierUtils.freq_array(self.nPix*self.kRef_,self.__sampRef,self.ao.tel.D)
         self.k2_        = self.kxky_[0]**2 + self.kxky_[1]**2                   
         #piston filtering
-        self.pistonFilter_ = FourierUtils.pistonFilter(self.D,self.k2_)
+        self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,self.k2_)
         self.pistonFilter_[self.nPix*self.kRef_//2,self.nPix*self.kRef_//2] = 0
             
     # CUT-OFF FREQUENCY
@@ -84,15 +84,15 @@ class psfR:
     def nAct(self,val):
         self.__nAct = val
         # redefining the ao-corrected area
-        self.kc_= (val-1)/(2.0*self.D)
+        self.kc_= (val-1)/(2.0*self.ao.tel.D)
         kc2     = self.kc_**2
-        if self.aoFilter == 'circle':
+        if self.ao.dms.AoArea == 'circle':
             self.mskOut_   = (self.k2_ >= kc2)
             self.mskIn_    = (self.k2_ < kc2)
         else:
             self.mskOut_   = np.logical_or(abs(self.kxky_[0]) >= self.kc_, abs(self.kxky_[1]) >= self.kc_)
             self.mskIn_    = np.logical_and(abs(self.kxky_[0]) < self.kc_, abs(self.kxky_[1]) < self.kc_)
-        self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.atm.L0**2) + self.k2_) ** (-11.0/6.0)
+        self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.ao.atm.L0**2) + self.k2_) ** (-11.0/6.0)
         self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kxky_[1][0]),self.kxky_[1][0]))
     
     # INIT
@@ -109,9 +109,16 @@ class psfR:
         self.file   = trs.path_ini
         self.trs    = trs
         self.theta_ext = theta_ext
-        self.status = defineAoSystem(self,self.file,aoFilter=aoFilter,nLayer=nLayer)
+        self.ao        = aoSystem(self.file)
         
-        if self.status:
+        self.nPix   = self.ao.cam.fovInPix
+        self.wvl    = self.ao.src.wvl
+        self.wvlRef = np.min(self.ao.src.wvl)
+        self.wvlCen = np.mean(self.ao.src.wvl)
+        self.nWvl   = len(self.wvl)
+        self.nAct   = self.ao.dms.nActu1D
+        
+        if self.ao.error == False:
             
             self.nOtf = self.nPix * self.kRef_
                         
@@ -122,11 +129,11 @@ class psfR:
             self.bounds = self.defineBounds()
         
             # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
-            self.otfNCPA, _ = FourierUtils.getStaticOTF(self.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.apodizer,opdMap_ext=self.opdMap_ext,theta_ext=self.theta_ext)
-            self.otfDL,_    = FourierUtils.getStaticOTF(self.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.apodizer)
-    
+            self.otfNCPA, _ = FourierUtils.getStaticOTF(self.ao.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.ao.tel.apodizer,opdMap_ext=self.ao.tel.opdMap_ext)
+            self.otfDL,_    = FourierUtils.getStaticOTF(self.ao.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.ao.tel.apodizer)
+            
             # INSTANTIATING THE FOURIER MODEL
-            self.fao = fourierModel(self.file,calcPSF=False,display=False,aoFilter=aoFilter)
+            self.fao = fourierModel(self.file,calcPSF=False,display=False,aoFilter=self.ao.dms.AoArea)
             
             # INSTANTIATING THE FITTING PHASE STRUCTURE FUNCTION
             self.dphi_fit = self.fittingPhaseStructureFunction(1)
@@ -163,23 +170,23 @@ class psfR:
           _EPSILON = np.sqrt(sys.float_info.epsilon)
           
           # Bounds on r0
-          bounds_down = list(np.ones(self.atm.nL)*_EPSILON)
-          bounds_up   = list(np.inf * np.ones(self.atm.nL))            
+          bounds_down = list(np.ones(self.ao.atm.nL)*_EPSILON)
+          bounds_up   = list(np.inf * np.ones(self.ao.atm.nL))            
           # optical gains 
           bounds_down += [0,0]
           bounds_up   += [np.inf,np.inf]         
           # Photometry
-          bounds_down += list(np.zeros(self.src.nSrc))
-          bounds_up   += list(np.inf*np.ones(self.src.nSrc))
+          bounds_down += list(np.zeros(self.ao.src.nSrc))
+          bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
           # Astrometry
-          bounds_down += list(-self.nPix//2 * np.ones(2*self.src.nSrc))
-          bounds_up   += list( self.nPix//2 * np.ones(2*self.src.nSrc))
+          bounds_down += list(-self.nPix//2 * np.ones(2*self.ao.src.nSrc))
+          bounds_up   += list( self.nPix//2 * np.ones(2*self.ao.src.nSrc))
           # Background
           bounds_down += [-np.inf]
           bounds_up   += [np.inf]
           # Static aberrations
-          bounds_down += list(-self.wvlRef/2*1e9 * np.ones(self.nModes))
-          bounds_up   += list(self.wvlRef/2 *1e9 * np.ones(self.nModes))
+          bounds_down += list(-self.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
+          bounds_up   += list(self.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
           return (bounds_down,bounds_up)
       
     def fittingPhaseStructureFunction(self,r0):
@@ -214,7 +221,7 @@ class psfR:
         Cao = (2*np.pi/self.wvlRef)**2 * (Cao - self.trs.noise.Cn_ao)
         
         # Computing the phase structure function
-        _,dphi_ao = psfrUtils.modes2Otf(Cao,self.trs.mat.dmIF,self.tel.pupil,self.nOtf,basis=basis,samp=self.sampCen/2)
+        _,dphi_ao = psfrUtils.modes2Otf(Cao,self.trs.mat.dmIF,self.ao.tel.pupil,self.nOtf,basis=basis,samp=self.sampRef/2)
         
         return dphi_ao
             
@@ -240,19 +247,19 @@ class psfR:
     def anisoplanatismPhaseStructureFunction(self):
         
         # allocating memory
-        self.dani_ang = np.zeros((self.src.nSrc,self.nOtf,self.nOtf))
+        self.dani_ang = np.zeros((self.ao.src.nSrc,self.nOtf,self.nOtf))
         
         # compute th Cn2 profile in m^(-5/3)
-        Cn2 = self.atm.weights * self.atm.r0**(-5/3)
+        Cn2 = self.ao.atm.weights * self.ao.atm.r0**(-5/3)
         
         if self.trs.aoMode == 'NGS':
             # NGS case : angular-anisoplanatism only
-            self.dani_ang = anisoplanatismStructureFunction(self.tel,self.atm,self.src,self.ngs,self.ngs,self.nOtf,self.sampRef)
+            self.dani_ang = anisoplanatismStructureFunction(self.ao.tel,self.ao.atm,self.ao.src,self.ao.ngs,self.ao.ngs,self.nOtf,self.sampRef)
             return (self.dani_ang *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         
         elif self.trs.aoMode == 'LGS':
             # LGS case : focal-angular  + anisokinetism
-            self.dani_focang,self.dani_ang,self.dani_tt = anisoplanatismStructureFunction(self.tel,self.atm,self.src,self.lgs,self.ngs,self.nOtf,self.sampRef,Hfilter=self.trs.mat.Hdm)
+            self.dani_focang,self.dani_ang,self.dani_tt = anisoplanatismStructureFunction(self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,self.nOtf,self.sampRef,Hfilter=self.trs.mat.Hdm)
             return ( (self.dani_focang.T + self.dani_tt.T) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         
     def pixelOpticalTransferFunction(self):
@@ -267,11 +274,11 @@ class psfR:
         
         if nPix == None:
             nPix = self.nPix
-        psf = np.zeros((self.src.nSrc,nPix,nPix))
+        psf = np.zeros((self.ao.src.nSrc,nPix,nPix))
         
         # GETTING THE PARAMETERS
         # Cn2 profile
-        nL   = self.atm.nL
+        nL   = self.ao.atm.nL
         if nL > 1: # fit the Cn2 profile
             Cn2  = np.asarray(x0[0:nL])
             r0   = np.sum(Cn2)**(-3/5)
@@ -283,28 +290,28 @@ class psfR:
         gtt = x0[nL+1]
         
         # Astrometry/Photometry/Background
-        x0_stellar = list(x0[nL+2:nL+4+3*self.src.nSrc])
+        x0_stellar = list(x0[nL+2:nL+4+3*self.ao.src.nSrc])
         # Static aberrations
-        if len(x0) > nL + 2 + 3*self.src.nSrc + 1:
-            x0_stat = list(x0[nL+3+3*self.src.nSrc:])
+        if len(x0) > nL + 2 + 3*self.ao.src.nSrc + 1:
+            x0_stat = list(x0[nL+3+3*self.ao.src.nSrc:])
         else:
             x0_stat = []   
             
         # INSTRUMENTAL OTF
         if len(x0_stat) or self.nWvl > 1:
-            self.otfStat, self.phaseMap = FourierUtils.getStaticOTF(self.tel,int(self.nPix*self.kCen_),self.sampCen,self.wvlCen,xStat=x0_stat,apodizer=self.apodizer,statModes=self.statModes,opdMap_ext=self.opdMap_ext)
+            self.otfStat, self.phaseMap = FourierUtils.getStaticOTF(self.ao.tel,int(self.nPix*self.kRef_),self.sampRef,self.wvlRef,xStat=x0_stat,apodizer=self.apodizer,statModes=self.statModes,opdMap_ext=self.opdMap_ext)
         else:
             self.otfStat = self.otfNCPA
                             
         self.dphi   = gho*self.dphi_ao + gtt*self.dphi_tt + r0**(-5/3) * (self.dphi_fit + self.dphi_alias)
         
-        for iSrc in range(self.src.nSrc): # LOOP ON SOURCES
+        for iSrc in range(self.ao.src.nSrc): # LOOP ON SOURCES
             # Stellar parameters
             if len(x0_stellar):
                 F   = x0_stellar[iSrc] * self.trs.cam.transmission
-                dx  = x0_stellar[iSrc + self.src.nSrc] + self.trs.cam.dispersion[0][iSrc]
-                dy  = x0_stellar[iSrc + 2*self.src.nSrc] + self.trs.cam.dispersion[1][iSrc]
-                bkg = x0_stellar[3*self.src.nSrc]
+                dx  = x0_stellar[iSrc + self.ao.src.nSrc] + self.trs.cam.dispersion[0][iSrc]
+                dy  = x0_stellar[iSrc + 2*self.ao.src.nSrc] + self.trs.cam.dispersion[1][iSrc]
+                bkg = x0_stellar[3*self.ao.src.nSrc]
             else:
                 F   = self.trs.cam.transmission
                 dx  = self.trs.cam.dispersion[0][iSrc]

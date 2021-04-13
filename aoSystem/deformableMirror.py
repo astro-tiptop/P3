@@ -7,15 +7,8 @@ Created on Wed Aug 22 16:59:35 2018
 """
 
 import numpy as np
-import sys
 import scipy.interpolate as interp
-import scipy.sparse as sparse
 
-def fprintf(stream, format_spec, *args):
-    stream.write(format_spec % args)
-    
-
-    
 class deformableMirror:
     """
     """
@@ -24,18 +17,25 @@ class deformableMirror:
     def nValidActuator(self):
         return self.validActuator.sum()
     
-    def __init__(self,nActu1D,pitch,mechCoupling,modes='gaussian',validActuator=0,offset = [0,0],resolution=None):
+    def __init__(self,nActu1D,pitch,heights=[0.0],mechCoupling=0.2,modes='gaussian',opt_dir=[[0.0],[0.0]], opt_weights=[1.0],\
+                 opt_cond=1e2, n_rec=10, validActuator=None,offset = [0,0],AoArea='circle',resolution=None):
         # PARSING INPUTS
         self.nActu1D      = nActu1D
         self.pitch        = pitch
+        self.heights      = heights
         self.mechCoupling = mechCoupling
         self.modes        = modes
         self.offset       = offset
         self.influenceCentre=0
         self.resolution   = resolution
+        self.AoArea       = AoArea
+        
         # DEFINE THE VALID ACTUATOR
-        if np.isscalar(validActuator):
-            self.validActuator = np.ones((nActu1D,nActu1D),dtype=bool)
+        if np.any(validActuator == None):
+            if np.isscalar(nActu1D):
+                self.validActuator = np.ones((nActu1D,nActu1D),dtype=bool)
+            else:
+                self.validActuator = np.ones((nActu1D[0],nActu1D[0]),dtype=bool)
         else:
             self.validActuator = validActuator
         # DEFINE THE MODES
@@ -114,17 +114,12 @@ class deformableMirror:
         return m_modes
                 
                 
-                    
-    def display(self):
-        """ DISPLAY prints information about the deformable mirror
-        """
-            
-        print('___DEFORMABLE MIRROR ___')
-        print('----------------------------------------------------------------')
-        fprintf(sys.stdout,' %dX%d actuators deformable mirror with %d controlled actuators\n',\
-                self.nActu1D,self.nActu1D,self.nValidActuator)
-        print('----------------------------------------------------------------\n')
-           
+    def __repr__(self):
+        s = "___DEFORMABLE MIRROR___\n ---------------------------------------- \n"
+        s+= ".%dX%d actuators deformable mirror with %d controlled actuators"%( self.nActu1D,self.nActu1D,self.nValidActuator)
+        s = s +"\n----------------------------------------\n"
+        return s
+                            
 def sub2ind(array_shape, rows, cols):
     ind = rows*array_shape[1] + cols
     ind[ind < 0] = -1

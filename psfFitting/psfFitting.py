@@ -158,10 +158,10 @@ def evaluateFittingQuality(result,psfModelInst):
         fvu = 1e2*np.sum((sky-fit)**2)/np.sum((sky-sky.mean())**2)
         return mse,mae,fvu
     
-    result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.tel.pupil,psfModelInst.sampCen)
-    result.SR_fit   = FourierUtils.getStrehl(result.im_fit,psfModelInst.tel.pupil,psfModelInst.sampCen)
-    result.FWHMx_sky , result.FWHMy_sky = FourierUtils.getFWHM(result.im_sky,psfModelInst.psInMas,nargout=2)
-    result.FWHMx_fit , result.FWHMy_fit = FourierUtils.getFWHM(result.im_fit,psfModelInst.psInMas,nargout=2)
+    result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.ao.tel.pupil,psfModelInst.sampCen)
+    result.SR_fit   = FourierUtils.getStrehl(result.im_fit,psfModelInst.ao.tel.pupil,psfModelInst.sampCen)
+    result.FWHMx_sky , result.FWHMy_sky = FourierUtils.getFWHM(result.im_sky,psfModelInst.ao.cam.psInMas,nargout=2)
+    result.FWHMx_fit , result.FWHMy_fit = FourierUtils.getFWHM(result.im_fit,psfModelInst.ao.cam.psInMas,nargout=2)
     result.mse, result.mae , result.fvu = meanErrors(result.im_sky,result.im_fit)
     
     return result

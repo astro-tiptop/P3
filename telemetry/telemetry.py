@@ -14,13 +14,14 @@ from astropy.io import fits
 from configparser import ConfigParser
 
 from aoSystem.deformableMirror import deformableMirror
+import fourier.FourierUtils as FourierUtils
 import telemetry.keckUtils as keckUtils
 from telemetry.massdimm import fetch_data
 from telemetry.massdimm import DIMM
 from telemetry.massdimm import MASS
 from telemetry.massdimm import MASSPROF
 from telemetry.massdimm import CombineMASSandDIMM
-from telemetry.systemDiagnosis import systemDiagnosis
+
 #%%
 class structtype():
     pass
@@ -28,7 +29,7 @@ class structtype():
 class telemetry:
     
     
-    def __init__(self,path_trs,path_img,path_calib,path_save='./',verbose=False):
+    def __init__(self,path_trs,path_img,path_calib,path_save='./',nLayer=1,verbose=False):
         
         # Check the telemetry path
         self.path_trs = path_trs
@@ -68,7 +69,7 @@ class telemetry:
     
         if self.path_trs != None:
             #3\ restoring calibration data
-            self.restoringCalibrationData()
+            self.restoringCalibrationData(nLayer=nLayer)
             
             #4\ CREATE TELEMETRY LEVEL 0
             self.restoringTelemetry(verbose=verbose)
@@ -109,6 +110,8 @@ class telemetry:
         self.wfs.nSl    = 608 # Number of slopes measurements within the pupil (x and y)
         self.wfs.theta  = 90
         self.wfs.ron    = 3.0
+        self.wfs.pixel_scale = 800
+        self.wfs.fov = 3200
         # tipTilt
         self.tipTilt = structtype()
         self.tipTilt.tilt2meter = 12.68e-6 # arcsec of tilt to OPD over the Keckpupil 
@@ -190,7 +193,7 @@ class telemetry:
             print('THE OSIRIS CASE IS NOT YET IMPLEMENTED\n')
             return 0
         
-    def restoringCalibrationData(self):
+    def restoringCalibrationData(self,nLayer=1):
         """
             Collecting calibration data for the Keck AO system
         """
@@ -248,6 +251,12 @@ class telemetry:
             # combine MASS and DIMM data
             self.atm.Cn2 = CombineMASSandDIMM(self.atm.seeing,SeeingAlt,Cn2Alt,wvl=self.atm.wvl)
             self.atm.Cn2Weights = self.atm.Cn2/self.atm.Cn2.sum()
+            
+        # compressing
+        if nLayer < len(self.atm.Cn2Heights):
+            _,self.atm.wSpeed = FourierUtils.eqLayers(self.atm.Cn2Weights,np.array(self.atm.wSpeed),nLayer)
+            _,self.atm.wDir   = FourierUtils.eqLayers(self.atm.Cn2Weights,np.array(self.atm.wDir),nLayer,power=1)
+            self.atm.Cn2Weights,self.atm.Cn2Heights = FourierUtils.eqLayers(self.atm.Cn2Weights,np.array(self.atm.Cn2Heights),nLayer)
             
     def restoringTelemetry(self,verbose=False):
               
@@ -366,70 +375,77 @@ class telemetry:
         if not parser.has_section('telescope'):
             parser.add_section('telescope')
         parser.set('telescope','TelescopeDiameter',str(self.tel.D))
-        parser.set('telescope','obscurationRatio', str(self.tel.cobs))
-        parser.set('telescope','zenithAngle', str(self.tel.zenith_angle))
-        parser.set('telescope','resolution', str(self.tel.resolution))
-        parser.set('telescope','pupilAngle', str(self.tel.pupilAngle))
-        parser.set('telescope','path_pupil','\'' + self.tel.path_pupil + '\'')
-        parser.set('telescope','path_static','\'' + self.cam.path_ncpa + '\'')
+        parser.set('telescope','ObscurationRatio', str(self.tel.cobs))
+        parser.set('telescope','ZenithAngle', str(self.tel.zenith_angle))
+        parser.set('telescope','Resolution', str(self.tel.resolution))
+        parser.set('telescope','PupilAngle', str(self.tel.pupilAngle))
+        parser.set('telescope','PathPupil','\'' + self.tel.path_pupil + '\'')
+        parser.set('telescope','PathStatic','\'' + self.cam.path_ncpa + '\'')
         
         # updating the atmosphere config
         if not parser.has_section('atmosphere'):
             parser.add_section('atmosphere')
-        parser.set('atmosphere','atmosphereWavelength', str(self.atm.wvl))
-        parser.set('atmosphere','seeing', str(self.atm.seeing))
+        parser.set('atmosphere','AtmosphereWavelength', str(self.atm.wvl))
+        parser.set('atmosphere','Seeing', str(self.atm.seeing))
         parser.set('atmosphere','L0', str(self.atm.L0))
         parser.set('atmosphere','Cn2Weights', str(self.atm.Cn2Weights))
         parser.set('atmosphere','Cn2Heights', str(self.atm.Cn2Heights))
-        parser.set('atmosphere','wSpeed', str(self.atm.wSpeed))
-        parser.set('atmosphere','wDir', str(self.atm.wDir))
+        parser.set('atmosphere','WindSpeed', str(self.atm.wSpeed))
+        parser.set('atmosphere','WindDirection', str(self.atm.wDir))
 
         # updating the HO WFS config
-        if not parser.has_section('SENSOR_HO'):
-            parser.add_section('SENSOR_HO')
-        parser.set('SENSOR_HO','nLenslet_HO', str(self.wfs.nSubap))
-        parser.set('SENSOR_HO','SensingWavelength_HO', str(self.wfs.wvl))
-        parser.set('SENSOR_HO','loopGain_HO', str(self.holoop.gain))
-        parser.set('SENSOR_HO','SensorFrameRate_HO', str(self.holoop.freq))
-        parser.set('SENSOR_HO','loopDelaySteps_HO', str(self.holoop.lat * self.holoop.freq))
-        parser.set('SENSOR_HO','noiseVariance_HO', str(self.holoop.noise))
+        if not parser.has_section('sensor_HO'):
+            parser.add_section('sensor_HO')
+        parser.set('sensor_HO','PixelScale', str(self.wfs.pixel_scale))
+        parser.set('sensor_HO','FiedOfView', str(self.wfs.fov))
+        parser.set('sensor_HO','NumberLenslets', str(self.wfs.nSubap))
+        parser.set('sensor_HO','LoopGain', str(self.holoop.gain))
+        parser.set('sensor_HO','SensorFrameRate', str(self.holoop.freq))
+        parser.set('sensor_HO','LoopDelaySteps', str(self.holoop.lat * self.holoop.freq))
+        parser.set('sensor_HO','NoiseVariance', str(0.0))
+        
         # GUIDE STARS
-        if not parser.has_section('GUIDESTARS_HO'):
-            parser.add_section('GUIDESTARS_HO')
+        if not parser.has_section('sources_HO'):
+            parser.add_section('sources_HO')
+            parser.set('sources_HO','Wavelength', str(self.wfs.wvl))
+
         if self.aoMode == 'LGS':
-            parser.set('GUIDESTARS_HO','GuideStarHeight_HO', str(self.lgs.height))
-            parser.set('GUIDESTARS_HO','GuideStarZenith_HO',str(self.lgs.zenith))
-            parser.set('GUIDESTARS_HO','GuideStarAzimuth_HO',str(self.lgs.azimuth))
-            if not parser.has_section('GUIDESTARS_LO'):
-                parser.add_section('GUIDESTARS_LO')
-            parser.set('GUIDESTARS_LO','GuideStarZenith_LO',str(self.ngs.zenith))
-            parser.set('GUIDESTARS_LO','GuideStarAzimuth_LO',str(self.ngs.azimuth))
+            parser.set('sources_HO','Height', str(self.lgs.height))
+            parser.set('sources_HO','Zenith',str(self.lgs.zenith))
+            parser.set('sources_HO','Azimuth',str(self.lgs.azimuth))
+            if not parser.has_section('sources_LO'):
+                parser.add_section('sources_LO')
+            parser.set('sources_LO','Zenith',str(self.ngs.zenith))
+            parser.set('sources_LO','Azimuth',str(self.ngs.azimuth))
         else:
-            parser.set('GUIDESTARS_HO','GuideStarHeight_HO',str(0))
-            parser.set('GUIDESTARS_HO','GuideStarZenith_HO',str(self.ngs.zenith))
-            parser.set('GUIDESTARS_HO','GuideStarAzimuth_HO',str(self.ngs.azimuth))
+            parser.set('sources_HO','Height',str(0))
+            parser.set('sources_HO','Zenith',str(self.ngs.zenith))
+            parser.set('sources_HO','Azimuth',str(self.ngs.azimuth))
             
         # updating the DM config
         if not parser.has_section('DM'):
             parser.add_section('DM')
+        parser.set('DM','NumberActuators', str(self.dm.nActuators))
         parser.set('DM','DmPitchs', str(self.dm.pitch))
+        parser.set('DM','InfModel', '\'xinetics\'')
+        parser.set('DM','InfCoupling', str(0.11))
         
         # updating the imager config
-        if not parser.has_section('PSF_DIRECTIONS'):
-            parser.add_section('PSF_DIRECTIONS')
-        parser.set('PSF_DIRECTIONS','ScienceZenith', str(self.cam.zenith))
-        parser.set('PSF_DIRECTIONS','ScienceAzimuth', str(self.cam.azimuth))
-        parser.set('PSF_DIRECTIONS','psf_FoV', str(self.cam.fov))
-        parser.set('PSF_DIRECTIONS','psInMas', str(self.cam.psInMas))
-        parser.set('PSF_DIRECTIONS','ScienceWavelength', str(np.mean(self.cam.wvl)))
+        if not parser.has_section('sources_science'):
+            parser.add_section('sources_science')
+        parser.set('sources_science','Zenith', str(self.cam.zenith))
+        parser.set('sources_science','Azimuth', str(self.cam.azimuth))
+        parser.set('sources_science','Wavelength', str([np.mean(self.cam.wvl)]))
         
+        if not parser.has_section('sensor_science'):
+            parser.add_section('sensor_science')
+        parser.set('sensor_science','FiedOfView', str(self.cam.fov))
+        parser.set('sensor_science','PixelScale', str(self.cam.psInMas))
+
         if len(self.cam.wvl) > 1:
-            if not parser.has_section('POLYCHROMATISM'):
-                parser.add_section('POLYCHROMATISM')
-            parser.set('POLYCHROMATISM','transmittance', str(self.cam.transmission))
-            parser.set('POLYCHROMATISM','spectralBandwidth', str(self.cam.bw))
-            parser.set('POLYCHROMATISM','dispersionX', str(self.cam.dispersion[0]))
-            parser.set('POLYCHROMATISM','dispersionY', str(self.cam.dispersion[1]))
+            parser.set('sensor_science','Transmittance', str(self.cam.transmission))
+            parser.set('sensor_science','SpectralBandwidth', str(self.cam.bw))
+            parser.set('sensor_science','Dispersion', str(self.cam.dispersion))
             
         with open(self.path_ini, 'w') as configfile:
             parser.write(configfile)

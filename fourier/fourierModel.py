@@ -170,7 +170,7 @@ class fourierModel:
             id2                 = np.floor(self.fovInPixel/2 + self.tel.resolution/2).astype(int)
             P[id1:id2,id1:id2]  = self.tel.pupil
             if self.path_static != []:
-                im = fits.getdata(self.path_static)
+                im = 1e-9*fits.getdata(self.path_static)
                 im[np.where(im!=im)] = 0
                 im              = FourierUtils.interpolateSupport(im,self.resolution,kind='linear')
                 self.staticMap  = np.zeros((self.fovInPixel,self.fovInPixel))
@@ -258,30 +258,30 @@ class fourierModel:
         
         #%% Telescope
         self.D              = eval(config['telescope']['TelescopeDiameter'])
-        self.zenith_angle   = eval(config['telescope']['zenithAngle'])
-        self.obsRatio       = eval(config['telescope']['obscurationRatio'])
-        self.resolution     = eval(config['telescope']['resolution']) * self.overSampling
+        self.zenith_angle   = eval(config['telescope']['ZenithAngle'])
+        self.obsRatio       = eval(config['telescope']['ObscurationRatio'])
+        self.resolution     = eval(config['telescope']['Resolution']) * self.overSampling
         if path_pupil == '':
-            self.path_pupil     = eval(config['telescope']['path_pupil'])
+            self.path_pupil     = eval(config['telescope']['PathPupil'])
         else:
             self.path_pupil = path_pupil
         if path_static == '':
-            self.path_static    = eval(config['telescope']['path_static'])
+            self.path_static    = eval(config['telescope']['PathStatic'])
         else:
             self.path_static = path_static
         
         #%% Atmosphere
         rad2arcsec          = 3600*180/np.pi 
         rad2mas             = 1e3*rad2arcsec
-        self.wvlAtm         = eval(config['atmosphere']['atmosphereWavelength']) 
-        self.r0             = 0.976*self.wvlAtm/eval(config['atmosphere']['seeing'])*rad2arcsec
+        self.wvlAtm         = eval(config['atmosphere']['AtmosphereWavelength']) 
+        self.r0             = 0.976*self.wvlAtm/eval(config['atmosphere']['Seeing'])*rad2arcsec
         self.L0             = eval(config['atmosphere']['L0']) 
         self.weights        = np.array(eval(config['atmosphere']['Cn2Weights']) )
         self.heights        = np.array(eval(config['atmosphere']['Cn2Heights']) )
-        self.wSpeed         = np.array(eval(config['atmosphere']['wSpeed']) )
-        self.wDir           = np.array(eval(config['atmosphere']['wDir']) )
-        if config.has_option('atmosphere', 'nLayersReconstructed'):
-            self.nLayersReconstructed = eval(config['atmosphere']['nLayersReconstructed'])
+        self.wSpeed         = np.array(eval(config['atmosphere']['WindSpeed']) )
+        self.wDir           = np.array(eval(config['atmosphere']['WindDirection']) )
+        if config.has_option('DM', 'nLayersReconstructed'):
+            self.nLayersReconstructed = eval(config['DM']['nLayersReconstructed'])
         else:
             self.nLayersReconstructed = len(self.weights)
         #-----  verification
@@ -293,8 +293,8 @@ class fourierModel:
             return 0
         
         #%% PSF directions
-        self.nSrc           = len(np.array(eval(config['PSF_DIRECTIONS']['ScienceZenith'])))
-        self.wvlSrc         = np.unique(np.array(eval(config['PSF_DIRECTIONS']['ScienceWavelength'])))
+        self.nSrc           = len(np.array(eval(config['sources_science']['Zenith'])))
+        self.wvlSrc         = np.unique(np.array(eval(config['sources_science']['Wavelength'])))
         self.nWvl           = self.wvlSrc.size
         self.wvlRef         = self.wvlSrc.min()
         if cartPointingCoords is not None:
@@ -304,8 +304,8 @@ class fourierModel:
             self.zenithSrc  = np.hypot(x,y)
             self.azimuthSrc = 180/np.pi * np.arctan2(y,x)
         else:
-            self.zenithSrc      = np.array(np.array(eval(config['PSF_DIRECTIONS']['ScienceZenith'])))
-            self.azimuthSrc     = np.array(np.array(eval(config['PSF_DIRECTIONS']['ScienceAzimuth'])))
+            self.zenithSrc      = np.array(np.array(eval(config['sources_science']['Zenith'])))
+            self.azimuthSrc     = np.array(np.array(eval(config['sources_science']['Azimuth'])))
         
         # INCLUDE THE ADDITIONAL PSF EVALUATIONS
         if extraPSFsDirections is not None:
@@ -333,10 +333,10 @@ class fourierModel:
             return 0
         
         #%% Guide stars
-        self.nGs            = len(eval(config['GUIDESTARS_HO']['GuideStarZenith_HO']))
-        self.zenithGs       = np.array(eval(config['GUIDESTARS_HO']['GuideStarZenith_HO']))
-        self.azimuthGs      = np.array(eval(config['GUIDESTARS_HO']['GuideStarAzimuth_HO']))
-        self.heightGs       = eval(config['GUIDESTARS_HO']['GuideStarHeight_HO'])
+        self.nGs            = len(eval(config['sources_HO']['Zenith']))
+        self.zenithGs       = np.array(eval(config['sources_HO']['Zenith']))
+        self.azimuthGs      = np.array(eval(config['sources_HO']['Azimuth']))
+        self.heightGs       = eval(config['sources_HO']['Height'])
         # ----- verification
         if len(self.zenithGs) == len(self.azimuthGs):
             self.nGs = len(self.zenithGs)
@@ -346,33 +346,33 @@ class fourierModel:
             return 0
         
         #%% WFS parameters
-        self.loopGain       = eval(config['SENSOR_HO']['loopGain_HO'])
-        self.samplingTime   = 1/eval(config['SENSOR_HO']['SensorFrameRate_HO'])
+        self.loopGain       = eval(config['sensor_HO']['LoopGain'])
+        self.samplingTime   = 1/eval(config['sensor_HO']['SensorFrameRate'])
         # Note : so far, the WFSs have all the same exposure time
-        self.latency        = eval(config['SENSOR_HO']['loopDelaySteps_HO'])*self.samplingTime
-        self.wvlGs          = eval(config['SENSOR_HO']['SensingWavelength_HO'])
-        if config.has_option('SENSOR_HO', 'wfstype'):
-            self.wfstype    = eval(config['SENSOR_HO']['wfstype'])
-            self.modulation = eval(config['SENSOR_HO']['modulation'])
-            self.binning    = eval(config['SENSOR_HO']['binning'])
+        self.latency        = eval(config['sensor_HO']['LoopDelaySteps'])*self.samplingTime
+        self.wvlGs          = eval(config['sources_HO']['Wavelength'])
+        if config.has_option('sensor_HO', 'wfstype'):
+            self.wfstype    = eval(config['sensor_HO']['wfstype'])
+            self.modulation = eval(config['sensor_HO']['modulation'])
+            self.binning    = eval(config['sensor_HO']['binning'])
         else:
             self.wfstype    = 'shack-hartmann'
             self.modulation = None
             self.binning    = None
                     
         # Note : so far, the WFSs have all the same subaperture size
-        self.nLenslet_HO    = eval(config['SENSOR_HO']['nLenslet_HO'])
+        self.nLenslet_HO    = eval(config['sensor_HO']['NumberLenslets'])
         self.pitchs_wfs     = self.D/self.nLenslet_HO * np.ones(self.nGs)
         
         # Calculate the noise variance
-        if config.has_option('SENSOR_HO', 'noiseVariance_HO') and np.isscalar( eval(config['SENSOR_HO']['noiseVariance_HO'])):
-            self.noiseVariance  = eval(config['SENSOR_HO']['noiseVariance_HO'])
+        if config.has_option('sensor_HO', 'NoiseVariance') and np.isscalar( eval(config['sensor_HO']['NoiseVariance'])):
+            self.noiseVariance  = eval(config['sensor_HO']['NoiseVariance'])
             self.noiseVariance = self.noiseVariance * np.ones(self.nGs)    
         else:
-            self.nph_HO         = eval(config['SENSOR_HO']['nph_HO'])
-            self.pixel_Scale_HO = eval(config['SENSOR_HO']['pixel_scale_HO'])
-            self.sigmaRON_HO    = eval(config['SENSOR_HO']['sigmaRON_HO'])     
-            self.Npix_per_subap_HO = eval(config['SENSOR_HO']['Npix_per_subap_HO'])
+            self.nph_HO         = eval(config['sensor_HO']['NumberPhotons'])
+            self.pixel_Scale_HO = eval(config['sensor_HO']['PixelScale'])
+            self.sigmaRON_HO    = eval(config['sensor_HO']['SigmaRON'])     
+            self.Npix_per_subap_HO = eval(config['sensor_HO']['FiedOfView'])/self.nLenslet_HO 
             
             if self.pixel_Scale_HO > 1: # put the value in arcsec
                     self.pixel_Scale_HO = self.pixel_Scale_HO/1e3
@@ -419,9 +419,9 @@ class fourierModel:
             self.condmax_popt   = 1e2
             
         #%% Sampling and field of view
-        self.psf_FoV        = eval(config['PSF_DIRECTIONS']['psf_FoV'])
+        self.psf_FoV        = eval(config['sensor_science']['FiedOfView'])
         lonD                = rad2mas*self.wvlSrc/self.D
-        self.psInMas        = eval(config['PSF_DIRECTIONS']['psInMas'])
+        self.psInMas        = eval(config['sensor_science']['PixelScale'])
         if self.psInMas == 0:
             self.shannon    = True
             self.psInMas    = lonD/2
@@ -447,17 +447,16 @@ class fourierModel:
         
         #%% Additionnal jitter
         self.jitterX = self.jitterY = self.thetaJitter = 0.0    
-        if config.has_option('telescope', 'jitterX'):
-            self.jitterX = eval(config['telescope']['jitterX'])[0]
-        if config.has_option('telescope', 'jitterY'):
-            self.jitterY = eval(config['telescope']['jitterY'])[0]
-        if config.has_option('telescope', 'thetaJitter'):
-            self.thetaJitter   = eval(config['telescope']['thetaJitter'])[0]
+        if config.has_option('sensor_science', 'SpotFWHM'):
+            tmp = eval(config['sensor_science']['SpotFWHM'])
+            self.jitterX = tmp[0]
+            self.jitterY = tmp[1]
+            self.thetaJitter = tmp[2]
             
         #%% instantiating sub-classes
         
         # Telescope
-        self.tel = telescope(self.D,self.zenith_angle,self.obsRatio,self.resolution,file=self.path_pupil)
+        self.tel = telescope(self.D,self.resolution,zenith_angle=self.zenith_angle,obsRatio=self.obsRatio,path_pupil=self.path_pupil)
         
         # Strechning factor (LGS case)      
         self.r0       = self.r0*self.tel.airmass**(-3/5)
@@ -814,7 +813,7 @@ class fourierModel:
                     tmp     = np.matmul(PW,np.matmul(self.Cb,PW_t))
                     psd[:,:,j] = self.mskIn_ * tmp[:,:,0,0]*self.pistonFilterIn_
         
-            self.t_noisePSD = 1000*(time.time() - tstart)
+        self.t_noisePSD = 1000*(time.time() - tstart)
         # NOTE: the noise variance is the same for all WFS
         return  psd*self.noiseGain * np.mean(self.noiseVariance)
     
@@ -1150,14 +1149,14 @@ class fourierModel:
             # Von-Kármánn PSD
             self.PSD = self.atm.spectrum(self.kExtxy) * FourierUtils.pistonFilter(self.tel.D,self.kExtxy) * (2*self.kc/self.resAO)**2 
             cov      = fft.fftshift(fft.fft2(fft.fftshift(self.PSD)))
-            sf       = 2*np.real(cov.max() - cov)
+            self.sf       = 2*np.real(cov.max() - cov)
             
             for j in range(self.nWvl):
                 if self.shannon == True and self.nWvl > 1 and (self.jitterX or self.jitterY):
                     normFact2 = ff_jitter*(self.samp[j]*self.tel.D/self.wvlSrc[j]/(3600*180*1e3/np.pi))**2 *(2 * np.sqrt(2*np.log(2)))**2
                     self.Kjitter   = np.exp(-0.5 * Djitter * normFact2/normFact)
                      
-                otfTurb    = np.exp(-0.5*sf * (self.wvlRef/self.wvlSrc[j])**2) * self.Kjitter
+                otfTurb    = np.exp(-0.5*self.sf * (self.wvlRef/self.wvlSrc[j])**2) * self.Kjitter
                 otfTot     = otfTurb * self.otfTel
                 self.SR[:,j] = 1e2*np.abs(otfTot).sum(axis=(0,1))/self.otfTel.sum() * np.ones(self.nSrc)
                 # PSF
@@ -1203,7 +1202,7 @@ class fourierModel:
             S = self.otfTel.sum()
             # GET THE AO RESIDUAL PHASE STRUCTURE FUNCTION    
             cov = fft.fftshift(fft.fftn(fft.fftshift(self.PSD,axes=(0,1)),axes=(0,1)),axes=(0,1))
-            sf  = 2*np.real(cov.max(axis=(0,1)) - cov)
+            self.sf  = 2*np.real(cov.max(axis=(0,1)) - cov)
         
             # LOOP ON WAVELENGTHS   
             for j in range(self.nWvl):
@@ -1224,7 +1223,7 @@ class fourierModel:
                     kernel       = np.repeat(kernel[:,:,np.newaxis],self.nSrc,axis=2)     
                     
                 # OTF
-                otfTurb     = np.exp(-0.5*sf*(2*np.pi*1e-9/self.wvlSrc[j])**2)
+                otfTurb     = np.exp(-0.5*self.sf*(2*np.pi*1e-9/self.wvlSrc[j])**2)
                 otfTot      = fft.fftshift(otfTurb * kernel,axes=(0,1))
                 self.SR[:,j]= 1e2*np.abs(otfTot).sum(axis=(0,1))/S
                 

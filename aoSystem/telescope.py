@@ -7,11 +7,11 @@ Created on Thu Aug 16 16:34:02 2018
 """
 import numpy as np
 from astropy.io import fits
-import matplotlib.pyplot as plt
+import os.path as ospath
 import re
-import fourier.FourierUtils as FourierUtils
 from scipy.ndimage import rotate
-    
+import fourier.FourierUtils as FourierUtils
+
 class Attribute(object):
     pass
 
@@ -46,13 +46,13 @@ class telescope:
     def pupilLogical(self):
         """Telescope area in meter square"""
         return self.pupil.astype(bool)
-    
     @property
     def airmass(self):
         return 1/np.cos(self.zenith_angle*np.pi/180)
     
     # CONSTRUCTOR
-    def __init__(self,D,zenith_angle,obsRatio,resolution,pupilAngle = 0.0,file = [],obj=[],verbose=True):
+    def __init__(self,D,resolution, zenith_angle=0.0,obsRatio=0.0,pupilAngle = 0.0,\
+                 path_pupil='', path_static='', path_apodizer='', path_statModes='', verbose=True):
         
         # PARSING INPUTS
         self.D         = D          # in meter
@@ -61,22 +61,23 @@ class telescope:
         self.resolution= resolution # In pixels
         self.verbose   = verbose
         self.pupilAngle= pupilAngle
-        self.file      = file
-        # PUPIL DEFINITION        
-        import os.path as ospath
+        self.path_pupil= path_pupil
+        self.path_apodizer= path_apodizer
+        self.path_statModes= path_statModes
+        
+        #----- PUPIL DEFINITION        
         
         pupil = [] 
-        if file!=[] and ospath.isfile(file) == True:
+        if path_pupil!= '' and ospath.isfile(path_pupil) == True and re.search(".fits",path_pupil)!=None:
             self.verb = True
-            if  re.search(".fits",file)!=None :
-                pupil = fits.getdata(file)
-                if self.pupilAngle !=0.0:
-                    pupil = rotate(pupil,self.pupilAngle,reshape=False)
-                if pupil.shape[0] != resolution:
-                    pupil = FourierUtils.interpolateSupport(pupil,resolution,kind='nearest')
-                self.pupil = pupil
-        
-        if len(pupil) == 0:
+            pupil = fits.getdata(path_pupil)
+            if self.pupilAngle !=0.0:
+                pupil = rotate(pupil,self.pupilAngle,reshape=False)
+            if pupil.shape[0] != resolution:
+                pupil = FourierUtils.interpolateSupport(pupil,resolution,kind='linear')
+            self.pupil = pupil
+        else:
+            # build an annular pupil model
             th  = self.pupilAngle*np.pi/180
             x   = np.linspace(-D/2,D/2,resolution)
             X,Y = np.meshgrid(x,x)
@@ -87,6 +88,45 @@ class telescope:
             self.pupil = P
             self.verb = False
     
+    
+        # static aberrations
+        self.path_static   = path_static
+              
+        if path_static != None and ospath.isfile(path_static) == True and re.search(".fits",path_static)!=None:
+            self.opdMap_ext = fits.getdata(path_static)
+            self.opdMap_ext = FourierUtils.interpolateSupport(self.opdMap_ext,resolution,kind='linear')
+        else:
+            self.opdMap_ext = None
+            
+        #----- APODIZER
+        print(path_apodizer)
+        if path_apodizer!= '' and ospath.isfile(path_apodizer) and re.search(".fits",path_apodizer)!=None:
+            self.apodizer = fits.getdata(path_apodizer)
+            self.apodizer = FourierUtils.interpolateSupport(self.apodizer,resolution,kind='linear')
+        else:
+            self.apodizer = 1.0
+            
+        #----- MODAL BASIS FOR TELESCOPE ABERRATIONS
+        if path_statModes!='' and ospath.isfile(path_statModes) == True and re.search(".fits",path_statModes)!=None:                
+            statModes = fits.getdata(path_statModes)
+            s1,s2,s3 = statModes.shape
+            if s1 != s2: # mode on first dimension
+                tmp = np.transpose(statModes,(1,2,0))  
+            else:
+                tmp = statModes
+                    
+            self.nModes = tmp.shape[-1]
+            self.statModes = np.zeros((resolution,resolution,self.nModes))
+                
+            for k in range(self.nModes):
+                mode = FourierUtils.interpolateSupport(tmp[:,:,k],resolution,kind='linear')
+                if pupilAngle !=0:
+                    mode = rotate(mode,pupilAngle,reshape=False)
+                self.statModes[:,:,k] = mode
+        else:
+            self.statModes = None
+            self.nModes = 0
+            
         if self.verbose:
             self
                    
@@ -101,7 +141,8 @@ class telescope:
     def displayPupil(self):
         """DISPLAYPUPIL Display the telescope pupil
         """
-                    
+               
+        import matplotlib.pyplot as plt
         plt.figure()
         plt.imshow(self.pupil)
         plt.xlabel("Pixels")
