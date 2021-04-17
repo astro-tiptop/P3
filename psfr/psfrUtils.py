@@ -10,7 +10,7 @@ Created on Fri Jun 15 14:57:49 2018
 import numpy as np
 import numpy.fft as fft
 import scipy.special as ssp
-import fourier.FourierUtils as FourierUtils
+import aoSystem.fourier.FourierUtils as FourierUtils
 
 #%%  PSF-R FACILITIES               
 def getOLslopes(s,u,MI,dt):    

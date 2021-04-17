@@ -5,7 +5,7 @@ Created on Wed Mar  3 14:57:19 2021
 
 @author: omartin
 """
-import fourier.FourierUtils as FourierUtils
+import aoSystem.fourier.FourierUtils as FourierUtils
 
 def normalizePSF(psf_i,normType=1):
     ''' Returns the normalized PSF :

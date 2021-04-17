@@ -7,7 +7,6 @@ Created on Sat Aug 18 14:21:41 2018
 """
 
 import numpy as np
-import math
     
 class Attribute(object):
     pass

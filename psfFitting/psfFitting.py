@@ -9,7 +9,7 @@ Created on Wed Feb 17 10:33:19 2021
 #%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
 from scipy.optimize import least_squares
-import fourier.FourierUtils as FourierUtils
+import aoSystem.fourier.FourierUtils as FourierUtils
 from psfFitting.confidenceInterval import confidence_interval
 
 #%%
@@ -139,6 +139,10 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
     result.im_sky = image
     result        = evaluateFittingQuality(result,psfModelInst)
     
+    # static map
+    nModes = psfModelInst.ao.tel.nModes
+    if (nModes) > 0 and len(result.x) > nModes + psfModelInst.ao.src.nSrc:
+        result.opd = (psfModelInst.ao.tel.statModes*result.x[-nModes:]).sum(axis=2)
     # 95% confidence interval
     result.xerr   = mini2input(confidence_interval(result.fun,result.jac),forceZero=True)
     return result

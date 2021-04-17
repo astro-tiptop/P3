@@ -10,12 +10,12 @@ import numpy as np
 
 class detector:
     """
+        Detector class that gathers characteristics of the detector
     """
     
-    def __init__(self,pixel_scale,fov,bandwidth=0.0,transmittance=[1.0],dispersion=[[0.0],[0.0]],\
-                 nph=np.inf,ron=0.0,dark=0.0,sky=0.0,excess=1.0, spotFWHM=[0.0,0.0],\
-                 nL=20, loopGain=0.5, delay=2, SensorFrameRate=500.0, noise=None,\
-                 SlopeAlgorithm='window',wcog=[5.0,0.0,0.0],tech_fov=120, tag='SENSOR'):
+    def __init__(self,pixel_scale,fov,binning=1,spotFWHM=[0.0,0.0],\
+                 nph=np.inf,bandwidth=0.0,transmittance=[1.0],dispersion=[[0.0],[0.0]],\
+                 ron=0.0,gain=1.0,dark=0.0,sky=0.0,excess=1.0, tag='DETECTOR'):
         
         # PARSING INPUTS
         # scales
@@ -39,18 +39,6 @@ class detector:
         self.ron  = ron
         self.dark = dark
         self.sky  = sky
-        
-        # lenselts and centroiding
-        self.nLenslets = nL
-        self.loopGain  = loopGain
-        self.delay     = delay
-        self.noise     = None
-        self.SensorFrameRate = SensorFrameRate
-        self.SlopeAlgorithm = 'window'
-        self.WindowRadiusWCoG = wcog[0]
-        self.ThresholdWCoG = wcog[1]
-        self.NewValueThrPix = wcog[2]
-        self.tech_fov = tech_fov
         self.tag = tag
 
     def __repr__(self):

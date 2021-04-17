@@ -11,11 +11,11 @@ import time
 import sys as sys
 import numpy.fft as fft
 
-import fourier.FourierUtils as FourierUtils
-import psfr.psfrUtils as psfrUtils
-from fourier.fourierModel import fourierModel
 from aoSystem.aoSystem import aoSystem
+from aoSystem.fourier.fourierModel import fourierModel
 from aoSystem.anisoplanatismModel import anisoplanatismStructureFunction
+import aoSystem.fourier.FourierUtils as FourierUtils
+import psfr.psfrUtils as psfrUtils
 
 #%%
 rad2mas = 3600 * 180 * 1000 / np.pi
@@ -116,7 +116,7 @@ class psfR:
         self.wvlRef = np.min(self.ao.src.wvl)
         self.wvlCen = np.mean(self.ao.src.wvl)
         self.nWvl   = len(self.wvl)
-        self.nAct   = self.ao.dms.nActu1D
+        self.nAct   = self.ao.dms.nActu1D[0]
         
         if self.ao.error == False:
             
@@ -299,7 +299,9 @@ class psfR:
             
         # INSTRUMENTAL OTF
         if len(x0_stat) or self.nWvl > 1:
-            self.otfStat, self.phaseMap = FourierUtils.getStaticOTF(self.ao.tel,int(self.nPix*self.kRef_),self.sampRef,self.wvlRef,xStat=x0_stat,apodizer=self.apodizer,statModes=self.statModes,opdMap_ext=self.opdMap_ext)
+            self.otfStat, self.phaseMap = FourierUtils.getStaticOTF(\
+                self.ao.tel,int(self.nPix*self.kRef_),self.sampRef,self.wvlRef,xStat=x0_stat,\
+                apodizer=self.ao.tel.apodizer,statModes=self.ao.tel.statModes,opdMap_ext=self.ao.tel.opdMap_ext)
         else:
             self.otfStat = self.otfNCPA
                             

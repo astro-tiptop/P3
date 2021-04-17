@@ -9,7 +9,7 @@ Created on Fri Apr  9 16:04:21 2021
 #%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
 import numpy.fft as fft
-import fourier.FourierUtils as FourierUtils
+import aoSystem.fourier.FourierUtils as FourierUtils
 from aoSystem.zernike import zernike
 from astropy.io import fits
 from scipy.ndimage import rotate

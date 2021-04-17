@@ -12,8 +12,8 @@ import numpy.fft as fft
 import time
 import sys as sys
 
-import fourier.FourierUtils as FourierUtils
-from aoSystem.aoSystem import aoSystem
+import aoSystem.fourier.FourierUtils as FourierUtils
+from aoSystem.aoSystem import aoSystem as aoSys
 
 #%%
 rad2mas = 3600 * 180 * 1000 / np.pi
@@ -70,7 +70,6 @@ class psfao21:
         self.k2_        = self.kxky_[0]**2 + self.kxky_[1]**2                   
         #piston filtering        
         self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,self.k2_)
-        #self.pistonFilter_= 1 - 4*self.sombrero(1, np.pi*D*np.sqrt(self.k2_)) ** 2
         self.pistonFilter_[self.nPix*self.kRef_//2,self.nPix*self.kRef_//2] = 0
             
     # CUT-OFF FREQUENCY
@@ -93,20 +92,20 @@ class psfao21:
         self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kxky_[1][0]),self.kxky_[1][0]))
     
     # INIT
-    def __init__(self,file,antiAlias=False,fitCn2=False):
+    def __init__(self,path_ini,antiAlias=False,fitCn2=False):
         
         tstart = time.time()
         
         # PARSING INPUTS
-        self.file      = file
+        self.file      = path_ini
         self.antiAlias = antiAlias
-        self.ao        = aoSystem(file)
+        self.ao        = aoSys(path_ini)
         self.nPix   = self.ao.cam.fovInPix
         self.wvl    = self.ao.src.wvl
         self.wvlCen = np.mean(self.ao.src.wvl)
         self.wvlRef = np.min(self.ao.src.wvl)
         self.nWvl   = len(self.wvl)
-        self.nAct = self.ao.dms.nActu1D
+        self.nAct   = self.ao.dms.nActu1D[0]
         
         self.isStatic = self.ao.tel.statModes != None
         self.isAniso  = False

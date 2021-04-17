@@ -18,7 +18,7 @@ class deformableMirror:
         return self.validActuator.sum()
     
     def __init__(self,nActu1D,pitch,heights=[0.0],mechCoupling=0.2,modes='gaussian',opt_dir=[[0.0],[0.0]], opt_weights=[1.0],\
-                 opt_cond=1e2, n_rec=10, validActuator=None,offset = [0,0],AoArea='circle',resolution=None):
+                 opt_cond=1e2, n_rec=None, validActuator=None,offset = [0,0],AoArea='circle',resolution=None):
         # PARSING INPUTS
         self.nActu1D      = nActu1D
         self.pitch        = pitch
@@ -29,6 +29,9 @@ class deformableMirror:
         self.influenceCentre=0
         self.resolution   = resolution
         self.AoArea       = AoArea
+        self.nRecLayers   = n_rec
+        self.opt_dir      = opt_dir
+        self.opt_weights  = opt_weights
         
         # DEFINE THE VALID ACTUATOR
         if np.any(validActuator == None):

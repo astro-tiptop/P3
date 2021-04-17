@@ -14,7 +14,7 @@ from astropy.io import fits
 from configparser import ConfigParser
 
 from aoSystem.deformableMirror import deformableMirror
-import fourier.FourierUtils as FourierUtils
+import aoSystem.fourier.FourierUtils as FourierUtils
 import telemetry.keckUtils as keckUtils
 from telemetry.massdimm import fetch_data
 from telemetry.massdimm import DIMM
@@ -160,6 +160,7 @@ class telemetry:
         self.tel.pupilMaskName= keckUtils.getPupilMask(hdr)
         _,self.aoMode         = keckUtils.getStagePositionWFS(hdr)        
         self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_largeHex_272px.fits'
+        self.tel.path_telstat = self.path_calib + '/KECK_STAT/keck_piston_modes_200px_all_lr.fits'
         
         # 3\ Restore the instrument configuration
         self.cam.name = keckUtils.getInstName(hdr)
@@ -381,6 +382,7 @@ class telemetry:
         parser.set('telescope','PupilAngle', str(self.tel.pupilAngle))
         parser.set('telescope','PathPupil','\'' + self.tel.path_pupil + '\'')
         parser.set('telescope','PathStatic','\'' + self.cam.path_ncpa + '\'')
+        parser.set('telescope','PathStatModes','\'' + self.tel.path_telstat + '\'')
         
         # updating the atmosphere config
         if not parser.has_section('atmosphere'):
@@ -398,11 +400,8 @@ class telemetry:
             parser.add_section('sensor_HO')
         parser.set('sensor_HO','PixelScale', str(self.wfs.pixel_scale))
         parser.set('sensor_HO','FiedOfView', str(self.wfs.fov))
-        parser.set('sensor_HO','NumberLenslets', str(self.wfs.nSubap))
-        parser.set('sensor_HO','LoopGain', str(self.holoop.gain))
-        parser.set('sensor_HO','SensorFrameRate', str(self.holoop.freq))
-        parser.set('sensor_HO','LoopDelaySteps', str(self.holoop.lat * self.holoop.freq))
-        parser.set('sensor_HO','NoiseVariance', str(0.0))
+        parser.set('sensor_HO','NumberLenslets', str([self.wfs.nSubap]))
+        parser.set('sensor_HO','NoiseVariance', str([0.0]))
         
         # GUIDE STARS
         if not parser.has_section('sources_HO'):
@@ -425,7 +424,7 @@ class telemetry:
         # updating the DM config
         if not parser.has_section('DM'):
             parser.add_section('DM')
-        parser.set('DM','NumberActuators', str(self.dm.nActuators))
+        parser.set('DM','NumberActuators', str([self.dm.nActuators]))
         parser.set('DM','DmPitchs', str(self.dm.pitch))
         parser.set('DM','InfModel', '\'xinetics\'')
         parser.set('DM','InfCoupling', str(0.11))
@@ -447,6 +446,17 @@ class telemetry:
             parser.set('sensor_science','SpectralBandwidth', str(self.cam.bw))
             parser.set('sensor_science','Dispersion', str(self.cam.dispersion))
             
+            
+        if not parser.has_section('RTC'):
+            parser.add_section('RTC')
+        parser.set('RTC','LoopGain_HO', str(self.holoop.gain))
+        parser.set('RTC','SensorFrameRate_HO', str(self.holoop.freq))
+        parser.set('RTC','LoopDelaySteps_HO', str(self.holoop.lat * self.holoop.freq))
+        if hasattr(self,'ttloop'):
+            parser.set('RTC','LoopGain_LO', str(self.ttloop.gain))
+            parser.set('RTC','SensorFrameRate_LO', str(self.ttloop.freq))
+            parser.set('RTC','LoopDelaySteps_LO', str(self.ttloop.lat * self.ttloop.freq))
+        
         with open(self.path_ini, 'w') as configfile:
             parser.write(configfile)
             

@@ -12,14 +12,17 @@ from configparser import ConfigParser
 import numpy as np
 
 # IMPORTING P3 MODULES
-import fourier.FourierUtils as FourierUtils
 from aoSystem.telescope import telescope
 from aoSystem.atmosphere import atmosphere
 from aoSystem.source import source
 from aoSystem.deformableMirror import deformableMirror
 from aoSystem.detector import detector
+from aoSystem.sensor import sensor
+from aoSystem.rtc import rtc
 
 #INIT 
+
+# missing : wfs subap size, wfs binning, modulation, wfs type
 
 class aoSystem():
     
@@ -237,7 +240,7 @@ class aoSystem():
                     return
                 self.ngs = source(wvlGs,zenithGs,azimuthGs,tag="NGS",verbose=True)   
                 
-        #%% SCIENCE INSTRUMENT
+        #%% SCIENCE DETECTOR
         
         if config.has_option('sensor_science','PixelScale'):
             psInMas = eval(config['sensor_science']['PixelScale'])
@@ -255,6 +258,11 @@ class aoSystem():
             self.error = True
             return
         
+        if config.has_option('sensor_science','Binning'):
+            Binning = eval(config['sensor_science']['Binning'])
+        else:
+            Binning = 1
+            
         if config.has_option('sensor_science','spotFWHM'):
             spotFWHM = eval(config['sensor_science']['spotFWHM'])
         else:
@@ -283,6 +291,11 @@ class aoSystem():
         else:
             ron = 0.0
         
+        if config.has_option('sensor_science','Gain'):
+            Gain = eval(config['sensor_science']['Gain'])
+        else:
+            Gain = 1
+            
         if config.has_option('sensor_science','SkyBackground'):
             sky = eval(config['sensor_science']['SkyBackground'])
         else:
@@ -293,8 +306,14 @@ class aoSystem():
         else:
             dark = 0.0
         
-        self.cam = detector(psInMas,fov,bandwidth=bw,transmittance=tr,dispersion=disp,\
-                       spotFWHM=spotFWHM,nph=nph,ron=ron,sky=sky,dark=dark,tag="SCIENCE DETECTOR")
+        if config.has_option('sensor_science','ExcessNoiseFactor'):
+            excess = eval(config['sensor_science']['ExcessNoiseFactor'])
+        else:
+            excess = 1.0
+            
+        self.cam = detector(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
+                            nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
+                       gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,tag="SCIENCE DETECTOR")
               
         #%% HIGH-ORDER WAVEFRONT SENSOR
         
@@ -314,6 +333,11 @@ class aoSystem():
             self.error = True
             return
         
+        if config.has_option('sensor_science','Binning'):
+            Binning = eval(config['sensor_science']['Binning'])
+        else:
+            Binning = 1
+            
         if config.has_option('sensor_HO','spotFWHM'):
             spotFWHM = eval(config['sensor_HO']['spotFWHM'])
         else:
@@ -329,6 +353,11 @@ class aoSystem():
         else:
             ron = 0.0
         
+        if config.has_option('sensor_science','Gain'):
+            Gain = eval(config['sensor_science']['Gain'])
+        else:
+            Gain = 1
+            
         if config.has_option('sensor_HO','SkyBackground'):
             sky = eval(config['sensor_HO']['SkyBackground'])
         else:
@@ -344,35 +373,31 @@ class aoSystem():
         else:
             excess = 1.0
             
+            
+        if config.has_option('sensor_HO','TYPE'):
+            wfstype = eval(config['sensor_HO']['TYPE'])
+        else:
+            wfstype = 'Shack-Hartmann'
+            
         if config.has_option('sensor_HO','NumberLenslets'):
-            NumberLenslets = eval(config['sensor_HO']['NumberLenslets'])
+            nL = eval(config['sensor_HO']['NumberLenslets'])
         else:
-            NumberLenslets = 20
+            nL = [20]
             
-        if config.has_option('sensor_HO','LoopGain'):
-            LoopGain = eval(config['sensor_HO']['LoopGain'])
+        if config.has_option('sensor_HO','modulation'):
+            modu = eval(config['sensor_HO']['modulation'])
         else:
-            LoopGain = 0.5
-            
-        if config.has_option('sensor_HO','SensorFrameRate'):
-            SensorFrameRate = eval(config['sensor_HO']['SensorFrameRate'])
-        else:
-            SensorFrameRate = 500.0
-            
-        if config.has_option('sensor_HO','LoopDelaySteps'):
-            LoopDelaySteps = eval(config['sensor_HO']['LoopDelaySteps'])
-        else:
-            LoopDelaySteps = 2
+            modu = None
             
         if config.has_option('sensor_HO','NoiseVariance'):
-            NoiseVariance = eval(config['sensor_HO']['NoiseVariance'])
+            NoiseVar = eval(config['sensor_HO']['NoiseVariance'])
         else:
-            NoiseVariance = None
+            NoiseVar = None
             
-        if config.has_option('sensor_HO','SlopeAlgorithm'):
-            SlopeAlgorithm = eval(config['sensor_HO']['SlopeAlgorithm'])
+        if config.has_option('sensor_HO','algorithm'):
+            algorithm = eval(config['sensor_HO']['algorithm'])
         else:
-            SlopeAlgorithm = 'window'
+            algorithm = 'wcog'
             
         if config.has_option('sensor_HO','WindowRadiusWCoG'):
             wr = eval(config['sensor_HO']['WindowRadiusWCoG'])
@@ -388,10 +413,17 @@ class aoSystem():
             nv = eval(config['sensor_HO']['NewValueThrPix'])
         else:
             nv = 0.0
+         
+        if config.has_option('sensor_science','ExcessNoiseFactor'):
+            excess = eval(config['sensor_science']['ExcessNoiseFactor'])
+        else:
+            excess = 1.0
             
-        self.wfs = detector(psInMas,fov,dispersion=disp,nph=nph,spotFWHM=spotFWHM,ron=ron,sky=sky,dark=dark,excess=excess,\
-                       nL=NumberLenslets, loopGain=LoopGain, SensorFrameRate=SensorFrameRate,delay=LoopDelaySteps,\
-                       noise=NoiseVariance,SlopeAlgorithm=SlopeAlgorithm,wcog=[wr,thr,nv],tag="HO WFS")
+        self.wfs = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
+                   nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
+                   gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,\
+                   nL=nL,dsub=list(D/np.array(nL)),wfstype=wfstype,modulation=modu,\
+                   noiseVar=NoiseVar,algorithm=algorithm,algo_param=[wr,thr,nv],tag="HO WFS")
         
         #%% TIP-TILT SENSORS
         if config.has_section('sensor_LO'):
@@ -412,6 +444,11 @@ class aoSystem():
                 print('You must provide a value for the science detector field of view\n')
                 self.error = True
                 return
+            
+            if config.has_option('sensor_science','Binning'):
+                Binning = eval(config['sensor_science']['Binning'])
+            else:
+                Binning = 1
             
             if config.has_option('sensor_LO','spotFWHM'):
                 spotFWHM = eval(config['sensor_LO']['spotFWHM'])
@@ -444,34 +481,19 @@ class aoSystem():
                 excess = 1.0
                 
             if config.has_option('sensor_LO','NumberLenslets'):
-                NumberLenslets = eval(config['sensor_LO']['NumberLenslets'])
+                nL = eval(config['sensor_LO']['NumberLenslets'])
             else:
-                NumberLenslets = 20
-                
-            if config.has_option('sensor_LO','LoopGain'):
-                LoopGain = eval(config['sensor_LO']['LoopGain'])
-            else:
-                LoopGain = 0.5
-                
-            if config.has_option('sensor_LO','SensorFrameRate'):
-                SensorFrameRate = eval(config['sensor_LO']['SensorFrameRate'])
-            else:
-                SensorFrameRate = 500.0
-                
-            if config.has_option('sensor_LO','LoopDelaySteps'):
-                LoopDelaySteps = eval(config['sensor_LO']['LoopDelaySteps'])
-            else:
-                LoopDelaySteps = 2
-                
+                nL = [1]
+                     
             if config.has_option('sensor_LO','NoiseVariance'):
-                NoiseVariance = eval(config['sensor_LO']['NoiseVariance'])
+                NoiseVar = eval(config['sensor_LO']['NoiseVariance'])
             else:
-                NoiseVariance = None
+                NoiseVar = [None]
                 
-            if config.has_option('sensor_LO','SlopeAlgorithm'):
-                SlopeAlgorithm = eval(config['sensor_LO']['SlopeAlgorithm'])
+            if config.has_option('sensor_LO','algorithm'):
+                algorithm = eval(config['sensor_LO']['algorithm'])
             else:
-                SlopeAlgorithm = 'window'
+                algorithm = 'wcog'
                 
             if config.has_option('sensor_LO','WindowRadiusWCoG'):
                 wr = eval(config['sensor_LO']['WindowRadiusWCoG'])
@@ -488,20 +510,22 @@ class aoSystem():
             else:
                 nv = 0.0
                 
-            if config.has_option('sensor_LO','Technical_FoV'):
-                tech_fov = eval(config['sensor_LO']['Technical_FoV']) 
-            else:
-                tech_fov = 120
+#            if config.has_option('sensor_LO','Technical_FoV'):
+#                tech_fov = eval(config['sensor_LO']['Technical_FoV']) 
+#            else:
+#                tech_fov = 120
                 
-            self.tts = detector(psInMas,fov,dispersion=disp,nph=nph,spotFWHM=spotFWHM,ron=ron,sky=sky,dark=dark,excess=excess,\
-                       nL=NumberLenslets, loopGain=LoopGain, SensorFrameRate=SensorFrameRate,delay=LoopDelaySteps,\
-                       noise=NoiseVariance,SlopeAlgorithm=SlopeAlgorithm,wcog=[wr,thr,nv],tech_fov=tech_fov,tag="TT WFS") 
+            self.tts = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
+                   nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
+                   gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,\
+                   nL=nL,dsub=list(D/np.array(nL)),wfstype='Shack-Hartmann',noiseVar=NoiseVar,\
+                   algorithm=algorithm,algo_param=[wr,thr,nv],tag="TT WFS")
         else:
             self.tts = None
                
         #%% DEFORMABLE MIRRORS
         if config.has_option('DM','NumberActuators'):
-            NumberActuators = eval(config['DM']['NumberActuators'])
+            nActu = eval(config['DM']['NumberActuators'])
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
             print('You must provide a value for the Dm actuators pitch\n')
@@ -532,36 +556,36 @@ class aoSystem():
             DmHeights = [0.0]
             
         if config.has_option('DM','OptimizationWeight'):
-            OptimizationWeight = eval(config['DM']['OptimizationWeight']) 
+            opt_w = eval(config['DM']['OptimizationWeight']) 
         else:
-            OptimizationWeight = [0.0]
+            opt_w = [0.0]
             
         if config.has_option('DM','OptimizationAzimuth'):
-            OptimizationAzimuth = eval(config['DM']['OptimizationAzimuth']) 
+            opt_az = eval(config['DM']['OptimizationAzimuth']) 
         else:
-            OptimizationAzimuth = [0.0]
+            opt_az = [0.0]
             
         if config.has_option('DM','OptimizationZenith'):
-            OptimizationZenith = eval(config['DM']['OptimizationZenith']) 
+            opt_zen = eval(config['DM']['OptimizationZenith']) 
         else:
-            OptimizationZenith = [0.0]
+            opt_zen = [0.0]
 
          # ----- verification
-        if (len(OptimizationZenith) != len(OptimizationZenith)) or (len(OptimizationZenith) != len(OptimizationWeight)):
+        if (len(opt_zen) != len(opt_az)) or (len(opt_zen) != len(opt_w)):
             print('%%%%%%%% ERROR %%%%%%%%')
             print('The number of optimization directions is not consistent in the parameters file\n')
             self.error = True
             return
               
         if config.has_option('DM','OptimizationConditioning'):
-            OptimizationConditioning = eval(config['DM']['OptimizationConditioning']) 
+            cond = eval(config['DM']['OptimizationConditioning']) 
         else:
-            OptimizationConditioning = 100.0
+            cond = 100.0
             
         if config.has_option('DM','NumberReconstructedLayers'):
-            NumberReconstructedLayers = eval(config['DM']['NumberReconstructedLayers']) 
+            nrec = eval(config['DM']['NumberReconstructedLayers']) 
         else:
-            NumberReconstructedLayers = 10
+            nrec = 10
             
         if config.has_option('DM','AoArea'):
             AoArea = eval(config['DM']['AoArea']) 
@@ -569,7 +593,42 @@ class aoSystem():
             AoArea = 'circle'
             
         # ----- creating the dm class
-        self.dms = deformableMirror(NumberActuators,DmPitchs,heights=DmHeights,mechCoupling=InfCoupling,modes=InfModel,\
-                              opt_dir=[OptimizationZenith,OptimizationAzimuth],opt_weights=OptimizationWeight,\
-                              opt_cond=OptimizationConditioning,n_rec = NumberReconstructedLayers,AoArea=AoArea)
+        self.dms = deformableMirror(nActu,DmPitchs,heights=DmHeights,mechCoupling=InfCoupling,modes=InfModel,\
+                   opt_dir=[opt_zen,opt_az],opt_weights=opt_w,\
+                   opt_cond=cond,n_rec = nrec,AoArea=AoArea)
       
+    #%% REAL-TIME-COMPUTER
+     
+        if config.has_option('RTC','LoopGain_HO'):
+            LoopGain_HO = eval(config['RTC']['LoopGain_HO'])
+        else:
+            LoopGain_HO = 0.5
+            
+        if config.has_option('RTC','SensorFrameRate_HO'):
+            frameRate_HO = eval(config['RTC']['SensorFrameRate_HO'])
+        else:
+            frameRate_HO = 500.0
+            
+        if config.has_option('RTC','LoopDelaySteps_HO'):
+            delay_HO = eval(config['RTC']['LoopDelaySteps_HO'])
+        else:
+            delay_HO = 2
+                     
+        if config.has_option('RTC','LoopGain_LO'):
+            LoopGain_LO = eval(config['RTC']['LoopGain_LO'])
+        else:
+            LoopGain_LO = None
+            
+        if config.has_option('RTC','SensorFrameRate_LO'):
+            frameRate_LO = eval(config['RTC']['SensorFrameRate_LO'])
+        else:
+            frameRate_LO = None
+            
+        if config.has_option('RTC','LoopDelaySteps_LO'):
+            delay_LO = eval(config['RTC']['LoopDelaySteps_LO'])
+        else:
+            delay_LO = None
+            
+        self.rtc = rtc(LoopGain_HO, frameRate_HO, delay_HO,\
+                 loopGainLO=LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
+                
