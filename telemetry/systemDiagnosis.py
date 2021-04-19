@@ -114,7 +114,7 @@ class systemDiagnosis:
             pixInt = np.sort(maps,axis=1)
             nSl_c  = np.count_nonzero(self.trs.mat.R[100,:,0])
             pixCog = pixInt[:,-nSl_c//2:]
-            nph = np.mean(pixCog*self.trs.holoop.freq/self.trs.dm.pitch**2) # in ADU/m2/s
+            nph = np.mean(pixCog*self.trs.holoop.freq/self.trs.dm.pitch[0]**2) # in ADU/m2/s
             
             # Read-out noise estimation
             tmp = np.mean(pixInt,axis=0)

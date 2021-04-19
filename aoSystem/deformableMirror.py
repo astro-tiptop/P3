@@ -17,28 +17,29 @@ class deformableMirror:
     def nValidActuator(self):
         return self.validActuator.sum()
     
-    def __init__(self,nActu1D,pitch,heights=[0.0],mechCoupling=0.2,modes='gaussian',opt_dir=[[0.0],[0.0]], opt_weights=[1.0],\
-                 opt_cond=1e2, n_rec=None, validActuator=None,offset = [0,0],AoArea='circle',resolution=None):
+    def __init__(self,nActu1D,pitch,heights=[0.0],mechCoupling=[0.2],modes='gaussian',opt_dir=[[0.0],[0.0]], opt_weights=[1.0],\
+                 opt_cond=1e2, n_rec=None, validActuator=None,offset = [[0,0]],AoArea='circle',resolution=None):
         # PARSING INPUTS
-        self.nActu1D      = nActu1D
-        self.pitch        = pitch
-        self.heights      = heights
-        self.mechCoupling = mechCoupling
+        if np.isscalar(nActu1D):
+            nActu1D = [int(nActu1D)]
+            
+        self.nActu1D      = np.array(nActu1D)
+        self.pitch        = np.array(pitch)
+        self.heights      = np.array(heights)
+        self.mechCoupling = np.array(mechCoupling)
         self.modes        = modes
         self.offset       = offset
         self.influenceCentre=0
         self.resolution   = resolution
         self.AoArea       = AoArea
         self.nRecLayers   = n_rec
-        self.opt_dir      = opt_dir
+        self.opt_dir      = np.array(opt_dir)
         self.opt_weights  = opt_weights
+        self.nDMs         = len(pitch)
         
         # DEFINE THE VALID ACTUATOR
         if np.any(validActuator == None):
-            if np.isscalar(nActu1D):
-                self.validActuator = np.ones((nActu1D,nActu1D),dtype=bool)
-            else:
-                self.validActuator = np.ones((nActu1D[0],nActu1D[0]),dtype=bool)
+            self.validActuator = np.ones((nActu1D[0],nActu1D[0]),dtype=bool)
         else:
             self.validActuator = validActuator
         # DEFINE THE MODES
@@ -46,13 +47,13 @@ class deformableMirror:
             self.modes = self.setInfluenceFunction(self.resolution)
             
     
-    def setInfluenceFunction(self,resolution):
+    def setInfluenceFunction(self,resolution,ndm=0):
         """
             SETINFLUENCEFUNCTION    
         """
-        nIF = self.nActu1D 
+        nIF = self.nActu1D[ndm] 
         # defining the spline functions
-        c  = 1/np.sqrt(np.log(1/self.mechCoupling))
+        c  = 1/np.sqrt(np.log(1/self.mechCoupling[ndm]))
         df = 1e-10
         mx = np.sqrt(-np.log(df)*c**2)
         r  = np.linspace(-mx,mx,1001)
@@ -77,8 +78,8 @@ class deformableMirror:
         
         # managing the actuators positions
         if self.influenceCentre==0:
-            xIF = np.linspace(-1,1,nIF)*(nIF-1)/2*self.pitch - self.offset[0]
-            yIF = np.linspace(-1,1,nIF)*(nIF-1)/2*self.pitch - self.offset[1]
+            xIF = np.linspace(-1,1,nIF)*(nIF-1)/2*self.pitch[ndm] - self.offset[ndm][0]
+            yIF = np.linspace(-1,1,nIF)*(nIF-1)/2*self.pitch[ndm] - self.offset[ndm][1]
             xIF2,yIF2 = np.meshgrid(xIF,yIF)
             self.actuatorCoord = yIF2 + complex(0,1)*np.flip(xIF2,axis=0)                                  
             u0 = np.linspace(-1,1,resolution)*(nIF-1)/2*self.pitch
@@ -91,12 +92,12 @@ class deformableMirror:
         
         u           = np.transpose([u0])- [xIF]
         wu          = np.zeros((resolution,nIF))
-        index_u     = (u >= -r[len(r)-1]*self.pitch) & (u <= r[len(r)-1]*self.pitch)
+        index_u     = (u >= -r[len(r)-1]*self.pitch[ndm]) & (u <= r[len(r)-1]*self.pitch[ndm])
         wu[index_u] = spline(u[index_u])
                 
         v           = np.transpose([u0])- [yIF]
         wv          = np.zeros((resolution,nIF))
-        index_v     = (v >= -r[len(r)-1]*self.pitch) & (v <= r[len(r)-1]*self.pitch)
+        index_v     = (v >= -r[len(r)-1]*self.pitch[ndm]) & (v <= r[len(r)-1]*self.pitch[ndm])
         wv[index_v] = spline(v[index_v])
              
         #m_modes = sparse.lil_matrix((resolution**2,self.nValidActuator))
@@ -119,7 +120,7 @@ class deformableMirror:
                 
     def __repr__(self):
         s = "___DEFORMABLE MIRROR___\n ---------------------------------------- \n"
-        s+= ".%dX%d actuators deformable mirror with %d controlled actuators"%( self.nActu1D,self.nActu1D,self.nValidActuator)
+        s+= ".%dX%d actuators deformable mirror with %d controlled actuators"%( self.nActu1D[0],self.nActu1D[0],self.nValidActuator)
         s = s +"\n----------------------------------------\n"
         return s
                             

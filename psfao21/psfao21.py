@@ -14,83 +14,13 @@ import sys as sys
 
 import aoSystem.fourier.FourierUtils as FourierUtils
 from aoSystem.aoSystem import aoSystem as aoSys
+from aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
 
 #%%
 rad2mas = 3600 * 180 * 1000 / np.pi
 rad2arc = rad2mas / 1000
 
 class psfao21:
-    
-    # WAVELENGTH
-    @property
-    def wvl(self):
-        return self.__wvl
-    @wvl.setter
-    def wvl(self,val):
-        self.__wvl = val
-        self.samp  = val* rad2mas/(self.ao.cam.psInMas*self.ao.tel.D)
-    @property
-    def wvlRef(self):
-        return self.__wvlRef
-    @wvlRef.setter
-    def wvlRef(self,val):
-        self.__wvlRef = val
-        self.sampRef  = val* rad2mas/(self.ao.cam.psInMas*self.ao.tel.D)
-    @property
-    def wvlCen(self):
-        return self.__wvlCen
-    @wvlCen.setter
-    def wvlCen(self,val):
-        self.__wvlCen = val
-        self.sampCen  = val* rad2mas/(self.ao.cam.psInMas*self.ao.tel.D)
-        
-    # SAMPLING
-    @property
-    def samp(self):
-        return self.__samp
-    @samp.setter
-    def samp(self,val):
-        self.k_      = np.ceil(2.0/val).astype('int') # works for oversampling
-        self.__samp  = self.k_ * val     
-    @property
-    def sampCen(self):
-        return self.__sampCen
-    @sampCen.setter
-    def sampCen(self,val):
-        self.kCen_      = int(np.ceil(2.0/val))# works for oversampling
-        self.__sampCen  = self.kCen_ * val  
-    @property
-    def sampRef(self):
-        return self.__sampRef
-    @sampRef.setter
-    def sampRef(self,val):
-        self.kRef_      = int(np.ceil(2.0/val)) # works for oversampling
-        self.__sampRef  = self.kRef_ * val
-        self.kxky_      = FourierUtils.freq_array(self.nPix*self.kRef_,self.__sampRef,self.ao.tel.D)
-        self.k2_        = self.kxky_[0]**2 + self.kxky_[1]**2                   
-        #piston filtering        
-        self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,self.k2_)
-        self.pistonFilter_[self.nPix*self.kRef_//2,self.nPix*self.kRef_//2] = 0
-            
-    # CUT-OFF FREQUENCY
-    @property
-    def nAct(self):
-        return self.__nAct    
-    @nAct.setter
-    def nAct(self,val):
-        self.__nAct = val
-        # redefining the ao-corrected area
-        self.kc_= (val-1)/(2.0*self.ao.tel.D)
-        kc2     = self.kc_**2
-        if self.ao.dms.AoArea == 'circle':
-            self.mskOut_   = (self.k2_ >= kc2)
-            self.mskIn_    = (self.k2_ < kc2)
-        else:
-            self.mskOut_   = np.logical_or(abs(self.kxky_[0]) >= self.kc_, abs(self.kxky_[1]) >= self.kc_)
-            self.mskIn_    = np.logical_and(abs(self.kxky_[0]) < self.kc_, abs(self.kxky_[1]) < self.kc_)
-        self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.ao.atm.L0**2) + self.k2_) ** (-11.0/6.0)
-        self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kxky_[1][0]),self.kxky_[1][0]))
-    
     # INIT
     def __init__(self,path_ini,antiAlias=False,fitCn2=False):
         
@@ -99,52 +29,17 @@ class psfao21:
         # PARSING INPUTS
         self.file      = path_ini
         self.antiAlias = antiAlias
-        self.ao        = aoSys(path_ini)
-        self.nPix   = self.ao.cam.fovInPix
-        self.wvl    = self.ao.src.wvl
-        self.wvlCen = np.mean(self.ao.src.wvl)
-        self.wvlRef = np.min(self.ao.src.wvl)
-        self.nWvl   = len(self.wvl)
-        self.nAct   = self.ao.dms.nActu1D[0]
-        
-        self.isStatic = self.ao.tel.statModes != None
-        self.isAniso  = False
+        self.ao        = aoSys(path_ini)    
+        self.isStatic = self.ao.tel.nModes > 0
         
         if self.ao.error==False:
-            # DEFINING THE DOMAIN ANGULAR FREQUENCIES
-            self.nOtf        = self.nPix * self.kRef_
-            self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf,fact=2)
-              
-            # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
-            self.otfNCPA, _ = FourierUtils.getStaticOTF(self.ao.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.ao.tel.apodizer,opdMap_ext=self.ao.tel.opdMap_ext)
-            self.otfDL,_    = FourierUtils.getStaticOTF(self.ao.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.ao.tel.apodizer)
-    
-    
-            # ANISOPLANATISM
-#            if any(self.ao.atm.heights) and any(self.ao.src.zenith):
-#                self.Dani_l = self.instantiateAnisoplanatism(self.nOtf,self.sampRef)
-#                self.isAniso = True
-#                if fitCn2 == False: 
-#                    self.Kaniso = np.zeros((self.ao.src.nSrc,self.nWvl,self.nOtf,self.nOtf))
-#                    Cn2  = self.atm.r0**(-5/3) * (self.ao.atm.wvl/self.wvlRef)**2  * self.ao.atm.weights
-#                    for l in range(self.nWvl):
-#                        wvl_l     = self.wvl[l]
-#                        wvlRatio  = (self.wvlRef/wvl_l) ** 2
-#                        for iSrc in range(self.src.nSrc):   
-#                            Dani                = (self.Dani_l[iSrc].T * Cn2 * wvlRatio).sum(axis=2)
-#                            self.Kaniso[iSrc,l] = np.exp(-0.5 * Dani)
-#                    self.atm = atmosphere(self.atm.wvl,self.atm.r0,[1],[0],self.ao.atm.wSpeed.mean(),self.ao.atm.wDir.mean(),self.ao.atm.L0)   
-#                    self.isAniso = False
-#            else:
-#                self.Dani_l = None
-#                self.Kaniso = np.ones((self.src.nSrc,self.nWvl))
-#                self.isAniso = False
-#                if fitCn2 == False: 
-#                    self.atm = atmosphere(self.atm.wvl,self.atm.r0,[1],[0],self.atm.wSpeed.mean(),self.atm.wDir.mean(),self.atm.L0)  
+            
+            # DEFINING THE FREQUENCY DOMAIN
+            self.freq = frequencyDomain(self.ao)
             
             # ONE OF SEVERAL FRAMES
-            self.isCube = any(rad2mas * self.ao.src.direction[0]/self.ao.cam.psInMas > self.nPix) \
-            or all(rad2mas * self.ao.src.direction[1]/self.ao.cam.psInMas > self.nPix)
+            self.isCube = any(rad2mas * self.ao.src.direction[0]/self.ao.cam.psInMas > self.freq.nPix) \
+            or all(rad2mas * self.ao.src.direction[1]/self.ao.cam.psInMas > self.freq.nPix)
                 
             # DEFINING BOUNDS
             self.bounds = self.defineBounds()
@@ -170,38 +65,38 @@ class psfao21:
           bounds_down += list(np.zeros(self.ao.src.nSrc))
           bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
           # Astrometry
-          bounds_down += list(-self.nPix//2 * np.ones(2*self.ao.src.nSrc))
-          bounds_up   += list( self.nPix//2 * np.ones(2*self.ao.src.nSrc))
+          bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+          bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
           # Background
           bounds_down += [-np.inf]
           bounds_up   += [np.inf]
           # Static aberrations
-          bounds_down += list(-self.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
-          bounds_up   += list(self.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
+          bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
+          bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
           return (bounds_down,bounds_up)
         
         
     def getPSD(self,x0):
         # Get the moffat PSD
         #pix2freq = 1/(self.tel.D * self.sampRef)
-        psd = self.moffat(self.kxky_,list(x0[3:])+[0,0])
+        psd = self.moffat(self.freq.kxky_,list(x0[3:])+[0,0])
         # Piston filtering
-        psd = self.pistonFilter_ * psd
+        psd = self.freq.pistonFilter_ * psd
         # Combination
         #A_emp = psd.sum() * pix2freq**2
-        A_emp = np.trapz(np.trapz(psd,self.kxky_[1][0]),self.kxky_[1][0])
-        psd   = x0[0]**(-5/3) * self.psdKolmo_ + self.mskIn_ * (x0[1] + psd/A_emp * x0[2] )
+        A_emp = np.trapz(np.trapz(psd,self.freq.kxky_[1][0]),self.freq.kxky_[1][0])
+        psd   = x0[0]**(-5/3) * self.freq.psdKolmo_ + self.freq.mskIn_ * (x0[1] + psd/A_emp * x0[2] )
 
         # Wavefront error
-        self.wfe = np.sqrt( np.trapz(np.trapz(psd,self.kxky_[1][0]),self.kxky_[1][0]) ) * self.wvlRef*1e9/2/np.pi
-        self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * self.wfe_fit_norm  * self.wvlRef*1e9/2/np.pi
+        self.wfe = np.sqrt( np.trapz(np.trapz(psd,self.freq.kxky_[1][0]),self.freq.kxky_[1][0]) ) * self.freq.wvlRef*1e9/2/np.pi
+        self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * self.freq.wfe_fit_norm  * self.freq.wvlRef*1e9/2/np.pi
         return psd
     
     def __call__(self,x0,nPix=None):
         
         # INSTANTIATING
         if nPix == None:
-            nPix = self.nPix
+            nPix = self.freq.nPix
         psf = np.zeros((self.ao.src.nSrc,nPix,nPix))
         
         # GETTING THE PARAMETERS
@@ -229,35 +124,35 @@ class psfao21:
         # GETTING THE PHASE STRUCTURE FUNCTION
         self.psd = self.getPSD([r0]+ x0_psd)
         if self.antiAlias:
-            	self.psd = np.pad(self.psd,(self.nOtf//2,self.nOtf//2)) 
+            	self.psd = np.pad(self.psd,(self.freq.nOtf//2,self.freq.nOtf//2)) 
         #covariance map
-        Bphi        = fft.fft2(fft.fftshift(self.psd)) / (self.ao.tel.D * self.sampRef)**2       
+        Bphi        = fft.fft2(fft.fftshift(self.psd)) / (self.ao.tel.D * self.freq.sampRef)**2       
         # phase structure function
         self.Dphi   = fft.fftshift(np.real(2*(Bphi.max() - Bphi)))
         if self.antiAlias:
-            	self.Dphi   = FourierUtils.interpolateSupport(self.Dphi,self.nOtf)    
+            	self.Dphi   = FourierUtils.interpolateSupport(self.Dphi,self.freq.nOtf)    
 
         # ADDITIONAL JITTER
         if len(x0_jitter) and (x0_jitter[0]!=0 or x0_jitter[1]!=0): # note sure about the normalization
-            self.Djitter = (x0_jitter[0]**2 * self.U2_ + x0_jitter[1]**2 * self.V2_+ \
-                    2*x0_jitter[0] * x0_jitter[1] * x0_jitter[2] * self.UV_)
-            Kjitter = np.exp(-0.5 * self.Djitter * (np.sqrt(2)/self.psInMas)**2)
+            self.Djitter = (x0_jitter[0]**2 * self.freq.U2_ + x0_jitter[1]**2 * self.freq.V2_+ \
+                    2*x0_jitter[0] * x0_jitter[1] * x0_jitter[2] * self.freq.UV_)
+            Kjitter = np.exp(-0.5 * self.Djitter * (np.sqrt(2)/self.ao.cam.psInMas)**2)
         else:
             Kjitter = 1
                                
-        for l in range(self.nWvl): # LOOP ON WAVELENGTH
+        for l in range(self.freq.nWvl): # LOOP ON WAVELENGTH
             
             # WAVELENGTH
-            wvl_l       = self.wvl[l]
-            wvlRatio    = (self.wvlRef/wvl_l) ** 2           
+            wvl_l       = self.freq.wvl[l]
+            wvlRatio    = (self.freq.wvlRef/wvl_l) ** 2           
             
             # STATIC OTF
-            if len(x0_stat) or self.nWvl > 1:
+            if len(x0_stat) or self.freq.nWvl > 1:
                 self.otfStat, self.phaseMap = \
-                FourierUtils.getStaticOTF(self.ao.tel,int(self.nPix*self.k_[l]),self.samp[l],wvl_l,xStat=x0_stat,\
-                                          apodizer=self.ao.tel.apodizer,statModes=self.ao.tel.statModes,opdMap_ext=self.opdMap_ext)
+                FourierUtils.getStaticOTF(self.ao.tel,int(self.freq.nPix*self.freq.k_[l]),self.freq.samp[l],wvl_l,xStat=x0_stat,\
+                                          apodizer=self.ao.tel.apodizer,statModes=self.ao.tel.statModes,opdMap_ext=self.ao.tel.opdMap_ext)
             else:
-                self.otfStat = self.otfNCPA
+                self.otfStat = self.freq.otfNCPA
               
             # ON-AXIS OTF
             otfOn = self.otfStat * np.exp(-0.5*self.Dphi * wvlRatio)
@@ -265,7 +160,7 @@ class psfao21:
             for iSrc in range(self.ao.src.nSrc): # LOOP ON SOURCES
                 
                 # ANISOPLANATISM
-                if self.isAniso and len(Cn2) == self.Dani_l.shape[1]:
+                if self.freq.isAniso and (len(Cn2) == self.freq.dani_ang.shape[1]):
                     Dani = (self.Dani_l[iSrc].T * Cn2 * wvlRatio).sum(axis=2)
                     Kaniso = np.exp(-0.5 * Dani)
                 else:
@@ -273,7 +168,7 @@ class psfao21:
                     
                 # Stellar parameters
                 if len(x0_stellar):
-                    F   = x0_stellar[iSrc] * self.ao.cam.transmittance[l]
+                    F   = x0_stellar[iSrc]* self.ao.cam.transmittance[l]
                     dx  = x0_stellar[iSrc + self.ao.src.nSrc] + self.ao.cam.dispersion[0][l]
                     dy  = x0_stellar[iSrc + 2*self.ao.src.nSrc] + self.ao.cam.dispersion[1][l]
                     bkg = x0_stellar[3*self.ao.src.nSrc]
@@ -285,7 +180,7 @@ class psfao21:
                 
                 # Phasor
                 if dx !=0 or dy!=0:
-                    fftPhasor = np.exp(np.pi*complex(0,1)*(self.U_*dx + self.V_*dy))
+                    fftPhasor = np.exp(np.pi*complex(0,1)*(self.freq.U_*dx + self.freq.V_*dy))
                 else:
                     fftPhasor = 1
                     
@@ -296,11 +191,11 @@ class psfao21:
                 psf_i = np.real(fft.fftshift(fft.ifft2(fft.fftshift(self.otfTot))))
                 
                 # CROPPING
-                if self.k_[l]> 1:
+                if self.freq.k_[l]> 1:
                         psf_i = FourierUtils.interpolateSuport(psf_i,nPix);            
                     
-                if nPix != self.nPix:
-                    psf_i = FourierUtils.cropSupport(psf_i,nPix/self.nPix)
+                if nPix != self.freq.nPix:
+                    psf_i = FourierUtils.cropSupport(psf_i,nPix/self.freq.nPix)
                 
                 # SCALING
                 psf[iSrc] += F * psf_i/psf_i.sum()
@@ -327,8 +222,7 @@ class psfao21:
         c       = np.cos(theta)
         s       = np.sin(theta)
         s2      = np.sin(2.0 * theta)
-        
-     
+           
         Rxx = (c/ax)**2 + (s/ay)**2
         Ryy = (c/ay)**2 + (s/ax)**2
         Rxy =  s2/ay**2 -  s2/ax**2

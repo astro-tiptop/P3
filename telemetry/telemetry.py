@@ -119,10 +119,11 @@ class telemetry:
         # dm
         self.dm = structtype()
         self.dm.volt2meter   = 0.6e-6 # conversion factor from volts to meter OPD
-        self.dm.nActuators   = 21     # 1D Number of actuators                                            
+        self.dm.nActuators   = [21]     # 1D Number of actuators                                            
         self.dm.nCom         = 349   # Number of total actuators within the pupil
-        self.dm.pitch        = 0.5625
-        self.dm.mechCoupling = 0.11
+        self.dm.pitch        = [0.5625]
+        self.dm.mechCoupling = [0.11]
+        self.dm.heights      = [0.0]
         self.dm.modes        = 'xinetics'
         #self.dm.resolution   = 2*self.dm.nActuators-1
         self.dm.condmax      = 1e2
@@ -209,10 +210,10 @@ class telemetry:
         
         #2\ DM influence functions and filters
         if self.path_trs != None:
-            dm = deformableMirror(self.dm.nActuators,self.dm.pitch,self.dm.mechCoupling,modes=self.dm.modes)
-            self.mat.dmIF = dm.setInfluenceFunction(self.tel.resolution)
+            dm = deformableMirror(self.dm.nActuators,self.dm.pitch,heights=self.dm.heights,mechCoupling=self.dm.mechCoupling,modes=self.dm.modes)
+            self.mat.dmIF     = dm.setInfluenceFunction(self.tel.resolution)
             self.mat.dmIF_inv = np.linalg.pinv(self.mat.dmIF,rcond=1/self.dm.condmax)
-            self.mat.Hdm  = np.matmul(self.mat.dmIF,self.mat.dmIF_inv)
+            self.mat.Hdm      = np.matmul(self.mat.dmIF,self.mat.dmIF_inv)
         
         #3\ MASS/DIMM
         # managing the saving folder
@@ -321,10 +322,10 @@ class telemetry:
         # fill vector to get 21x21 actuators
         if np.any(self.dm.validActuators):   
             idG          = self.dm.validActuators.reshape(-1)
-            u            = np.zeros((self.wfs.nExp,self.dm.nActuators**2))
+            u            = np.zeros((self.wfs.nExp,self.dm.nActuators[0]**2))
             u[:,idG]     = self.rec.res
             self.rec.res = u
-            u            = np.zeros((self.wfs.nExp,self.dm.nActuators**2))
+            u            = np.zeros((self.wfs.nExp,self.dm.nActuators[0]**2))
             u[:,idG]     = self.dm.com
             self.dm.com  = u
         else:
@@ -424,10 +425,10 @@ class telemetry:
         # updating the DM config
         if not parser.has_section('DM'):
             parser.add_section('DM')
-        parser.set('DM','NumberActuators', str([self.dm.nActuators]))
+        parser.set('DM','NumberActuators', str(self.dm.nActuators))
         parser.set('DM','DmPitchs', str(self.dm.pitch))
         parser.set('DM','InfModel', '\'xinetics\'')
-        parser.set('DM','InfCoupling', str(0.11))
+        parser.set('DM','InfCoupling', str([0.11]))
         
         # updating the imager config
         if not parser.has_section('sources_science'):

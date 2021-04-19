@@ -20,14 +20,9 @@ from aoSystem.detector import detector
 from aoSystem.sensor import sensor
 from aoSystem.rtc import rtc
 
-#INIT 
-
-# missing : wfs subap size, wfs binning, modulation, wfs type
-
+#%%
 class aoSystem():
     
-    
-
     def __init__(self,path_ini,nLayer=None):
                             
         self.error = False
@@ -372,10 +367,9 @@ class aoSystem():
             excess = eval(config['sensor_HO']['ExcessNoiseFactor'])
         else:
             excess = 1.0
-            
-            
-        if config.has_option('sensor_HO','TYPE'):
-            wfstype = eval(config['sensor_HO']['TYPE'])
+                       
+        if config.has_option('sensor_HO','wfstype'):
+            wfstype = eval(config['sensor_HO']['wfstype'])
         else:
             wfstype = 'Shack-Hartmann'
             
@@ -631,4 +625,19 @@ class aoSystem():
             
         self.rtc = rtc(LoopGain_HO, frameRate_HO, delay_HO,\
                  loopGainLO=LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
+         
+    #%% AO mode
+        self.aoMode = 'SCAO'
+        
+        if self.lgs:
+            if self.lgs.nSrc > 1:
+                if self.dms.nDms > 1:
+                    self.aoMode = 'MCAO'
+                else:
+                    if self.dms.nRecLayers >1:
+                        self.aoMode = 'LTAO' 
+                    else:
+                        self.aoMode = 'GLAO'                  
+            else:
+                self.aoMode = 'SLAO'
                 
