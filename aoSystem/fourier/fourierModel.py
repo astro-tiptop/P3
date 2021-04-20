@@ -91,7 +91,7 @@ class fourierModel:
     """
     
     # CONTRUCTOR
-    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,displayContour=False,aoFilter='circle',\
+    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,displayContour=False,\
                  getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,getEncircledEnergy=False,\
                  extraPSFsDirections=None,cartPointingCoords=None,kcExt=None,\
                  overSampling=1,pitchScaling=1,path_pupil='',path_static='',addChromatism=False,fftphasor=False):
@@ -161,7 +161,7 @@ class fourierModel:
             else:
             # ----------------- CLOSED-LOOP CASE ---------------------------- #
                 # DEFINE THE AO CORRECTION and PSF HALO  REGIONS
-                if aoFilter == 'circle':
+                if self.ao.dms.AoArea == 'circle':
                     self.mskIn_  = self.freq.kxy  <= self.freq.kc_      
                     self.mskOut_ = np.hypot(self.freq.kxExt,self.freq.kyExt) > self.freq.kc_
                 else:

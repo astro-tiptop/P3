@@ -8,25 +8,19 @@ Created on Tue Apr  6 22:24:36 2021
 
 #%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
-from scipy.io import readsav
 import os
+from scipy.io import readsav
 from astropy.io import fits
-from configparser import ConfigParser
-
 from aoSystem.deformableMirror import deformableMirror
 import aoSystem.fourier.FourierUtils as FourierUtils
 import telemetry.keckUtils as keckUtils
-from telemetry.massdimm import fetch_data
-from telemetry.massdimm import DIMM
-from telemetry.massdimm import MASS
-from telemetry.massdimm import MASSPROF
-from telemetry.massdimm import CombineMASSandDIMM
+from telemetry.massdimm import fetch_data, DIMM, MASS, MASSPROF, CombineMASSandDIMM
 
 #%%
 class structtype():
     pass
 
-class telemetry:
+class telemetryKeck:
     
     
     def __init__(self,path_trs,path_img,path_calib,path_save='./',nLayer=1,verbose=False):
@@ -43,7 +37,6 @@ class telemetry:
                 print('%%%%%%%% ERROR %%%%%%%%')
                 print('The self file does not exist\n')
                 return
-            
             
         # Check the presence of the calibration folder
         self.path_calib = path_calib
@@ -71,16 +64,9 @@ class telemetry:
             #3\ restoring calibration data
             self.restoringCalibrationData(nLayer=nLayer)
             
-            #4\ CREATE TELEMETRY LEVEL 0
+            #4\ CREATE TELEMETRY LEVEL 1 KECK-SPECIFIC
             self.restoringTelemetry(verbose=verbose)
-        
-            #5\ CREATE TELEMETRY LEVEL 1
-        
-            #6\ CREATE TELEMETRY LEVEL 2
-            if path_save!=None:
-                self.CreateTelemetryLevel2()
-        
-        
+            
     def instantiatingFields(self):
         """
             Instantiating the data structures for the Keck AO system"
@@ -139,11 +125,6 @@ class telemetry:
         # ttloop
         self.ttloop = structtype()
         self.ttloop.tf = structtype()
-        #results
-        self.seeing = structtype()
-        self.noise  = structtype()
-        self.noise.Cn_ao = 0
-        self.noise.Cn_tt = 0
        
     def restoringInstrumentData(self):
         """
@@ -351,113 +332,3 @@ class telemetry:
         self.ttloop.gain   = trsData['DT_SERVO'][0]
         self.ttloop.tf.num = trsData['DT_SERVO'][0:4]
         self.ttloop.tf.den = trsData['DT_SERVO'][4:]
-        
-        
-    def CreateTelemetryLevel1(self):
-        """
-        """
-        pass
-    
-    def CreateTelemetryLevel2(self):
-        
-        # create the .ini file
-        file = self.tel.name + '_' + self.cam.name + '_' + self.obsdate + '_' + self.acqtime + '.ini'
-        self.path_ini = self.path_save + '/'+ file
-        if not os.path.exists(self.path_ini):
-            with open(self.path_ini, 'w'): pass
-        else:
-            print('WARNING: the .ini file already exists')
-
-        # open the .ini file
-        parser = ConfigParser()
-        parser.optionxform = str
-        parser.read(self.path_ini)
-        
-        # updating the telescope parameters
-        if not parser.has_section('telescope'):
-            parser.add_section('telescope')
-        parser.set('telescope','TelescopeDiameter',str(self.tel.D))
-        parser.set('telescope','ObscurationRatio', str(self.tel.cobs))
-        parser.set('telescope','ZenithAngle', str(self.tel.zenith_angle))
-        parser.set('telescope','Resolution', str(self.tel.resolution))
-        parser.set('telescope','PupilAngle', str(self.tel.pupilAngle))
-        parser.set('telescope','PathPupil','\'' + self.tel.path_pupil + '\'')
-        parser.set('telescope','PathStatic','\'' + self.cam.path_ncpa + '\'')
-        parser.set('telescope','PathStatModes','\'' + self.tel.path_telstat + '\'')
-        
-        # updating the atmosphere config
-        if not parser.has_section('atmosphere'):
-            parser.add_section('atmosphere')
-        parser.set('atmosphere','AtmosphereWavelength', str(self.atm.wvl))
-        parser.set('atmosphere','Seeing', str(self.atm.seeing))
-        parser.set('atmosphere','L0', str(self.atm.L0))
-        parser.set('atmosphere','Cn2Weights', str(self.atm.Cn2Weights))
-        parser.set('atmosphere','Cn2Heights', str(self.atm.Cn2Heights))
-        parser.set('atmosphere','WindSpeed', str(self.atm.wSpeed))
-        parser.set('atmosphere','WindDirection', str(self.atm.wDir))
-
-        # updating the HO WFS config
-        if not parser.has_section('sensor_HO'):
-            parser.add_section('sensor_HO')
-        parser.set('sensor_HO','PixelScale', str(self.wfs.pixel_scale))
-        parser.set('sensor_HO','FiedOfView', str(self.wfs.fov))
-        parser.set('sensor_HO','NumberLenslets', str([self.wfs.nSubap]))
-        parser.set('sensor_HO','NoiseVariance', str([0.0]))
-        
-        # GUIDE STARS
-        if not parser.has_section('sources_HO'):
-            parser.add_section('sources_HO')
-            parser.set('sources_HO','Wavelength', str(self.wfs.wvl))
-
-        if self.aoMode == 'LGS':
-            parser.set('sources_HO','Height', str(self.lgs.height))
-            parser.set('sources_HO','Zenith',str(self.lgs.zenith))
-            parser.set('sources_HO','Azimuth',str(self.lgs.azimuth))
-            if not parser.has_section('sources_LO'):
-                parser.add_section('sources_LO')
-            parser.set('sources_LO','Zenith',str(self.ngs.zenith))
-            parser.set('sources_LO','Azimuth',str(self.ngs.azimuth))
-        else:
-            parser.set('sources_HO','Height',str(0))
-            parser.set('sources_HO','Zenith',str(self.ngs.zenith))
-            parser.set('sources_HO','Azimuth',str(self.ngs.azimuth))
-            
-        # updating the DM config
-        if not parser.has_section('DM'):
-            parser.add_section('DM')
-        parser.set('DM','NumberActuators', str(self.dm.nActuators))
-        parser.set('DM','DmPitchs', str(self.dm.pitch))
-        parser.set('DM','InfModel', '\'xinetics\'')
-        parser.set('DM','InfCoupling', str([0.11]))
-        
-        # updating the imager config
-        if not parser.has_section('sources_science'):
-            parser.add_section('sources_science')
-        parser.set('sources_science','Zenith', str(self.cam.zenith))
-        parser.set('sources_science','Azimuth', str(self.cam.azimuth))
-        parser.set('sources_science','Wavelength', str([np.mean(self.cam.wvl)]))
-        
-        if not parser.has_section('sensor_science'):
-            parser.add_section('sensor_science')
-        parser.set('sensor_science','FiedOfView', str(self.cam.fov))
-        parser.set('sensor_science','PixelScale', str(self.cam.psInMas))
-
-        if len(self.cam.wvl) > 1:
-            parser.set('sensor_science','Transmittance', str(self.cam.transmission))
-            parser.set('sensor_science','SpectralBandwidth', str(self.cam.bw))
-            parser.set('sensor_science','Dispersion', str(self.cam.dispersion))
-            
-            
-        if not parser.has_section('RTC'):
-            parser.add_section('RTC')
-        parser.set('RTC','LoopGain_HO', str(self.holoop.gain))
-        parser.set('RTC','SensorFrameRate_HO', str(self.holoop.freq))
-        parser.set('RTC','LoopDelaySteps_HO', str(self.holoop.lat * self.holoop.freq))
-        if hasattr(self,'ttloop'):
-            parser.set('RTC','LoopGain_LO', str(self.ttloop.gain))
-            parser.set('RTC','SensorFrameRate_LO', str(self.ttloop.freq))
-            parser.set('RTC','LoopDelaySteps_LO', str(self.ttloop.lat * self.ttloop.freq))
-        
-        with open(self.path_ini, 'w') as configfile:
-            parser.write(configfile)
-            
