@@ -42,6 +42,11 @@ class systemDiagnosis:
         self.trs.wfs.nph,self.trs.wfs.ron,self.trs.tipTilt.nph,self.trs.tipTilt.ron = self.GetNumberPhotons()
         self.trs.wfs.Cn_ao,self.trs.tipTilt.Cn_tt = self.GetNoiseVariance(noiseMethod=self.noiseMethod,nshift=nshift,nfit=nfit)
         
+        # GET THE VARIANCE
+        Cnn = np.diag(self.trs.wfs.Cn_ao)
+        Cnn = Cnn[Cnn!=0]
+        self.trs.wfs.noiseVar = [(2*np.pi/self.trs.wfs.wvl)**2 *np.mean(Cnn),]*len(self.trs.wfs.nSubap)
+        
         # Zernike
         self.trs.wfs.Cz_ao, self.trs.tipTilt.Cz_tt = self.ReconstructZernike()
         
@@ -141,6 +146,7 @@ class systemDiagnosis:
         def SlopesToNoise(u,noiseMethod='autocorrelation',nshift=1,nfit=2,rtf=None):
         
             nF,nU      = u.shape
+            u         -= np.mean(u,axis=0)
             Cnn        = np.zeros((nU,nU))
             validInput = np.argwhere(u.std(axis=0)!=0)
             
@@ -177,9 +183,9 @@ class systemDiagnosis:
                     Cnn[i,i] = mx - yfit[0]              
         
             if noiseMethod == 'autocorrelation':
-                du_n  = u - np.roll(u,(-nshift,0))
-                du_p  = u - np.roll(u,(nshift,0))
-                Cnn = 0.5*(np.matmul(u.T,du_n +du_p))/nF
+                du_n  = u - np.roll(u,-nshift,axis=0)
+                du_p  = u - np.roll(u,nshift,axis=0)
+                Cnn   = 0.5*(np.matmul(u.T,du_n + du_p))/nF
             
             return Cnn
             
@@ -222,7 +228,7 @@ class systemDiagnosis:
         # defining the pupil mask and the Zernike modes
         if wfsMask==None:
             wfsMask = fits.getdata(self.trs.tel.path_pupil)
-            ang     = self.trs.wfs.theta + self.trs.tel.pupilAngle
+            ang     = self.trs.wfs.theta[0] + self.trs.tel.pupilAngle
             wfsMask = FourierUtils.interpolateSupport(rotate(wfsMask,ang,reshape=False),self.trs.tel.resolution).astype(bool)
         
         self.z = zernike(self.trs.wfs.jIndex,self.trs.tel.resolution,pupil=wfsMask)

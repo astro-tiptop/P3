@@ -92,9 +92,9 @@ class telemetryKeck:
         self.lgs.azimuth = [0.0]
         # wfs
         self.wfs = structtype()  
-        self.wfs.nSubap = 20
-        self.wfs.nSl    = 608 # Number of slopes measurements within the pupil (x and y)
-        self.wfs.theta  = 90
+        self.wfs.nSubap = [20]
+        self.wfs.nSl    = [608] # Number of slopes measurements within the pupil (x and y)
+        self.wfs.theta  = [90]
         self.wfs.ron    = 3.0
         self.wfs.pixel_scale = 800
         self.wfs.fov = 3200
@@ -106,7 +106,7 @@ class telemetryKeck:
         self.dm = structtype()
         self.dm.volt2meter   = 0.6e-6 # conversion factor from volts to meter OPD
         self.dm.nActuators   = [21]     # 1D Number of actuators                                            
-        self.dm.nCom         = 349   # Number of total actuators within the pupil
+        self.dm.nCom         = [349]   # Number of total actuators within the pupil
         self.dm.pitch        = [0.5625]
         self.dm.mechCoupling = [0.11]
         self.dm.heights      = [0.0]
@@ -169,7 +169,6 @@ class telemetryKeck:
             self.cam.ronDN = np.sqrt(self.cam.coadds)*self.cam.ron/self.cam.gain
             # NCPA
             self.cam.path_ncpa = self.path_calib + '/NIRC2_STAT/' +  keckUtils.getNCPAstr(hdr)
-            
             
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
@@ -261,7 +260,7 @@ class telemetryKeck:
         if np.any(self.wfs.validSubaperture):   
             self.wfs.intensity = np.zeros((self.wfs.nExp,400))
             self.wfs.intensity[:,self.wfs.validSubaperture.reshape(-1)] = trsData.A['SUBAPINTENSITY'][0]
-            self.wfs.intensity = self.wfs.intensity.reshape((self.wfs.nExp,self.wfs.nSubap,self.wfs.nSubap))
+            self.wfs.intensity = self.wfs.intensity.reshape((self.wfs.nExp,self.wfs.nSubap[0],self.wfs.nSubap[0]))
         else:
             self.wfs.intensity = trsData.A['SUBAPINTENSITY'][0]
         self.wfs.wvl = keckUtils.getWFSwavelength(hdr)

@@ -137,7 +137,7 @@ class psfR:
         Cao  =  np.matmul(du.T,du)/du.shape[0]
        
         # Unbiasing noise and accounting for the wave number
-        Cao = (2*np.pi/self.freq.wvlRef)**2 * (Cao - self.trs.noise.Cn_ao)
+        Cao = (2*np.pi/self.freq.wvlRef)**2 * (Cao + self.trs.wfs.Cn_ao)
         
         # Computing the phase structure function
         _,dphi_ao = psfrUtils.modes2Otf(Cao,self.trs.mat.dmIF,self.ao.tel.pupil,self.freq.nOtf,basis=basis,samp=self.freq.sampRef/2)
@@ -151,7 +151,7 @@ class psfR:
         Ctt   =  np.matmul(self.trs.tipTilt.com.T,self.trs.tipTilt.com)/self.trs.tipTilt.nExp
         
         # computing the coefficients of the Gaussian Kernel in rad^2
-        Guu = (2*np.pi/self.freq.wvlRef)**2 *(Ctt - self.trs.noise.Cn_tt) 
+        Guu = (2*np.pi/self.freq.wvlRef)**2 *(Ctt - self.trs.tipTilt.Cn_tt) 
         
         # rotating the axes
         ang = self.trs.tel.pupilAngle * np.pi/180

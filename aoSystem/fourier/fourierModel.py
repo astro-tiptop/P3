@@ -194,6 +194,9 @@ class fourierModel:
         if verbose:
             self.displayExecutionTime()
           
+        # DEFINING BOUNDS
+        self.bounds = self.defineBounds()
+            
     def __repr__(self):
         s = "Fourier Model class "
         if self.status == 1:
@@ -205,6 +208,19 @@ class fourierModel:
         
         return s
 
+
+    def defineBounds(self):
+          
+          # Photometry
+          bounds_down  = list(np.zeros(self.ao.src.nSrc))
+          bounds_up    = list(np.inf*np.ones(self.ao.src.nSrc))
+          # Astrometry
+          bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+          bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+          # Background
+          bounds_down += [-np.inf]
+          bounds_up   += [np.inf]
+          return (bounds_down,bounds_up)
 #    def parameters(self,file,extraPSFsDirections=None,cartPointingCoords=None,path_pupil='',path_static=''):
 #                    
 #        tstart = time.time() 
@@ -497,9 +513,11 @@ class fourierModel:
         gPSD       = abs(self.SxAv)**2 + abs(self.SyAv)**2 + MV*self.Wn/Watm
         self.Rx    = np.conj(self.SxAv)/gPSD
         self.Ry    = np.conj(self.SyAv)/gPSD
+        
         # Manage NAN value if any   
         self.Rx[np.isnan(self.Rx)] = 0
         self.Ry[np.isnan(self.Ry)] = 0
+        
         # Set central point (i.e. kx=0,ky=0) to zero
         N = int(np.ceil((self.freq.kx.shape[0]-1)/2))
         self.Rx[N,N] = 0
@@ -1237,7 +1255,52 @@ class fourierModel:
                 self.getPsfMetrics(getEnsquaredEnergy=getEnsquaredEnergy,getEncircledEnergy=getEncircledEnergy,getFWHM=getFWHM)
         
         self.t_getPSF = 1000*(time.time() - tstart)
+    
+
+    def __call__(self,x0,nPix=None):
         
+        
+        if nPix == None:
+            nPix = self.freq.nPix
+            
+        # INSTANTIATING
+        F   = x0[0]
+        dx  = x0[1]
+        dy  = x0[2]
+        bkg = x0[3]
+        
+        # ON-AXIS OTF
+        cov = fft.fftshift(fft.fftn(fft.fftshift(self.psd[:,:,0],axes=(0,1)),axes=(0,1)),axes=(0,1))
+        self.sf  = 2*np.real(cov.max(axis=(0,1)) - cov)
+        
+        if np.any(self.ao.wfs.detector.spotFWHM) and (self.ao.wfs.detector.spotFWHM[0]!=0 or self.ao.wfs.detector.spotFWHM[1]!=0): # note sure about the normalization
+            self.Djitter = (self.ao.wfs.detector.spotFWHM[0]**2 * self.freq.U2_ + self.ao.wfs.detector.spotFWHM[1]**2 * self.freq.V2_+ \
+                    2*self.ao.wfs.detector.spotFWHM[0] * self.ao.wfs.detector.spotFWHM[1] * self.freq.UV_)
+            self.Kjitter = np.exp(-0.5 * self.Djitter * (np.sqrt(2)/self.ao.cam.psInMas)**2)
+        else:
+            self.Kjitter = 1
+            
+        
+        # FFT PHASOR
+        fftPhasor = np.exp(np.pi*complex(0,1)*(self.freq.U_*dx + self.freq.V_*dy))    
+        
+        # Get the total OTF
+        self.otfTot = self.freq.otfNCPA * fftPhasor * self.Kjitter * np.exp(-0.5*self.sf*(2*np.pi*1e-9/self.freq.wvl[0])**2)
+                
+        # Get the PSF
+        psf_i = np.real(fft.fftshift(fft.ifft2(fft.fftshift(self.otfTot))))
+                
+        # CROPPING
+        if self.freq.k_[0]> 1:
+            psf_i = FourierUtils.interpolateSuport(psf_i,nPix);            
+                    
+        if nPix != self.freq.nPix:
+            psf_i = FourierUtils.cropSupport(psf_i,nPix/self.freq.nPix)
+                
+        # SCALING
+        return F * psf_i/psf_i.sum()  +bkg
+                
+    
     def getPsfMetrics(self,getEnsquaredEnergy=False,getEncircledEnergy=False,getFWHM=False):
         tstart  = time.time()
         self.FWHM = np.zeros((2,self.ao.src.nSrc,self.freq.nWvl))

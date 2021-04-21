@@ -143,8 +143,10 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
     nModes = psfModelInst.ao.tel.nModes
     if (nModes) > 0 and len(result.x) > nModes + psfModelInst.ao.src.nSrc:
         result.opd = (psfModelInst.ao.tel.statModes*result.x[-nModes:]).sum(axis=2)
+    
     # 95% confidence interval
     result.xerr   = mini2input(confidence_interval(result.fun,result.jac),forceZero=True)
+    
     return result
 
 
