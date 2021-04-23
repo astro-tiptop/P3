@@ -10,9 +10,8 @@ Created on Thu Jan 21 13:27:18 2021
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from aoSystem.pupilSimulator.inpolygon import inpolygon
 from distutils.spawn import find_executable
-
+from aoSystem.FourierUtils import inpolygon
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
 

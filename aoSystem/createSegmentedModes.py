@@ -7,18 +7,19 @@ Created on Sat Mar  6 17:28:53 2021
 """
 
 #%% IMPORTING LIBRAIRIES
-import aoSystem.pupilSimulator as pupilSimulator
-from aoSystem.pupilSimulator.pupil import pupil
-from aoSystem.pupilSimulator.segment import segment
+import numpy as np
+from astropy.io import fits
+
+import aoSystem as aoSystem
+from aoSystem.pupil import pupil
+from aoSystem.segment import segment
 from aoSystem.zernike import zernike
 import matplotlib.pyplot as plt
-import numpy as np
-import aoSystem.fourier.FourierUtils as FourierUtils
-from astropy.io import fits
+import aoSystem.FourierUtils as FourierUtils
 
 #%% CREATING THE PUPIL CLASS 
 nPx     = 200
-path_mod = '/'.join(pupilSimulator.__file__.split('/')[0:-1])
+path_mod = '/'.join(aoSystem.__file__.split('/')[0:-1])
 path_txt = path_mod + '/_txtFile/Keck_segmentVertices.txt'
 pupSeg   = pupil(segClass=segment(6,0.9,nPx),segCoord=path_txt)
 nSeg     = pupSeg.nSegments

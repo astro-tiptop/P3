@@ -12,7 +12,7 @@ import os
 from scipy.io import readsav
 from astropy.io import fits
 from aoSystem.deformableMirror import deformableMirror
-import aoSystem.fourier.FourierUtils as FourierUtils
+import aoSystem.FourierUtils as FourierUtils
 import telemetry.keckUtils as keckUtils
 from telemetry.massdimm import fetch_data, DIMM, MASS, MASSPROF, CombineMASSandDIMM
 

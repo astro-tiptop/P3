@@ -10,11 +10,12 @@ Created on Thu Jan 21 17:34:19 2021
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import aoSystem.fourier.FourierUtils as FourierUtils
-from aoSystem.pupilSimulator.inpolygon import inpolygon
+
 from distutils.spawn import find_executable
 from scipy.ndimage import label
 
+import aoSystem.FourierUtils as FourierUtils
+from aoSystem.FourierUtils import inpolygon
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
 

@@ -12,7 +12,7 @@ from configparser import ConfigParser
 import numpy as np
 
 # IMPORTING P3 MODULES
-import aoSystem.fourier.FourierUtils as FourierUtils
+import aoSystem.FourierUtils as FourierUtils
 from aoSystem.telescope import telescope
 from aoSystem.atmosphere import atmosphere
 from aoSystem.source import source

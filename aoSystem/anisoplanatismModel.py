@@ -6,7 +6,7 @@ Created on Mon Apr  5 14:54:57 2021
 @author: omartin
 """
 import numpy as np
-import psfr.psfrUtils as psfrUtils
+import aoSystem.FourierUtils as FourierUtils
 
 def anisoplanatismStructureFunction(tel,atm,src,lgs,ngs,nOtf,samp,Hfilter=1):
         
@@ -63,7 +63,7 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,Hf
         
     # Instantiation
     I0      = 3/5
-    I1      = psfrUtils.Ialpha(f0*rhoX,f0*rhoY)
+    I1      = FourierUtils.Ialpha(f0*rhoX,f0*rhoY)
     cte     = 0.12184*0.06*(2*np.pi)**2*atm.L0**(5/3)
 
     # Anisoplanatism Structure Function      
@@ -76,16 +76,16 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,Hf
                 if zl !=0: 
                     if gs.height: # focal-angular case -> computing the covariance matrix
                         g     = zl/gs.height
-                        I2    = psfrUtils.Ialpha(f0*(rhoX*(1-g)) , f0*(rhoY*(1-g)) )
-                        I3    = psfrUtils.Ialpha(f0*(rhoX -g*X1 + zl*thx) , f0*(rhoY - g*Y1 + zl*thy) )
-                        I4    = psfrUtils.Ialpha(f0*( g*X1 - zl*thx) , f0*(g*Y1 - zl*thy))
-                        I5    = psfrUtils.Ialpha(f0*(g*(rhoX-X1) -zl*thx) , f0*(g*(rhoY-Y1) - zl*thy) )
-                        I6    = psfrUtils.Ialpha(f0*((1-g)*rhoX + g*X1 - zl*thx) , f0*((1-g)*rhoY + g*Y1 - zl*thy))
+                        I2    = FourierUtils.Ialpha(f0*(rhoX*(1-g)) , f0*(rhoY*(1-g)) )
+                        I3    = FourierUtils.Ialpha(f0*(rhoX -g*X1 + zl*thx) , f0*(rhoY - g*Y1 + zl*thy) )
+                        I4    = FourierUtils.Ialpha(f0*( g*X1 - zl*thx) , f0*(g*Y1 - zl*thy))
+                        I5    = FourierUtils.Ialpha(f0*(g*(rhoX-X1) -zl*thx) , f0*(g*(rhoY-Y1) - zl*thy) )
+                        I6    = FourierUtils.Ialpha(f0*((1-g)*rhoX + g*X1 - zl*thx) , f0*((1-g)*rhoY + g*Y1 - zl*thy))
                         Dani_l[iSrc,l] = Hfilter*(2*I0 - I1 - I2 + I3 - I4 - I5 + I6)*Hfilter.T
                     else: #angular case -> computing the covariance map
-                        I2    = psfrUtils.Ialpha( f0*(rhoX+zl*thx) , f0*(rhoY+zl*thy) )
-                        I3    = psfrUtils.Ialpha( f0*(zl*thx) , f0*(zl*thy) )
-                        I4    = psfrUtils.Ialpha( f0*(rhoX-zl*thx) , f0*(rhoY-zl*thy) )
+                        I2    = FourierUtils.Ialpha( f0*(rhoX+zl*thx) , f0*(rhoY+zl*thy) )
+                        I3    = FourierUtils.Ialpha( f0*(zl*thx) , f0*(zl*thy) )
+                        I4    = FourierUtils.Ialpha( f0*(rhoX-zl*thx) , f0*(rhoY-zl*thy) )
                         Dani_l[iSrc,l] = (2*I0 - 2*I1 + I2 - 2*I3  + I4)  
         
     return cte*Dani_l

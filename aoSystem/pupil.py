@@ -15,10 +15,10 @@ import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
 import os
 
-import aoSystem.pupilSimulator as pupilSimulator
-import aoSystem.fourier.FourierUtils as FourierUtils
-from aoSystem.pupilSimulator.segment import segment
-from aoSystem.pupilSimulator.spiders import spiders
+import aoSystem as aoSystem
+import aoSystem.FourierUtils as FourierUtils
+from aoSystem.segment import segment
+from aoSystem.spiders import spiders
 from aoSystem.zernike import zernike
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
@@ -42,14 +42,14 @@ plt.rcParams.update({
 #%% CLASS DEFINITION
 
 def makeKeckPupil():
-    path_mod = '/'.join(pupilSimulator.__file__.split('/')[0:-1])
+    path_mod = '/'.join(aoSystem.__file__.split('/')[0:-1])
     path_txt = path_mod + '/_txtFile/Keck_segmentVertices.txt'
     spiRef   = spiders([0,60,120],0.0254,symetric=True,D=11.25) 
     keckPup  = pupil(segClass=segment(6,0.9,200),segCoord=path_txt,D=11.25,cobs=0.2375,spiderClass=spiRef)
     return keckPup
     
 def makeELTPupil():
-    path_mod = '/'.join(pupilSimulator.__file__.split('/')[0:-1])
+    path_mod = '/'.join(aoSystem.__file__.split('/')[0:-1])
     path_txt = path_mod + '/_txtFile/ELT_segmentVertices.txt'
     spiRef   = spiders([0,60,120],0.5,symetric=True,D=39) 
     eltPup   = pupil(segClass=segment(6,1.3/2,25),segCoord=path_txt,D=39,cobs=0.2375,spiderClass=spiRef)

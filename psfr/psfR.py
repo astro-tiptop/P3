@@ -12,9 +12,9 @@ import sys as sys
 import numpy.fft as fft
 
 from aoSystem.aoSystem import aoSystem
-from aoSystem.fourier.fourierModel import fourierModel
+from aoSystem.fourierModel import fourierModel
 from aoSystem.anisoplanatismModel import anisoplanatismStructureFunction
-import aoSystem.fourier.FourierUtils as FourierUtils
+import aoSystem.FourierUtils as FourierUtils
 import psfr.psfrUtils as psfrUtils
 from aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
 

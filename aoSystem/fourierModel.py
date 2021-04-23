@@ -26,7 +26,7 @@ import sys
 
 from distutils.spawn import find_executable
 
-import aoSystem.fourier.FourierUtils as FourierUtils
+import aoSystem.FourierUtils as FourierUtils
 from aoSystem.aoSystem import aoSystem as aoSys
 from aoSystem.atmosphere import atmosphere
 from aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
@@ -174,7 +174,7 @@ class fourierModel:
               
             # COMPUTE THE ERROR BREAKDOWN
             if self.getErrorBreakDown:
-                self.errorBreakDown()
+                self.errorBreakDown(verbose=self.verbose)
                     
         self.t_init = 1000*(time.time()  - tstart)
         
@@ -778,7 +778,7 @@ class fourierModel:
             Ws   = self.ao.atm.weights
             Watm = self.Wphi * self.freq.pistonFilterAO_     
             A    = 0
-            k    = np.sqrt(self.freq.k2_)
+            k    = np.sqrt(self.freq.k2AO_)
             arg_k= np.arctan2(self.freq.kyAO_,self.freq.kxAO_)
             azimuth = self.ao.src.azimuth
         
@@ -807,7 +807,7 @@ class fourierModel:
     
     
     #%% AO ERROR BREAKDOWN
-    def errorBreakDown(self):
+    def errorBreakDown(self,verbose=True):
         """ AO error breakdown from the PSD integrals
         """        
         tstart  = time.time()
@@ -827,7 +827,7 @@ class fourierModel:
             self.wfeST     = np.sqrt(self.psdSpatioTemporal.sum(axis=(0,1)))* rad2nm
             self.wfeDiffRef= np.sqrt(self.psdDiffRef.sum(axis=(0,1)))* rad2nm
             self.wfeChrom  = np.sqrt(self.psdChromatism.sum(axis=(0,1)))* rad2nm
-            self.wfeJitter = 1e9*self.ao.tel.D*np.mean(self.ao.wfs.detector.spotFWHM[0:1])/rad2mas/4
+            self.wfeJitter = 1e9*self.ao.tel.D*np.mean(self.ao.cam.spotFWHM[0:1])/rad2mas/4
             
             # Total wavefront error
             self.wfeTot = np.sqrt(self.wfeNCPA**2 + self.wfeFit**2 + self.wfeAl**2\
@@ -847,7 +847,7 @@ class fourierModel:
                 self.wfeTomo = np.sqrt(self.wfeST**2 - self.wfeS**2)
                     
             # Print
-            if self.verbose == True:
+            if verbose == True:
                 print('\n_____ ERROR BREAKDOWN  ON-AXIS_____')
                 print('------------------------------------------')
                 idCenter = self.ao.src.zenith.argmin()
@@ -865,7 +865,7 @@ class fourierModel:
                 else:
                     print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[idCenter])
                 print('.Spatio-temporal error:\t\t%4.2fnm'%self.wfeST[idCenter])
-                print('.Additionnal jitter:\t\t%4.2fmas / %4.2fnm'%(np.mean(self.ao.wfs.detector.spotFWHM[0:1]),self.wfeJitter))
+                print('.Additionnal jitter:\t\t%4.2fmas / %4.2fnm'%(np.mean(self.ao.cam.spotFWHM[0:1]),self.wfeJitter))
                 print('-------------------------------------------')
                 print('.Sole servoLag error:\t\t%4.2fnm'%self.wfeS)
                 print('-------------------------------------------')            
@@ -877,7 +877,7 @@ class fourierModel:
                 
         self.t_errorBreakDown = 1000*(time.time() - tstart)
     
-    
+  #%% PSF COMPUTATION  
     def pointSpreadFunction(self,x0=None,nPix=None,verbose=False,fftphasor=False):
         """
           Computation of the PSF
@@ -890,10 +890,10 @@ class fourierModel:
             print("The fourier Model class must be instantiated first\n")
             return 0,0
         
-        if x0 == None:
+        if np.any(x0 == None):
             jitterX = self.ao.cam.spotFWHM[0][0]
             jitterY = self.ao.cam.spotFWHM[0][1]
-            jitterT = self.ao.cam.spotFWHM[0][2]* np.pi/180
+            jitterXY= self.ao.cam.spotFWHM[0][2]
             F  = np.array(self.ao.cam.transmittance)[:,np.newaxis]
             dx = np.array(self.ao.cam.dispersion[0])[:,np.newaxis]
             dy = np.array(self.ao.cam.dispersion[1])[:,np.newaxis]
@@ -901,7 +901,7 @@ class fourierModel:
         else:
             jitterX = x0[0]
             jitterY = x0[1]
-            jitterT = x0[2]* np.pi/180
+            jitterXY= x0[2]
             F       = x0[3:3+self.ao.src.nSrc] * np.array(self.ao.cam.transmittance)[np.newaxis,:]
             dx      = x0[3+self.ao.src.nSrc:3+2*self.ao.src.nSrc] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
             dy      = x0[3+2*self.ao.src.nSrc:3+3*self.ao.src.nSrc] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
@@ -918,17 +918,14 @@ class fourierModel:
         self.sf  = 2*np.real(cov.max(axis=(0,1)) - cov)
         
         # DEFINING THE RESIDUAL JITTER KERNEL
-        if jitterX!=0 or jitterY!=0:
-            # geometry
-            U2 = np.cos(jitterT) * self.freq.U_ + np.sin(jitterT) * self.freq.V_
-            V2 = np.cos(jitterT) * self.freq.V_ - np.sin(jitterT) * self.freq.U_
+        if jitterX!=0 or jitterY!=0:        
             # Gaussian kernel
             # note 1 : Umax = self.samp*self.tel.D/self.wvlRef/(3600*180*1e3/np.pi) = 1/(2*psInMas)
             # note 2 : the 1.16 factor is needed to get FWHM=jitter for jitter-limited PSF; needed to be figured out
             Umax         = self.freq.samp*self.ao.tel.D/self.freq.wvl/(3600*180*1e3/np.pi)
             ff_jitter    = 1.16
             normFact     = ff_jitter*np.max(Umax)**2 *(2 * np.sqrt(2*np.log(2)))**2 #1.16
-            Djitter      = normFact * (jitterX**2 * U2**2  + jitterY**2 * V2**2)
+            Djitter      = normFact * (jitterX**2 * self.freq.U2_  + jitterY**2 * self.freq.V2_ + 2*jitterXY *self.freq.UV_)
             self.Kjitter = np.exp(-0.5 * Djitter)
         else:
             self.Kjitter = 1
@@ -944,9 +941,9 @@ class fourierModel:
         for j in range(self.freq.nWvl):
             
             # UPDATE THE INSTRUMENTAL OTF
-            if self.ao.tel.opdMap_ext != None:
-                self.otfNCPA, _ = FourierUtils.getStaticOTF(self.ao.tel,self.nOtf,self.samp[j],self.freq.wvl[j], apodizer=self.ao.tel.apodizer,opdMap_ext=self.ao.tel.opdMap_ext)
-                self.otfDL,_  = FourierUtils.getStaticOTF(self.ao.tel,self.nOtf,self.sampRef,self.wvlRef, apodizer=self.ao.tel.apodizer)
+            if np.any(self.ao.tel.opdMap_ext != None):
+                self.otfNCPA, _ = FourierUtils.getStaticOTF(self.ao.tel,self.freq.nOtf,self.freq.samp[j],self.freq.wvl[j], apodizer=self.ao.tel.apodizer,opdMap_ext=self.ao.tel.opdMap_ext)
+                self.otfDL,_  = FourierUtils.getStaticOTF(self.ao.tel,self.freq.nOtf,self.freq.sampRef,self.freq.wvlRef, apodizer=self.ao.tel.apodizer)
                 
             # UPDATE THE RESIDUAL JITTER
             if self.freq.shannon == True and self.freq.nWvl > 1 and (np.any(self.ao.wfs.detector.spotFWHM)):
@@ -978,8 +975,10 @@ class fourierModel:
     def __call__(self,x0,nPix=None):
         
         psf,_ = self.pointSpreadFunction(x0=x0,nPix=nPix,verbose=False,fftphasor=True)
-        return psf    
+        return psf[:,:,0,0]    
     
+    
+    #%% METRICS COMPUTATION
     def getPsfMetrics(self,getEnsquaredEnergy=False,getEncircledEnergy=False,getFWHM=False):
         tstart  = time.time()
         self.FWHM = np.zeros((2,self.ao.src.nSrc,self.freq.nWvl))

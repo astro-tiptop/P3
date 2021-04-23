@@ -12,7 +12,7 @@ import numpy.fft as fft
 import time
 import sys as sys
 
-import aoSystem.fourier.FourierUtils as FourierUtils
+import aoSystem.FourierUtils as FourierUtils
 from aoSystem.aoSystem import aoSystem as aoSys
 from aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
 
@@ -79,16 +79,14 @@ class psfao21:
     def getPSD(self,x0):
         # Get the moffat PSD
         #pix2freq = 1/(self.tel.D * self.sampRef)
-        psd = self.moffat(self.freq.kxky_,list(x0[3:])+[0,0])
+        psd = self.moffat(self.freq.kx_,self.freq.ky_,list(x0[3:])+[0,0])
         # Piston filtering
         psd = self.freq.pistonFilter_ * psd
         # Combination
-        #A_emp = psd.sum() * pix2freq**2
-        A_emp = np.trapz(np.trapz(psd,self.freq.kxky_[1][0]),self.freq.kxky_[1][0])
+        A_emp = np.trapz(np.trapz(psd,self.freq.ky_[0]),self.freq.ky_[0])
         psd   = x0[0]**(-5/3) * self.freq.psdKolmo_ + self.freq.mskIn_ * (x0[1] + psd/A_emp * x0[2] )
-
         # Wavefront error
-        self.wfe = np.sqrt( np.trapz(np.trapz(psd,self.freq.kxky_[1][0]),self.freq.kxky_[1][0]) ) * self.freq.wvlRef*1e9/2/np.pi
+        self.wfe = np.sqrt( np.trapz(np.trapz(psd,self.freq.ky_[0]),self.freq.kx_[0]) ) * self.freq.wvlRef*1e9/2/np.pi
         self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * self.freq.wfe_fit_norm  * self.freq.wvlRef*1e9/2/np.pi
         return psd
     
@@ -206,7 +204,7 @@ class psfao21:
         else:
             return np.squeeze(psf.sum(axis=0)) + bkg
         
-    def moffat(self,XY,x0):
+    def moffat(self,kx,ky,x0):
         
         # parsing inputs
         a       = x0[0]
@@ -227,5 +225,5 @@ class psfao21:
         Ryy = (c/ay)**2 + (s/ax)**2
         Rxy =  s2/ay**2 -  s2/ax**2
             
-        u = Rxx * (XY[0] - dx)**2 + Rxy * (XY[0] - dx)* (XY[1] - dy) + Ryy * (XY[1] - dy)**2
+        u = Rxx * (kx - dx)**2 + Rxy * (kx - dx)* (ky - dy) + Ryy * (ky - dy)**2
         return (1.0 + u) ** (-beta)

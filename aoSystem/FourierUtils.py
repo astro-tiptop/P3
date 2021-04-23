@@ -13,6 +13,8 @@ import matplotlib as mpl
 import scipy.interpolate as interp        
 import scipy.ndimage as scnd
 import scipy.special as ssp
+from matplotlib.path import Path
+
 #%%  FOURIER TOOLS
 
 def cov2sf(cov):
@@ -88,6 +90,18 @@ def instantiateAngularFrequencies(nOtf,fact=2):
     V2_    = V_**2
     UV_    = U_*V_
     return U_, V_, U2_, V2_, UV_
+          
+def mcDonald(x):
+        out = 3/5 * np.ones_like(x)
+        idx  = x!=0
+        if np.any(idx==False):
+            out[idx] = x[idx] ** (5/6) * ssp.kv(5/6,x[idx])/(2**(5/6) * ssp.gamma(11/6))
+        else:
+            out = x ** (5/6) * ssp.kv(5/6,x)/(2**(5/6) * ssp.gamma(11/6))
+        return out
+        
+def Ialpha(x,y):
+    return mcDonald(np.hypot(x,y))
 
 def otf2psf(otf):        
     nX,nY   = otf.shape
@@ -276,6 +290,16 @@ def enlargeSupport(im,n):
     
     return imNew
 
+def inpolygon(xq, yq, xv, yv):
+        shape = xq.shape
+        xq = xq.reshape(-1)
+        yq = yq.reshape(-1)
+        xv = xv.reshape(-1)
+        yv = yv.reshape(-1)
+        q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
+        p = Path([(xv[i], yv[i]) for i in range(xv.shape[0])])
+        return p.contains_points(q).reshape(shape)
+    
 def interpolateSupport(image,nRes,kind='spline'):
     
     # Define angular frequencies vectors

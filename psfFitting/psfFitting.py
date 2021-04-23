@@ -9,7 +9,7 @@ Created on Wed Feb 17 10:33:19 2021
 #%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
 from scipy.optimize import least_squares
-import aoSystem.fourier.FourierUtils as FourierUtils
+import aoSystem.FourierUtils as FourierUtils
 from psfFitting.confidenceInterval import confidence_interval
 
 #%%

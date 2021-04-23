@@ -10,7 +10,7 @@ Created on Fri Jun 15 14:57:49 2018
 import numpy as np
 import numpy.fft as fft
 import scipy.special as ssp
-import aoSystem.fourier.FourierUtils as FourierUtils
+import aoSystem.FourierUtils as FourierUtils
 
 #%%  PSF-R FACILITIES               
 def getOLslopes(s,u,MI,dt):    
@@ -29,18 +29,7 @@ def getStructureFunction(phi,pupil,overSampling):
     corww[corww <= 1] = 1
     
     return np.real(fft.fftshift(dphi * mask /corww))
-          
-def mcDonald(x):
-        out = 3/5 * np.ones_like(x)
-        idx  = x!=0
-        if np.any(idx==False):
-            out[idx] = x[idx] ** (5/6) * ssp.kv(5/6,x[idx])/(2**(5/6) * ssp.gamma(11/6))
-        else:
-            out = x ** (5/6) * ssp.kv(5/6,x)/(2**(5/6) * ssp.gamma(11/6))
-        return out
-        
-def Ialpha(x,y):
-    return mcDonald(np.hypot(x,y))
+
 
 def mkotf(indptsc,indptsc2,nU1d,ampl,dp,C_phi):            
     #Instantiation

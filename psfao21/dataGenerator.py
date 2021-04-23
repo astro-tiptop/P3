@@ -13,7 +13,7 @@ import numpy.fft as fft
 import os
 from astropy.io import fits
 from psfao21.psfao21 import psfao21
-from normalizePSF import normalizePSF
+from psfao21.normalizePSF import normalizePSF
 np.random.seed(69)
 
 def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=False,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=0,\
