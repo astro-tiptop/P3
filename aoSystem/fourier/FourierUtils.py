@@ -47,12 +47,12 @@ def fftsym(x):
     elif x.ndim ==1:
         return fft.fftshift(x)
 
-def freq_array(nX,samp,D):
+def freq_array(nX,L=1,offset=1e-10):
     k2D = np.mgrid[0:nX, 0:nX].astype(float)
     k2D[0] -= nX//2
     k2D[1] -= nX//2
-    k2D *= 1.0/(D*samp)
-    return k2D
+    k2D     = k2D*L + offset
+    return k2D[0],k2D[1]
 
 def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],opdMap_ext=0,apodizer=1,statModes=0,theta_ext=0):
         

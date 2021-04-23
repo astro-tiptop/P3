@@ -89,8 +89,8 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
         def __call__(self,y):
             if (self.iter%3)==0 and (method=='lm' or verbose == 0 or verbose == 1): print("-",end="")
             self.iter += 1
-            psf = psfModelInst(mini2input(y))
-            return (sqW * (psf - image)).reshape(-1)
+            im_est = psfModelInst(mini2input(y))
+            return (sqW * (im_est - image)).reshape(-1)
     cost = CostClass()   
     
     # DEFINING THE BOUNDS

@@ -14,12 +14,12 @@ class detector:
     """
     
     def __init__(self,pixel_scale,fov,binning=1,spotFWHM=[0.0,0.0],\
-                 nph=np.inf,bandwidth=0.0,transmittance=[1.0],dispersion=[[0.0],[0.0]],\
+                 nph=np.inf,bandwidth=0.0,transmittance=[1.0],dispersion=[[0.0, 0.0,0.0]],\
                  ron=0.0,gain=1.0,dark=0.0,sky=0.0,excess=1.0, tag='DETECTOR'):
         
         # PARSING INPUTS
         # scales
-        self.psInMas = pixel_scale
+        self.psInMas     = pixel_scale
         self.fovInPix    = fov
         self.fovInArcsec = pixel_scale * fov/1e3
         self.spotFWHM    = spotFWHM
@@ -39,6 +39,9 @@ class detector:
         self.ron  = ron
         self.dark = dark
         self.sky  = sky
+        self.excess = excess
+        self.gain = gain
+        self.binning  = binning
         self.tag = tag
 
     def __repr__(self):

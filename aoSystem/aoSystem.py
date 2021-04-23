@@ -38,7 +38,7 @@ class aoSystem():
         config.optionxform = str
         config.read(path_ini)
             
-        #%% Telescope
+        #%% TELESCOPE
         #----- grabbing main parameters
         if config.has_option('telescope','TelescopeDiameter'):
             D = eval(config['telescope']['TelescopeDiameter'])
@@ -52,7 +52,9 @@ class aoSystem():
             zenithAngle = eval(config['telescope']['ZenithAngle'])
         else:
             zenithAngle = 0.0
-            
+        
+        airmass = 1/np.cos(zenithAngle*np.pi/180)
+        
         if config.has_option('telescope','ObscurationRatio'):
             obsRatio = eval(config['telescope']['ObscurationRatio'])
         else:
@@ -99,7 +101,7 @@ class aoSystem():
                         pupilAngle=pupilAngle,path_pupil=path_pupil,path_static=path_static,\
                         path_apodizer=path_apodizer,path_statModes=path_statModes)                     
 
-        #%% Atmosphere
+        #%% ATMOSPHERE
         
         if config.has_option('atmosphere','AtmosphereWavelength'):
             wvlAtm = eval(config['atmosphere']['AtmosphereWavelength']) 
@@ -146,7 +148,7 @@ class aoSystem():
             self.error = True
             return
         #----- class definition
-        self.atm = atmosphere(wvlAtm,r0,weights,heights/np.cos(zenithAngle*np.pi/180),wSpeed,wDir,L0)            
+        self.atm = atmosphere(wvlAtm,r0*airmass**(-3.0/5.0),weights,np.array(heights)*airmass,wSpeed,wDir,L0)            
         
         #%%  SCIENCE SOURCES
         
@@ -208,10 +210,10 @@ class aoSystem():
             return
         # ----- creating the source class
         if heightGs == 0:
-            self.ngs = source(wvlGs,zenithGs,azimuthGs,height=heightGs,tag="NGS",verbose=True)   
+            self.ngs = source(wvlGs,zenithGs,azimuthGs,tag="NGS",verbose=True)   
             self.lgs = None
         else:
-            self.lgs = source(wvlGs,zenithGs,azimuthGs,height=heightGs,tag="LGS",verbose=True)   
+            self.lgs = source(wvlGs,zenithGs,azimuthGs,height=heightGs*airmass,tag="LGS",verbose=True)   
             if (not config.has_section('sources_LO')) | (not config.has_section('sources_LO')):
                 print('%%%%%%%% WARNING %%%%%%%%')
                 print('No information about the tip-tilt star can be retrieved\n')
@@ -261,7 +263,7 @@ class aoSystem():
         if config.has_option('sensor_science','spotFWHM'):
             spotFWHM = eval(config['sensor_science']['spotFWHM'])
         else:
-            spotFWHM = [[0.0, 0.0]]
+            spotFWHM = [[0.0, 0.0, 0.0]]
             
         if config.has_option('sensor_science','FiedOfView'):
             bw = eval(config['sensor_science']['FiedOfView'])

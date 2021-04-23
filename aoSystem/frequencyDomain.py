@@ -25,6 +25,7 @@ class frequencyDomain():
     def wvl(self,val):
         self.__wvl = val
         self.samp  = val* rad2mas/(self.psInMas*self.ao.tel.D)
+        self.PSDstep= np.min(self.psInMas/self.ao.src.wvl/rad2mas)      
     @property
     def wvlCen(self):
         return self.__wvlCen
@@ -61,11 +62,17 @@ class frequencyDomain():
     def sampRef(self,val):
         self.kRef_      = int(np.ceil(2.0/val)) # works for oversampling
         self.__sampRef  = self.kRef_ * val
-        self.kxky_      = FourierUtils.freq_array(self.nPix*self.kRef_,self.__sampRef,self.ao.tel.D)
-        self.k2_        = self.kxky_[0]**2 + self.kxky_[1]**2                   
+        self.nOtf       = self.nPix * self.kRef_
+        #  ---- FULL DOMAIN OF FREQUENCY
+        self.kx_,self.ky_ = FourierUtils.freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
+        self.k2_          = self.kx_**2 + self.ky_**2     
+#        k2D         = np.mgrid[0:self.resAO, 0:self.resAO].astype(float)
+#        self.kx     = self.PSDstep*(k2D[0] - self.resAO//2)  +1e-10
+#        self.ky     = self.PSDstep*(k2D[1] - self.resAO//2) + 1e-10    
+#        self.kxy    = np.hypot(self.kx,self.ky)    
         #piston filtering        
-        self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,self.k2_)
-        self.pistonFilter_[self.nPix*self.kRef_//2,self.nPix*self.kRef_//2] = 0
+        self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
+        self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
     
     # CUT-OFF FREQUENCY
     @property
@@ -81,16 +88,30 @@ class frequencyDomain():
             #return 1/(2*max(self.pitchs_dm.min(),self.pitchs_wfs.min()))
             self.kc_ =  1/(2*val)
             #self.kc_= (val-1)/(2.0*self.ao.tel.D)
+        self.kcMin_ =  np.min(self.kc_)
+        kc2         = self.kc_**2
+        self.resAO  = int(2*self.kc_/self.PSDstep)
         
-        kc2     = self.kc_**2
+        # ---- SPATIAL FREQUENCY DOMAIN OF THE AO-CORRECTED AREA
+        self.kxAO_,self.kyAO_ = FourierUtils.freq_array(self.resAO,offset=1e-10,L=self.PSDstep)
+        self.k2AO_            = self.kxAO_**2 + self.kyAO_**2   
+        self.pistonFilterAO_  = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2AO_))
+        
+        # ---- DEFINING MASKS
         if self.ao.dms.AoArea == 'circle':
-            self.mskOut_   = (self.k2_ >= kc2)
-            self.mskIn_    = (self.k2_ < kc2)
+            self.mskOut_  = (self.k2_ >= kc2)
+            self.mskIn_   = (self.k2_ < kc2)
+            self.mskOutAO_= self.k2AO_ >= kc2
+            self.mskInAO_ = self.k2AO_ < kc2      
+            
         else:
-            self.mskOut_   = np.logical_or(abs(self.kxky_[0]) >= self.kc_, abs(self.kxky_[1]) >= self.kc_)
-            self.mskIn_    = np.logical_and(abs(self.kxky_[0]) < self.kc_, abs(self.kxky_[1]) < self.kc_)
+            self.mskOut_   = np.logical_or(abs(self.kx_) >= self.kc_, abs(self.ky_) >= self.kc_)
+            self.mskIn_    = np.logical_and(abs(self.kx_) < self.kc_, abs(self.ky_) < self.kc_)
+            self.mskInAO_  = np.logical_or(abs(self.kxAO_) >= self.kc_, abs(self.kyAO_) >= self.kc_)
+            self.mskOutAO_ = np.logical_and(abs(self.kxAO_) < self.kc_, abs(self.kyAO_) < self.kc_)
+            
         self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.ao.atm.L0**2) + self.k2_) ** (-11.0/6.0)
-        self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kxky_[1][0]),self.kxky_[1][0]))
+        self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kx_[0]),self.kx_[0]))
     
     @property
     def kcInMas(self):
@@ -117,35 +138,33 @@ class frequencyDomain():
         else:
             self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl)
             self.shannon    = False
-                
-                
+                           
         self.kcExt  = kcExt
         self.nPix   = self.ao.cam.fovInPix
         self.wvl    = self.ao.src.wvl
         self.wvlCen = np.mean(self.ao.src.wvl)
         self.wvlRef = np.min(self.ao.src.wvl)
         self.pitch  = self.ao.dms.pitch
-        self.nOtf   = self.nPix * self.kRef_
+        
         
         # DEFINING THE DOMAIN OF SPATIAL FREQUENCIES
-        self.PSDstep= np.min(self.psInMas/self.ao.src.wvl/rad2mas)
-        self.resAO  = int(2*self.kc_/self.PSDstep)
-        self.nOtf   = self.nPix * self.kRef_
         
-        k2D         = np.mgrid[0:self.resAO, 0:self.resAO].astype(float)
-        self.kx     = self.PSDstep*(k2D[0] - self.resAO//2)  +1e-10
-        self.ky     = self.PSDstep*(k2D[1] - self.resAO//2) + 1e-10    
-        self.kxy    = np.hypot(self.kx,self.ky)    
-        
-        # DEFINE THE PISTON FILTER FOR LOW-ORDER FREQUENCIES
-        self.pistonFilterIn_ = FourierUtils.pistonFilter(self.ao.tel.D,self.kxy)
-        
-        # DEFINE THE FREQUENCY DOMAIN OVER THE FULL PSD DOMAIN
-        k2D = np.mgrid[0:self.nOtf, 0:self.nOtf].astype(float)
-        self.kxExt      = self.PSDstep*(k2D[0] - self.nOtf//2)
-        self.kyExt      = self.PSDstep*(k2D[1] - self.nOtf//2)
-        self.kExtxy     = np.hypot(self.kxExt,self.kyExt)  
-            
+#        self.nOtf   = self.nPix * self.kRef_
+#        
+#        k2D         = np.mgrid[0:self.resAO, 0:self.resAO].astype(float)
+#        self.kx     = self.PSDstep*(k2D[0] - self.resAO//2)  +1e-10
+#        self.ky     = self.PSDstep*(k2D[1] - self.resAO//2) + 1e-10    
+#        self.kxy    = np.hypot(self.kx,self.ky)    
+#        
+#        # DEFINE THE PISTON FILTER FOR LOW-ORDER FREQUENCIES
+#        #self.pistonFilterIn_ = FourierUtils.pistonFilter(self.ao.tel.D,self.kxy)
+#        
+#        # DEFINE THE FREQUENCY DOMAIN OVER THE FULL PSD DOMAIN
+#        k2D = np.mgrid[0:self.nOtf, 0:self.nOtf].astype(float)
+#        self.kxExt      = self.PSDstep*(k2D[0] - self.nOtf//2)
+#        self.kyExt      = self.PSDstep*(k2D[1] - self.nOtf//2)
+#        self.kExtxy     = np.hypot(self.kxExt,self.kyExt)  
+       
         # DEFINING THE DOMAIN ANGULAR FREQUENCIES
         self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf,fact=2)
               
