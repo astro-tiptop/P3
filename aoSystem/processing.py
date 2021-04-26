@@ -5,6 +5,7 @@ Created on Sat Apr 17 14:19:06 2021
 
 @author: omartin
 """
+import numpy as np
 
 class processing:
     """
@@ -31,7 +32,10 @@ class processing:
             s += '.Threshold : %.2f e-\n'%(self.settings[1])
             s += '.New value : %.2f e-\n'%(self.settings[2])
             
-        s += '.Noise variance [rd^2] : %.f'%(self.noiseVar)
+        if np.any(self.noiseVar == None):
+            s += '.Mean noise variance [rd^2] : %.f'%(0)
+        else:
+            s += '.Mean noise variance [rd^2] : %.f'%(np.mean(self.noiseVar))
         
         return s
         

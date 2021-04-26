@@ -23,10 +23,10 @@ import scipy.special as spc
 import time
 from distutils.spawn import find_executable
 
-import FourierUtils as FourierUtils
-from aoSystem import aoSystem as aoSys
-from atmosphere import atmosphere
-from frequencyDomain import frequencyDomain as frequencyDomain
+import aoSystem.FourierUtils as FourierUtils
+from aoSystem.aoSystem import aoSystem
+from aoSystem.atmosphere import atmosphere
+from aoSystem.frequencyDomain import frequencyDomain
 
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
@@ -67,7 +67,7 @@ class fourierModel:
         self.calcPSF           = calcPSF
         
         # GRAB PARAMETERS
-        self.ao = aoSys(path_ini)
+        self.ao = aoSystem(path_ini)
         self.t_initAO = 1000*(time.time() - tstart)
         
         if self.ao.error==False:
@@ -275,7 +275,7 @@ class fourierModel:
         nL_mod  = len(h_mod)
         nGs     = self.nGs
         i       = complex(0,1)
-        d       = self.ao.wfs.optics.dsub   #sub-aperture size      
+        d       = [self.ao.wfs.optics[j].dsub for j in range(nGs)]   #sub-aperture size      
         
          # WFS operator and projection matrices
         M     = np.zeros([nK,nK,nGs,nGs],dtype=complex)
@@ -869,7 +869,7 @@ class fourierModel:
             # UPDATE THE INSTRUMENTAL OTF
             if np.any(self.ao.tel.opdMap_ext != None) and self.freq.nWvl>1:
                 self.freq.otfNCPA, self.freq.otfDL, _ = FourierUtils.getStaticOTF(self.ao.tel,\
-                                                        int(self.freq.nPix*self.freq.k_[l]),\
+                                                        int(self.freq.nPix*self.freq.k_[j]),\
                                                         self.freq.samp[j],self.freq.wvl[j])
                 
             # UPDATE THE RESIDUAL JITTER

@@ -7,9 +7,9 @@ Created on Sat Apr 17 13:57:21 2021
 """
 
 import numpy as np
-from optics import optics
-from detector import detector
-from processing import processing
+from aoSystem.optics import optics
+from aoSystem.detector import detector
+from aoSystem.processing import processing
 
 class sensor:
     """
@@ -39,7 +39,10 @@ class sensor:
     
     def __repr__(self):
         
-        s = '__SENSOR__\n' + '--------------------------------------------- \n'
+        if self.nWfs == 1:
+            s = '__WAVEFRONT SENSOR__\n' + '--------------------------------------------- \n'
+        else:
+            s = '__'+str(self.nWfs) + ' WAVEFRONT SENSORS__\n' + '--------------------------------------------- \n'
         s += self.optics[0].__repr__() + '\n'
         s+= self.detector.__repr__() + '\n'
         s+= self.processing.__repr__() +'\n'
@@ -62,7 +65,7 @@ class sensor:
             
             # read-out noise calculation
             nD      = rad2arcsec * wvl/dsub/pixelScale #spot FWHM in pixels and without turbulence
-            varRON  = np.pi**2/3*(ron**2 /nph**2) * (nPix**2/nD)**2
+            varRON  = np.pi**2/3*(ron**2 /nph[k]**2) * (nPix**2/nD)**2
             
             if varRON.any() > 3:
                 print('The read-out noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varRON))
@@ -70,11 +73,10 @@ class sensor:
              
             # photo-noise calculation
             nT  = rad2arcsec*wvl/r0/pixelScale
-            varShot  = np.pi**2/(2*nph)*(nT/nD)**2
+            varShot  = np.pi**2/(2*nph[k])*(nT/nD)**2
             if varShot.any() > 3:
                 print('The shot noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varShot))
                 varShot = 0
-            
             varNoise[k] = self.detector.excess * (varRON + varShot)
         
         return varNoise

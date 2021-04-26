@@ -12,13 +12,13 @@ from configparser import ConfigParser
 import numpy as np
 
 # IMPORTING P3 MODULES
-from telescope import telescope
-from atmosphere import atmosphere
-from source import source
-from deformableMirror import deformableMirror
-from detector import detector
-from sensor import sensor
-from rtc import rtc
+from aoSystem.telescope import telescope
+from aoSystem.atmosphere import atmosphere
+from aoSystem.source import source
+from aoSystem.deformableMirror import deformableMirror
+from aoSystem.detector import detector
+from aoSystem.sensor import sensor
+from aoSystem.rtc import rtc
 
 #%%
 class aoSystem():

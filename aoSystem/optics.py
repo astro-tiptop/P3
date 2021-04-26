@@ -22,7 +22,7 @@ class optics:
         
     def __repr__(self):
         
-        s = '__OPTCS__\n'
+        s = '__OPTICS__\n'
         if self.wfstype.upper() == 'SHACK-HARTMANN':
             s += 'Optics type : %dX%d %s\n'%(self.nL,self.nL,'lenslets array')
         else:

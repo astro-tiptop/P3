@@ -8,8 +8,8 @@ Created on Mon Apr 19 11:34:44 2021
 
 # IMPORTING PYTHON LIBRAIRIES
 import numpy as np
-import FourierUtils as FourierUtils
-from anisoplanatismModel import anisoplanatismStructureFunction
+import aoSystem.FourierUtils as FourierUtils
+from aoSystem.anisoplanatismModel import anisoplanatismStructureFunction
 import time
 
 #%%

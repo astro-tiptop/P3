@@ -12,13 +12,12 @@ import time
 
 import aoSystem as aoSystemMain
 
-from aoSystem import aoSystem as aoSys
-from pupil import pupil
-from segment import segment
-from spiders import spiders
-from frequencyDomain import frequencyDomain
-
-from fourierModel import fourierModel
+from aoSystem.aoSystem import aoSystem
+from aoSystem.pupil import pupil
+from aoSystem.segment import segment
+from aoSystem.spiders import spiders
+from aoSystem.frequencyDomain import frequencyDomain
+from aoSystem.fourierModel import fourierModel
 
 
 #%% TEST THE PUPIL MAKER
@@ -66,7 +65,7 @@ def InitSys(sysName,nargout=0):
         
     # INIT THE AO SYSTEM
     t0 = time.time()
-    ao = aoSys(path_ini)
+    ao = aoSystem(path_ini)
     print(sysName + " system instantiation in %.2f ms  "%(1000*(time.time() - t0)))
     
     # INIT THE FREQUENCY DOMAIN
@@ -75,9 +74,9 @@ def InitSys(sysName,nargout=0):
     print("Frequency domain instantiation in %.2f ms  "%(1000*(time.time() - t0)))
     
     if nargout==1:
-        return aoSys
+        return ao
     elif nargout == 2:
-        return aoSys, freq
+        return ao, freq
     
 def TestInitSys():
     

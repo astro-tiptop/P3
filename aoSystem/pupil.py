@@ -15,9 +15,9 @@ import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
 import os
 
-import FourierUtils as FourierUtils
-from segment import segment
-from zernike import zernike
+import aoSystem.FourierUtils as FourierUtils
+from aoSystem.segment import segment
+from aoSystem.zernike import zernike
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
 

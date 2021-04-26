@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
 from scipy.ndimage import label
 
-import FourierUtils as FourierUtils
+import aoSystem.FourierUtils as FourierUtils
 
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16

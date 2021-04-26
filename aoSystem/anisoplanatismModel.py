@@ -6,7 +6,7 @@ Created on Mon Apr  5 14:54:57 2021
 @author: omartin
 """
 import numpy as np
-import FourierUtils as FourierUtils
+import aoSystem.FourierUtils as FourierUtils
 
 def anisoplanatismStructureFunction(tel,atm,src,lgs,ngs,nOtf,samp,Hfilter=1):
         
