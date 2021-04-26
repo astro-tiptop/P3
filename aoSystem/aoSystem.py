@@ -330,8 +330,8 @@ class aoSystem():
             self.error = True
             return
         
-        if config.has_option('sensor_science','Binning'):
-            Binning = eval(config['sensor_science']['Binning'])
+        if config.has_option('sensor_HO','Binning'):
+            Binning = eval(config['sensor_HO']['Binning'])
         else:
             Binning = 1
             
@@ -350,8 +350,8 @@ class aoSystem():
         else:
             ron = 0.0
         
-        if config.has_option('sensor_science','Gain'):
-            Gain = eval(config['sensor_science']['Gain'])
+        if config.has_option('sensor_HO','Gain'):
+            Gain = eval(config['sensor_HO']['Gain'])
         else:
             Gain = 1
             
@@ -415,8 +415,8 @@ class aoSystem():
         else:
             nv = 0.0
          
-        if config.has_option('sensor_science','ExcessNoiseFactor'):
-            excess = eval(config['sensor_science']['ExcessNoiseFactor'])
+        if config.has_option('sensor_HO','ExcessNoiseFactor'):
+            excess = eval(config['sensor_HO']['ExcessNoiseFactor'])
         else:
             excess = 1.0
             
@@ -446,8 +446,8 @@ class aoSystem():
                 self.error = True
                 return
             
-            if config.has_option('sensor_science','Binning'):
-                Binning = eval(config['sensor_science']['Binning'])
+            if config.has_option('sensor_LO','Binning'):
+                Binning = eval(config['sensor_LO']['Binning'])
             else:
                 Binning = 1
             

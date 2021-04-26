@@ -84,14 +84,7 @@ class fourierModel:
                 self.gs  = self.ao.ngs
                 self.nGs = self.ao.ngs.nSrc
                 self.strechFactor = 1.0
-               
-            # DEFINING THE NOISE AND ATMOSPHERE PSD
-            if self.ao.wfs.processing.noiseVar == None:
-                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0 * (self.freq.wvlRef/self.ao.atm.wvl)**1.2 ,self.freq.wvlRef)
-            
-            self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMin_)**2
-            self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
-            
+                           
             # DEFINING THE MODELED ATMOSPHERE 
             if (self.ao.dms.nRecLayers!=None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
                 weights_mod,heights_mod = FourierUtils.eqLayers(self.ao.atm.weights,self.ao.atm.heights,self.ao.dms.nRecLayers)
@@ -113,6 +106,13 @@ class fourierModel:
             self.atm_mod.wvl = self.freq.wvlRef
             self.t_initFreq = 1000*(time.time() - tstart)
 
+            # DEFINING THE NOISE AND ATMOSPHERE PSD
+            if self.ao.wfs.processing.noiseVar == None:
+                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0 ,self.ao.atm.wvl)
+            
+            self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMin_)**2
+            self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
+            
             # DEFINE THE RECONSTRUCTOR
             self.spatialReconstructor(MV=MV)
                 
@@ -235,7 +235,7 @@ class fourierModel:
             
         elif self.ao.wfs.optics[0].wfstype.upper() == 'PYRAMID':
             # forward pyramid filter (continuous) from Conan
-            umod    = 1/(2*d)/(self.ao.wfs.optics.nL[0]/2)*self.ao.wfs.optics.modulation
+            umod    = 1/(2*d)/(self.ao.wfs.optics[0].nL/2)*self.ao.wfs.optics[0].modulation
             Sx      = np.zeros((self.freq.resAO,self.freq.resAO),dtype=complex)
             idx     = abs(self.freq.kxAO_) > umod
             Sx[idx] = i*np.sign(self.freq.kxAO_[idx])

@@ -64,7 +64,7 @@ class sensor:
             dsub        = self.optics[k].dsub
             
             # read-out noise calculation
-            nD      = rad2arcsec * wvl/dsub/pixelScale #spot FWHM in pixels and without turbulence
+            nD      = max(1,rad2arcsec * wvl/dsub /pixelScale) #spot FWHM in pixels and without turbulence
             varRON  = np.pi**2/3*(ron**2 /nph[k]**2) * (nPix**2/nD)**2
             
             if varRON.any() > 3:
@@ -72,7 +72,7 @@ class sensor:
                 varRON = 0
              
             # photo-noise calculation
-            nT  = rad2arcsec*wvl/r0/pixelScale
+            nT  = max(1,np.hypot(max(self.detector.spotFWHM[0][0:2])/1e3,rad2arcsec*wvl/r0)/pixelScale)
             varShot  = np.pi**2/(2*nph[k])*(nT/nD)**2
             if varShot.any() > 3:
                 print('The shot noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varShot))
