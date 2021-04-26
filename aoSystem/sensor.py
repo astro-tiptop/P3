@@ -7,9 +7,9 @@ Created on Sat Apr 17 13:57:21 2021
 """
 
 import numpy as np
-from aoSystem.optics import optics
-from aoSystem.detector import detector
-from aoSystem.processing import processing
+from optics import optics
+from detector import detector
+from processing import processing
 
 class sensor:
     """
@@ -24,8 +24,10 @@ class sensor:
                  algorithm='wcog', algo_param=[5,0,0], noiseVar=None, tag='SENSOR'):
         
                 
+        self.nWfs = len(nL)
+        
         # optics class
-        self.optics = optics(nL=nL,dsub=dsub,nSides=nSides,wfstype=wfstype,modulation=modulation)
+        self.optics = [optics(nL=nL[k],dsub=dsub[k],nSides=nSides,wfstype=wfstype,modulation=modulation) for k in range(self.nWfs)]
         
         # detector class
         self.detector = detector(pixel_scale,fov,binning=binning,spotFWHM=spotFWHM,\
@@ -34,31 +36,45 @@ class sensor:
         
         # processing class
         self.processing = processing(algorithm=algorithm,settings=algo_param,noiseVar=noiseVar)
+    
+    def __repr__(self):
+        
+        s = '__SENSOR__\n' + '--------------------------------------------- \n'
+        s += self.optics[0].__repr__() + '\n'
+        s+= self.detector.__repr__() + '\n'
+        s+= self.processing.__repr__() +'\n'
+        s+= '---------------------------------------------\n'
+        return s
         
     def NoiseVariance(self,r0,wvl):
         
         rad2arcsec = 3600 * 180 / np.pi
 
         # parsing inputs
+        varNoise    = np.zeros(self.nWfs)
         nph         = np.array(self.detector.nph)
         pixelScale  = self.detector.psInMas/1e3 # in arcsec
         ron         = self.detector.ron
-        nPix        = self.detector.fovInPix/np.array(self.optics.nL)
-        dsub        = self.optics.dsub
         
-        # read-out noise calculation
-        nD      = rad2arcsec * wvl/dsub/pixelScale #spot FWHM in pixels and without turbulence
-        varRON  = np.pi**2/3*(ron**2 /nph**2) * (nPix**2/nD)**2
-        
-        if varRON.any() > 3:
-            print('The read-out noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varRON))
-            varRON = 0
-         
-        # photo-noise calculation
-        nT  = rad2arcsec*wvl/r0/pixelScale
-        varShot  = np.pi**2/(2*nph)*(nT/nD)**2
-        if varShot.any() > 3:
-            print('The shot noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varShot))
-            varShot = 0
+        for k in range(self.nWfs):
+            nPix        = self.detector.fovInPix/np.array(self.optics[k].nL)
+            dsub        = self.optics[k].dsub
             
-        return self.detector.excess * (varRON + varShot)
+            # read-out noise calculation
+            nD      = rad2arcsec * wvl/dsub/pixelScale #spot FWHM in pixels and without turbulence
+            varRON  = np.pi**2/3*(ron**2 /nph**2) * (nPix**2/nD)**2
+            
+            if varRON.any() > 3:
+                print('The read-out noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varRON))
+                varRON = 0
+             
+            # photo-noise calculation
+            nT  = rad2arcsec*wvl/r0/pixelScale
+            varShot  = np.pi**2/(2*nph)*(nT/nD)**2
+            if varShot.any() > 3:
+                print('The shot noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varShot))
+                varShot = 0
+            
+            varNoise[k] = self.detector.excess * (varRON + varShot)
+        
+        return varNoise

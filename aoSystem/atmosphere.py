@@ -79,7 +79,12 @@ class atmosphere:
     def meanWind(self):
         """ Mean-weighted wind speed in m/s"""
         return sum( self.weights*self.wSpeed**(5/3) )**(3/5)    
-                    
+    
+    @property
+    def tau0(self):
+        """Coherence time in ms at self.wvl"""
+        return 0.314 * 1000 * self.r0/self.meanWind
+                
     def __init__(self,wvl,r0,weights,heights,wSpeed=0.0,wDir=0.0,L0=math.inf,verbose=False):
         
         # PARSING INPUTS        
@@ -141,23 +146,24 @@ class atmosphere:
             s+= ".wavelength\t= %5.2fmicron,\n.r0 \t\t= %5.2fcm,\n.seeing \t= %5.2farcsec,\n"%(self.wvl*1e6,self.r0*1e2,self.seeing)
         else:
             s += (' Von Kármán atmospheric turbulence\n')
-            s+= '.wavelength\t=%5.2fmicron,\n.r0 \t\t= %5.2fcm,\n.L0 \t\t= %5.2fm,\n.seeing \t= %5.2farcsec,\n'%(self.wvl*1e6,self.r0*1e2,self.L0,self.seeing)
+            s+= '.wavelength\t=%5.2fmicron,\n.r0 \t\t= %5.2fcm,\n.L0 \t\t= %5.2fm,\n.seeing \t= %.2farcsec,\n'%(self.wvl*1e6,self.r0*1e2,self.L0,self.seeing)
             
         if not np.isinf(self.theta0):
             s+=('.theta0 \t= %5.2farcsec'%self.theta0)
+            
+        if not np.isinf(self.tau0):
+            s+=('\n.tau0 \t\t= %5.2fms'%self.tau0)
             
         
         s+=('\n------------------------------------------------------\n')
         s+=(' Layer\t Height [m]\t Weight\t L0 [m]\t wind([m/s] [deg])\n')
         for l in np.arange(0,self.nL):
-            s = s + "%2d\t\t %8.2f\t  %4.2f\t %4.2f\t (%5.2f %6.2f)\n"%(l,\
+            s = s + '%2d\t\t %8.2f\t  %4.2f\t %4.2f\t (%5.2f %6.2f)\n'%(l,\
                 self.layer[l].height,
                 self.layer[l].weight,
                 self.layer[l].L0,
                 self.layer[l].wSpeed,
                 self.layer[l].wDir)
-                
-        
                 
         s+=('------------------------------------------------------\n')              
         return s

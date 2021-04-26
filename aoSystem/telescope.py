@@ -10,7 +10,7 @@ from astropy.io import fits
 import os.path as ospath
 import re
 from scipy.ndimage import rotate
-import aoSystem.FourierUtils as FourierUtils
+import FourierUtils as FourierUtils
 
 class Attribute(object):
     pass
@@ -71,6 +71,7 @@ class telescope:
         if path_pupil!= '' and ospath.isfile(path_pupil) == True and re.search(".fits",path_pupil)!=None:
             self.verb = True
             pupil = fits.getdata(path_pupil)
+            pupil[pupil!=pupil] = 0
             if self.pupilAngle !=0.0:
                 pupil = rotate(pupil,self.pupilAngle,reshape=False)
             if pupil.shape[0] != resolution:
@@ -94,6 +95,7 @@ class telescope:
               
         if path_static != None and ospath.isfile(path_static) == True and re.search(".fits",path_static)!=None:
             self.opdMap_ext = fits.getdata(path_static)
+            self.opdMap_ext[self.opdMap_ext!=self.opdMap_ext] = 0
             self.opdMap_ext = FourierUtils.interpolateSupport(self.opdMap_ext,resolution,kind='linear')
         else:
             self.opdMap_ext = None
@@ -102,6 +104,7 @@ class telescope:
         print(path_apodizer)
         if path_apodizer!= '' and ospath.isfile(path_apodizer) and re.search(".fits",path_apodizer)!=None:
             self.apodizer = fits.getdata(path_apodizer)
+            self.apodizer[self.apodizer!=self.apodizer] = 0
             self.apodizer = FourierUtils.interpolateSupport(self.apodizer,resolution,kind='linear')
         else:
             self.apodizer = 1.0
@@ -132,9 +135,20 @@ class telescope:
                    
             
     def __repr__(self):
-        s = "___TELESCOPE___\n ---------------------------------------- \n"
-        s = s + ". Aperture diameter \t:{:.2f}m \n. Central obstruction \t:{:.2f}% \n. Collecting area \t\t:{:.2f}m^2\n. Pupil resolution \t\t:{:d}X{:d} pixels".format(self.D,self.obsRatio*1e2,self.area,self.resolution,self.resolution)
-        s = s +"\n----------------------------------------\n"
+        s = "___TELESCOPE___\n -------------------------------------------------------------------------------- \n"
+        s += '. Aperture diameter \t:%.2fm \n'%(self.D)
+        s += '. Central obstruction \t:%.2f%s \n'%(self.obsRatio*1e2,'%')
+        s += '. Collecting area \t\t:%.2fm^2\n'%(self.area)
+        s += '. Pupil resolution \t\t:%dX%d pixels'%(self.resolution,self.resolution)
+        if self.path_pupil != '':
+            s+= '\n. User-defined pupil at :\n ' + self.path_pupil
+        if self.path_apodizer != '':
+            s+= '\n. User-defined amplitude apodizer at :\n ' + self.path_apodizer
+        if self.path_static != '':
+            s+= '\n. User-defined static aberrations map at :\n ' + self.path_static
+        if self.path_statModes != '':
+            s+= '\n. User-defined modes of static aberrations at :\n ' + self.path_statModes
+        s = s +"\n--------------------------------------------------------------------------------\n"
         return s
         
     

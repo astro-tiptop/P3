@@ -8,8 +8,8 @@ Created on Sat Aug 18 14:21:41 2018
 
 import numpy as np
     
-class Attribute(object):
-    pass
+#class Attribute(object):
+#    pass
 
 class source:
     """
@@ -90,12 +90,12 @@ class source:
         """Display object information: prints information about the source object
         """
        
-        s = "___ " + self.tag + "___\n"
-        s = s + "--------------------------------------------------------------------------\n"  
-        s = s +" Obj zen[arcsec] azim[deg] height[m] wavelength[micron]\n"
-        for kObj in np.arange(0,self.nSrc):
-            s = s + " {:d}\t {:.2f}\t      {:.2f}\t\t {:g}\t\t   {:.3f}\n".format(kObj,self.zenith[kObj],self.azimuth[kObj],
+        s = '___ ' + self.tag + '___\n'
+        s += '--------------------------------------------------------------------------\n'
+        s += ' Obj\t Zenith [arcsec]\t Azimuth [deg]\t height [m]\t wavelength [micron]\n'
+        for kObj in range(self.nSrc):
+            s += ' %d\t\t\t %.2f\t\t\t\t %.2f\t\t\t %g\t\t\t %.3f\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
                             self.height[kObj],self.wvl[kObj]*1e6)
-        s = s + "--------------------------------------------------------------------------\n"
+        s +='--------------------------------------------------------------------------\n'
         
         return s

@@ -19,3 +19,14 @@ class optics:
         self.nSides = nSides
         self.wfstype = wfstype
         self.modulation = modulation
+        
+    def __repr__(self):
+        
+        s = '__OPTCS__\n'
+        if self.wfstype.upper() == 'SHACK-HARTMANN':
+            s += 'Optics type : %dX%d %s\n'%(self.nL,self.nL,'lenslets array')
+        else:
+            s += 'Optics type : %d %s\n'%(self.nSides,'Pyramid')
+            s += 'Modulation : %d lambda/D\n'%(self.modulation)
+            
+        return s

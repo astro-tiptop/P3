@@ -22,3 +22,16 @@ class processing:
             if len(settings) !=3:
                 print('Error : the number of parameters must be 3 : radius, threshold and new value')
                 
+    def __repr__(self):
+        
+        s = '__PROCESSING__\n'
+        s += '.Algorithm : %s\n'%(self.algorithm)
+        if self.algorithm.upper() == 'WCOG':
+            s += '.Window radius : %d pixels\n'%(self.settings[0])
+            s += '.Threshold : %.2f e-\n'%(self.settings[1])
+            s += '.New value : %.2f e-\n'%(self.settings[2])
+            
+        s += '.Noise variance [rd^2] : %.f'%(self.noiseVar)
+        
+        return s
+        

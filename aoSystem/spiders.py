@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
 from scipy.ndimage import label
 
-import aoSystem.FourierUtils as FourierUtils
-from aoSystem.FourierUtils import inpolygon
+import FourierUtils as FourierUtils
+
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
 
@@ -129,7 +129,7 @@ class spiders:
                 xvAll[k] = ck[0] + 2 * (np.cos(theta + self.spidersAngle[k]) - np.cos(self.spidersAngle[k]))
                 yvAll[k] = ck[1] + 2 * (np.sin(theta + self.spidersAngle[k]) - np.sin(self.spidersAngle[k]))
             # cumulative extrusion
-            self.matrix         = self.matrix * (inpolygon(x2D, y2D, xvAll[k], yvAll[k]) ==0)
+            self.matrix         = self.matrix * (FourierUtils.inpolygon(x2D, y2D, xvAll[k], yvAll[k]) ==0)
             
         #INCLUDE THE PUPIL MASK
         if self.mskPup:

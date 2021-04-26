@@ -110,10 +110,10 @@ class configFile():
        
         # jitter
         Cj = np.sqrt(np.dot(sysdiag.trs.tipTilt.slopes.T,sysdiag.trs.tipTilt.slopes)/sysdiag.trs.tipTilt.slopes.shape[0])
-        #Cj *= 4*3600 * 180 * 1000 / np.pi/sysdiag.trs.tel.D
         Cj*= 1000/sysdiag.trs.tipTilt.tilt2meter
         psInMas = sysdiag.trs.cam.psInMas 
-        parser.set('sensor_science','spotFWHM', str([[np.hypot(Cj[0,0],psInMas/2), np.hypot(Cj[1,1],psInMas/2), Cj[0,1]]]))
+        #1 mas = rad2mas * 4/D * 1e-9 * 1nm
+        parser.set('sensor_science','spotFWHM', str([[np.hypot(Cj[1,1],psInMas/2), np.hypot(Cj[0,0],psInMas/2), np.hypot(Cj[0,1],psInMas/2)]]))
         #%% RTC    
         if not parser.has_section('RTC'):
             parser.add_section('RTC')

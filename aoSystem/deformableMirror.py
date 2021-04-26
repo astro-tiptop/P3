@@ -15,7 +15,7 @@ class deformableMirror:
     # DEPENDENT PROPERTY
     @property
     def nValidActuator(self):
-        return self.validActuator.sum()
+        return [self.validActuator[kObj].sum() for kObj in range(self.nDMs)]
     
     def __init__(self,nActu1D,pitch,heights=[0.0],mechCoupling=[0.2],modes='gaussian',opt_dir=[[0.0],[0.0]], opt_weights=[1.0],\
                  opt_cond=1e2, n_rec=None, validActuator=None,offset = [[0,0]],AoArea='circle',resolution=None):
@@ -23,23 +23,44 @@ class deformableMirror:
         if np.isscalar(nActu1D):
             nActu1D = [int(nActu1D)]
             
+        # geometry
         self.nActu1D      = np.array(nActu1D)
         self.pitch        = np.array(pitch)
         self.heights      = np.array(heights)
+        self.nDMs         = len(pitch)
+        
+        if (len(self.nActu1D) != self.nDMs) or (len(self.heights) != self.nDMs):
+            raise ValueError("Please have the same size for nActu1D, pitch and heights input lists.")
+            
+        # influence function
         self.mechCoupling = np.array(mechCoupling)
+        if len(self.mechCoupling) < self.nDMs:
+            self.mechCoupling = self.mechCoupling[0]*self.nDMs
+            print("The first value of mechanical coupling is set for all DMs")
+        
+        elif len(self.mechCoupling) > self.nDMs:
+            self.mechCoupling = self.mechCoupling[0:self.nDMs]
+            print("The list of mechanical coupling values is truncated up to the number od DMs.")
+            
         self.modes        = modes
         self.offset       = offset
         self.influenceCentre=0
         self.resolution   = resolution
-        self.AoArea       = AoArea
+        
+        # reconstruction
         self.nRecLayers   = n_rec
+        self.opt_cond     = opt_cond
+        self.AoArea       = AoArea
+
+        # optimization
         self.opt_dir      = np.array(opt_dir)
         self.opt_weights  = opt_weights
-        self.nDMs         = len(pitch)
+        if (len(self.opt_dir[0]) != len(self.opt_weights)):
+            raise ValueError("Please define as many weights as optimization directions.")
         
         # DEFINE THE VALID ACTUATOR
         if np.any(validActuator == None):
-            self.validActuator = np.ones((nActu1D[0],nActu1D[0]),dtype=bool)
+            self.validActuator = [np.ones((nActu1D[kObj],nActu1D[kObj]),dtype=bool) for kObj in range(self.nDMs)]
         else:
             self.validActuator = validActuator
         # DEFINE THE MODES
@@ -119,10 +140,23 @@ class deformableMirror:
                 
                 
     def __repr__(self):
-        s = "___DEFORMABLE MIRROR___\n ---------------------------------------- \n"
-        s+= ".%dX%d actuators deformable mirror with %d controlled actuators"%( self.nActu1D[0],self.nActu1D[0],self.nValidActuator)
-        s = s +"\n----------------------------------------\n"
+        """Display object information: prints information about the source object
+        """
+       
+        s = '___ DEFORMABLE MIRROR___\n'
+        s += '----------------------------------------------------------------------------------------------\n'
+        s += ' Obj\t #Actuators\t Pitch [m]\t Heights [m]\t modes type\t Coupling\t #Controlled modes\n'
+        for kObj in range(self.nDMs):
+            if self.heights[kObj] == 0:
+                s += ' %d\t\t\t %d\t\t %.4f\t\t %.1f\t\t\t %s\t %.2f\t\t %d\n'%(kObj,self.nActu1D[kObj],self.pitch[kObj],
+                            float(self.heights[kObj]),self.modes,self.mechCoupling[kObj], self.nValidActuator[kObj])
+            else:
+                s += ' %d\t\t\t %d\t\t %.4f\t\t %.0f\t\t\t %s\t %.2f\t\t %d\n'%(kObj,self.nActu1D[kObj],self.pitch[kObj],
+                            float(self.heights[kObj]),self.modes,self.mechCoupling[kObj], self.nValidActuator[kObj])
+        s +='----------------------------------------------------------------------------------------------\n'
+        
         return s
+
                             
 def sub2ind(array_shape, rows, cols):
     ind = rows*array_shape[1] + cols

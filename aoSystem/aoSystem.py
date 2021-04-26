@@ -12,13 +12,13 @@ from configparser import ConfigParser
 import numpy as np
 
 # IMPORTING P3 MODULES
-from aoSystem.telescope import telescope
-from aoSystem.atmosphere import atmosphere
-from aoSystem.source import source
-from aoSystem.deformableMirror import deformableMirror
-from aoSystem.detector import detector
-from aoSystem.sensor import sensor
-from aoSystem.rtc import rtc
+from telescope import telescope
+from atmosphere import atmosphere
+from source import source
+from deformableMirror import deformableMirror
+from detector import detector
+from sensor import sensor
+from rtc import rtc
 
 #%%
 class aoSystem():
@@ -260,10 +260,10 @@ class aoSystem():
         else:
             Binning = 1
             
-        if config.has_option('sensor_science','spotFWHM'):
-            spotFWHM = eval(config['sensor_science']['spotFWHM'])
+        if config.has_option('sensor_science','SpotFWHM'):
+            spotFWHM = eval(config['sensor_science']['SpotFWHM'])
         else:
-            spotFWHM = [[0.0, 0.0, 0.0]]
+            spotFWHM = [[0.0,0.0,0.0]]
             
         if config.has_option('sensor_science','FiedOfView'):
             bw = eval(config['sensor_science']['FiedOfView'])
@@ -335,8 +335,8 @@ class aoSystem():
         else:
             Binning = 1
             
-        if config.has_option('sensor_HO','spotFWHM'):
-            spotFWHM = eval(config['sensor_HO']['spotFWHM'])
+        if config.has_option('sensor_HO','SpotFWHM'):
+            spotFWHM = eval(config['sensor_HO']['SpotFWHM'])
         else:
             spotFWHM = [[0.0, 0.0]]
             
@@ -370,8 +370,8 @@ class aoSystem():
         else:
             excess = 1.0
                        
-        if config.has_option('sensor_HO','wfstype'):
-            wfstype = eval(config['sensor_HO']['wfstype'])
+        if config.has_option('sensor_HO','WfsType'):
+            wfstype = eval(config['sensor_HO']['WfsType'])
         else:
             wfstype = 'Shack-Hartmann'
             
@@ -380,8 +380,13 @@ class aoSystem():
         else:
             nL = [20]
             
-        if config.has_option('sensor_HO','modulation'):
-            modu = eval(config['sensor_HO']['modulation'])
+        if config.has_option('sensor_HO','SizeLenslets'):
+            dsub = eval(config['sensor_HO']['SizeLenslets'])
+        else:
+            dsub = list(D/np.array(nL))
+            
+        if config.has_option('sensor_HO','Modulation'):
+            modu = eval(config['sensor_HO']['Modulation'])
         else:
             modu = None
             
@@ -390,8 +395,8 @@ class aoSystem():
         else:
             NoiseVar = None
             
-        if config.has_option('sensor_HO','algorithm'):
-            algorithm = eval(config['sensor_HO']['algorithm'])
+        if config.has_option('sensor_HO','Algorithm'):
+            algorithm = eval(config['sensor_HO']['Algorithm'])
         else:
             algorithm = 'wcog'
             
@@ -418,7 +423,7 @@ class aoSystem():
         self.wfs = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
                    nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
                    gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,\
-                   nL=nL,dsub=list(D/np.array(nL)),wfstype=wfstype,modulation=modu,\
+                   nL=nL,dsub=dsub,wfstype=wfstype,modulation=modu,\
                    noiseVar=NoiseVar,algorithm=algorithm,algo_param=[wr,thr,nv],tag="HO WFS")
         
         #%% TIP-TILT SENSORS
@@ -446,8 +451,8 @@ class aoSystem():
             else:
                 Binning = 1
             
-            if config.has_option('sensor_LO','spotFWHM'):
-                spotFWHM = eval(config['sensor_LO']['spotFWHM'])
+            if config.has_option('sensor_LO','SpotFWHM'):
+                spotFWHM = eval(config['sensor_LO']['SpotFWHM'])
             else:
                 spotFWHM = [[0.0, 0.0]]
                 
@@ -486,8 +491,8 @@ class aoSystem():
             else:
                 NoiseVar = [None]
                 
-            if config.has_option('sensor_LO','algorithm'):
-                algorithm = eval(config['sensor_LO']['algorithm'])
+            if config.has_option('sensor_LO','Algorithm'):
+                algorithm = eval(config['sensor_LO']['Algorithm'])
             else:
                 algorithm = 'wcog'
                 
@@ -506,10 +511,6 @@ class aoSystem():
             else:
                 nv = 0.0
                 
-#            if config.has_option('sensor_LO','Technical_FoV'):
-#                tech_fov = eval(config['sensor_LO']['Technical_FoV']) 
-#            else:
-#                tech_fov = 120
                 
             self.tts = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
                    nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
@@ -633,7 +634,7 @@ class aoSystem():
         
         if self.lgs:
             if self.lgs.nSrc > 1:
-                if self.dms.nDms > 1:
+                if self.dms.nDMs > 1:
                     self.aoMode = 'MCAO'
                 else:
                     if self.dms.nRecLayers >1:
@@ -642,4 +643,5 @@ class aoSystem():
                         self.aoMode = 'GLAO'                  
             else:
                 self.aoMode = 'SLAO'
+                
                 

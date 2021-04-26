@@ -146,9 +146,8 @@ class psfao21:
             
             # STATIC OTF
             if len(x0_stat) or self.freq.nWvl > 1:
-                self.otfStat, self.phaseMap = \
-                FourierUtils.getStaticOTF(self.ao.tel,int(self.freq.nPix*self.freq.k_[l]),self.freq.samp[l],wvl_l,xStat=x0_stat,\
-                                          apodizer=self.ao.tel.apodizer,statModes=self.ao.tel.statModes,opdMap_ext=self.ao.tel.opdMap_ext)
+                self.otfStat, self.otfDL, self.phaseMap = \
+                FourierUtils.getStaticOTF(self.ao.tel,int(self.freq.nPix*self.freq.k_[l]),self.freq.samp[l],wvl_l,xStat=x0_stat)
             else:
                 self.otfStat = self.freq.otfNCPA
               

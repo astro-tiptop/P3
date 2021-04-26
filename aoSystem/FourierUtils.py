@@ -56,32 +56,42 @@ def freq_array(nX,L=1,offset=1e-10):
     k2D     = k2D*L + offset
     return k2D[0],k2D[1]
 
-def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],opdMap_ext=0,apodizer=1,statModes=0,theta_ext=0):
+def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0):
         
         # DEFINING THE RESOLUTION/PUPIL
         nPup = tel.pupil.shape[0]
         
         # ADDING STATIC MAP
         phaseStat = np.zeros((nPup,nPup))
-        if np.any(opdMap_ext):
+        if np.any(tel.opdMap_ext):
             if theta_ext:
-                opdMap_ext = scnd.rotate(opdMap_ext,theta_ext,reshape=False)
-            phaseStat = (2*np.pi*1e-9/wvl) * opdMap_ext
+                tel.opdMap_ext = scnd.rotate(tel.opdMap_ext,theta_ext,reshape=False)
+            phaseStat = (2*np.pi*1e-9/wvl) * tel.opdMap_ext
             
         # ADDING USER-SPECIFIED STATIC MODES
         xStat = np.asarray(xStat)
         phaseMap = 0
-        if np.any(statModes):
-            if statModes.shape[2]==len(xStat):
-                phaseMap = 2*np.pi*1e-9/wvl * np.sum(statModes*xStat,axis=2)
+        if np.any(tel.statModes):
+            if tel.statModes.shape[2]==len(xStat):
+                phaseMap = 2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)
                 phaseStat += phaseMap
                 
-        # OTF
-        otfStat = pupil2otf(tel.pupil * apodizer,phaseStat,samp)
-        otfStat = interpolateSupport(otfStat,nOtf)
+        # INSTRUMENTAL OTF
+        otfStat = pupil2otf(tel.pupil * tel.apodizer,phaseStat,samp)
+        if np.any(otfStat.shape !=nOtf):
+            otfStat = interpolateSupport(otfStat,nOtf)
         otfStat/= otfStat.max()
         
-        return otfStat, phaseMap
+        # DIFFRACTION-LIMITED OTF
+        if np.all(phaseStat == 0):
+            otfDL = otfStat
+        else:
+            otfDL = np.real(pupil2otf(tel.pupil * tel.apodizer,0*phaseStat,samp))
+            if np.any(otfDL.shape !=nOtf):
+                otfDL = interpolateSupport(otfDL,nOtf)
+                otfDL/= otfDL.max()
+                
+        return otfStat, otfDL, phaseMap
 
 def instantiateAngularFrequencies(nOtf,fact=2):
     # DEFINING THE DOMAIN ANGULAR FREQUENCIES
@@ -175,11 +185,16 @@ def psf2otf(psf):
     return fft.fft2(fft.fftshift(psf))/psf.sum()
        
 def pupil2otf(pupil,phase,overSampling):   
-    P    = enlargeSupport(pupil,overSampling)
-    phi  = enlargeSupport(phase,overSampling)
-    E    = P*np.exp(1*complex(0,1)*phi)    
-    otf  = fft.fftshift(fftCorrel(E,E))
-    return otf/otf.max()
+    if np.all(phase == 0):
+        E   = np.abs(pupil)
+        E   = enlargeSupport(E,overSampling)
+        otf = np.real(fft.fftshift(fftCorrel(E,E)))
+    else:
+        E   = pupil*np.exp(1*complex(0,1)*phase)    
+        E   = enlargeSupport(E,overSampling)
+        otf = fft.fftshift(fftCorrel(E,E))
+        
+    return otf
 
 def pupil2psf(pupil,phase,overSampling):    
     otf = pupil2otf(pupil,phase,overSampling)
@@ -260,35 +275,38 @@ def cropSupport(im,n):
             
             
 def enlargeSupport(im,n):
-    # Otf sizes
+    
     nx,ny  = im.shape
-    nx2 = int(n*nx)
-    ny2 = int(n*ny)
+    return np.pad(im,[int((n-1)*nx/2),int((n-1)*ny/2)])
     
-    if np.any(np.iscomplex(im)):
-        imNew = np.zeros((nx2,ny2)) + complex(0,1)*np.zeros((nx2,ny2))
-    else:
-        imNew = np.zeros((nx2,ny2))
-        
-    #Zero-padding    
-    if nx2%2 ==0:
-        xi = int(0.5*(nx2-nx))
-        xf = int(0.5*(nx2 + nx))
-    else:
-        xi = int(0.5*(nx2-nx))
-        xf = int(0.5*(nx2+nx))
-        
-    if ny2%2 ==0:
-        yi = int(0.5*(ny2-ny))
-        yf = int(0.5*(ny2 + ny))
-    else:
-        yi = int(0.5*(ny2-ny))
-        yf = int(0.5*(ny2+ny))        
-        
-            
-    imNew[xi:xf,yi:yf] = im
-    
-    return imNew
+    # Otf sizes
+#    nx2 = int(n*nx)
+#    ny2 = int(n*ny)
+#    
+#    if np.any(np.iscomplex(im)):
+#        imNew = np.zeros((nx2,ny2)) + complex(0,1)*np.zeros((nx2,ny2))
+#    else:
+#        imNew = np.zeros((nx2,ny2))
+#        
+#    #Zero-padding    
+#    if nx2%2 ==0:
+#        xi = int(0.5*(nx2-nx))
+#        xf = int(0.5*(nx2 + nx))
+#    else:
+#        xi = int(0.5*(nx2-nx))
+#        xf = int(0.5*(nx2+nx))
+#        
+#    if ny2%2 ==0:
+#        yi = int(0.5*(ny2-ny))
+#        yf = int(0.5*(ny2 + ny))
+#    else:
+#        yi = int(0.5*(ny2-ny))
+#        yf = int(0.5*(ny2+ny))        
+#        
+#            
+#    imNew[xi:xf,yi:yf] = im
+#    
+#    return imNew
 
 def inpolygon(xq, yq, xv, yv):
         shape = xq.shape
@@ -302,9 +320,8 @@ def inpolygon(xq, yq, xv, yv):
     
 def interpolateSupport(image,nRes,kind='spline'):
     
-    # Define angular frequencies vectors
     nx,ny = image.shape
-        
+    # Define angular frequencies vectors
     if np.isscalar(nRes):
         mx = my = nRes
     else:        
@@ -346,18 +363,18 @@ def interpolateSupport(image,nRes,kind='spline'):
         if kind == 'spline':
             # Surprinsingly v and u vectors must be shifted when using
             # RectBivariateSpline. See:https://github.com/scipy/scipy/issues/3164
-            tmpReal = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.real(image))
+            fun_real = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.real(image))
             if np.any(np.iscomplex(image)):
-                tmpImag = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.imag(image))
+                fun_imag = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.imag(image))
         else:
-            tmpReal = interp.interp2d(uinit, vinit, np.real(image),kind=kind)
+            fun_real = interp.interp2d(uinit, vinit, np.real(image),kind=kind)
             if np.any(np.iscomplex(image)):
-                tmpImag = interp.interp2d(uinit, vinit, np.imag(image),kind=kind)
+                fun_imag = interp.interp2d(uinit, vinit, np.imag(image),kind=kind)
     
         if np.any(np.iscomplex(image)):
-            return tmpReal(unew,vnew) + complex(0,1)*tmpImag(unew,vnew)
+            return fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew)
         else:
-            return tmpReal(unew,vnew)
+            return fun_real(unew,vnew)
             
 
 
