@@ -146,10 +146,16 @@ class atmosphere:
             s+= ".wavelength\t= %5.2fmicron,\n.r0 \t\t= %5.2fcm,\n.seeing \t= %5.2farcsec,\n"%(self.wvl*1e6,self.r0*1e2,self.seeing)
         else:
             s += (' Von Kármán atmospheric turbulence\n')
-            s+= '.wavelength\t=%5.2fmicron,\n.r0 \t\t= %5.2fcm,\n.L0 \t\t= %5.2fm,\n.seeing \t= %.2farcsec,\n'%(self.wvl*1e6,self.r0*1e2,self.L0,self.seeing)
+            s+= '.wavelength\t=%5.2fmicron,\n.r0 \t\t= %5.2fcm,\n.L0 \t\t= %5.2fm,\n.seeing \t= %.2farcsec'%(self.wvl*1e6,self.r0*1e2,self.L0,self.seeing)
+            
+        if not np.isinf(self.meanHeight):
+            s+=('\n.h_mean \t= %5.2f m'%self.meanHeight)
             
         if not np.isinf(self.theta0):
-            s+=('.theta0 \t= %5.2farcsec'%self.theta0)
+            s+=('\n.theta0 \t= %5.2farcsec'%self.theta0)
+            
+        if not np.isinf(self.meanWind):
+            s+=('\n.v_mean \t= %5.2f m'%self.meanWind)
             
         if not np.isinf(self.tau0):
             s+=('\n.tau0 \t\t= %5.2fms'%self.tau0)

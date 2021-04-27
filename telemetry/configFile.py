@@ -44,7 +44,7 @@ class configFile():
         # updating the atmosphere config
         if not parser.has_section('atmosphere'):
             parser.add_section('atmosphere')
-        parser.set('atmosphere','AtmosphereWavelength', str(sysdiag.trs.atm.wvl))
+        parser.set('atmosphere','Wavelength', str(sysdiag.trs.atm.wvl))
         parser.set('atmosphere','Seeing', str(sysdiag.trs.atm.seeing))
         parser.set('atmosphere','L0', str(sysdiag.trs.atm.L0))
         parser.set('atmosphere','Cn2Weights', str(sysdiag.trs.atm.Cn2Weights))
@@ -58,7 +58,7 @@ class configFile():
             parser.add_section('sensor_HO')
         parser.set('sensor_HO','PixelScale', str(sysdiag.trs.wfs.pixel_scale))
         parser.set('sensor_HO','FiedOfView', str(sysdiag.trs.wfs.fov))
-        parser.set('sensor_HO','NumberLenslets', str([sysdiag.trs.wfs.nSubap]))
+        parser.set('sensor_HO','NumberLenslets', str(sysdiag.trs.wfs.nSubap))
         parser.set('sensor_HO','NoiseVariance', str(sysdiag.trs.wfs.noiseVar))
         
         #%% GUIDE STARS

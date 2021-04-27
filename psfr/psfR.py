@@ -200,9 +200,8 @@ class psfR:
             
         # INSTRUMENTAL OTF
         if len(x0_stat) or self.freq.nWvl > 1:
-            self.otfStat, self.phaseMap = FourierUtils.getStaticOTF(\
-                self.ao.tel,self.freq.nOtf,self.freq.sampRef,self.freq.wvlRef,xStat=x0_stat,\
-                apodizer=self.ao.tel.apodizer,statModes=self.ao.tel.statModes,opdMap_ext=self.ao.tel.opdMap_ext)
+            self.otfStat, _, self.phaseMap = FourierUtils.getStaticOTF(\
+                self.ao.tel,self.freq.nOtf,self.freq.sampRef,self.freq.wvlRef,xStat=x0_stat)
         else:
             self.otfStat = self.freq.otfNCPA
                             

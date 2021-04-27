@@ -107,7 +107,7 @@ class fourierModel:
             self.t_initFreq = 1000*(time.time() - tstart)
 
             # DEFINING THE NOISE AND ATMOSPHERE PSD
-            if self.ao.wfs.processing.noiseVar == None:
+            if self.ao.wfs.processing.noiseVar == [None]:
                 self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0 ,self.ao.atm.wvl)
             
             self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMin_)**2
@@ -122,8 +122,8 @@ class fourierModel:
             # COMPUTE THE PSD
             self.PSD = self.powerSpectrumDensity()
                 
+            # COMPUTE THE PSF
             if calcPSF:
-                # COMPUTING THE PSF
                 self.PSF, self.SR = self.pointSpreadFunction(verbose=verbose,fftphasor=fftphasor)
                 
                 # GETTING METRICS
@@ -149,7 +149,10 @@ class fourierModel:
         self.bounds = self.defineBounds()
             
     def __repr__(self):
-        s = "Fourier Model class "
+        s = '\t\t\t\t________________________ FOURIER MODEL ________________________\n\n'
+        s += self.ao.__repr__() + '\n'
+        s += self.freq.__repr__() + '\n'
+        s +=  '\n'
         return s
 
 #%% BOUNDS FOR PSF-FITTING
@@ -432,8 +435,7 @@ class fourierModel:
             
         self.t_controller = 1000*(time.time() - tstart)
       
- #%% PSD DEFINTIONS  
-
+#%% PSD DEFINTIONS  
     def powerSpectrumDensity(self):
         """ Total power spectrum density in nm^2.m^2
         """
@@ -498,7 +500,9 @@ class fourierModel:
         return psd
                
     def aliasingPSD(self):
-        """ Aliasing error power spectrum density """ 
+        """ Aliasing error power spectrum density 
+            TO BE REVIEWED IN THE CASE OF A PYRAMID WFSs
+        """ 
         
         tstart  = time.time()
         psd = np.zeros((self.freq.resAO,self.freq.resAO))
@@ -730,7 +734,7 @@ class fourierModel:
         return psd
     
     
-    #%% AO ERROR BREAKDOWN
+#%% AO ERROR BREAKDOWN
     def errorBreakDown(self,verbose=True):
         """ AO error breakdown from the PSD integrals
         """        
@@ -906,7 +910,7 @@ class fourierModel:
         return psf[:,:,0,0]    
     
     
-    #%% METRICS COMPUTATION
+  #%% METRICS COMPUTATION
     def getPsfMetrics(self,getEnsquaredEnergy=False,getEncircledEnergy=False,getFWHM=False):
         tstart  = time.time()
         self.FWHM = np.zeros((2,self.ao.src.nSrc,self.freq.nWvl))
@@ -926,6 +930,8 @@ class fourierModel:
                     self.EncE[:,n,j]  = 1e2*FourierUtils.getEncircledEnergy(self.PSF[:,:,n,j])
                         
         self.t_getPsfMetrics = 1000*(time.time() - tstart)
+
+#%% DISPLAY
                 
     def displayResults(self,eeRadiusInMas=75,displayContour=False):
         """

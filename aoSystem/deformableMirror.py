@@ -15,7 +15,14 @@ class deformableMirror:
     # DEPENDENT PROPERTY
     @property
     def nValidActuator(self):
-        return [self.validActuator[kObj].sum() for kObj in range(self.nDMs)]
+        return [int(self.validActuator[kObj].sum()) for kObj in range(self.nDMs)]    
+    @property
+    def nControlledRadialOrder(self):
+        # nZernike = 0.5 * (nActu + 1) **2
+        return int(np.sqrt(2*np.array(self.nValidActuator))-1)
+    @property
+    def nControlledRadialOrderTipTiltExcluded(self):
+        return int(np.sqrt(2*np.array(self.nValidActuator))-3)
     
     def __init__(self,nActu1D,pitch,heights=[0.0],mechCoupling=[0.2],modes='gaussian',opt_dir=[[0.0],[0.0]], opt_weights=[1.0],\
                  opt_cond=1e2, n_rec=None, validActuator=None,offset = [[0,0]],AoArea='circle',resolution=None):
@@ -122,16 +129,16 @@ class deformableMirror:
         wv[index_v] = spline(v[index_v])
              
         #m_modes = sparse.lil_matrix((resolution**2,self.nValidActuator))
-        m_modes = np.zeros((resolution**2,self.nValidActuator))
+        m_modes = np.zeros((resolution**2,self.nValidActuator[ndm]))
         indIF = np.arange(0,nIF**2)
-        idx = self.validActuator == False
+        idx = self.validActuator[ndm] == False
         indIF[idx.ravel()] = []
         iIF,jIF = ind2sub((nIF,nIF),indIF)
-        kIF = np.arange(0,self.nValidActuator)        
+        kIF = np.arange(0,self.nValidActuator[ndm])        
         wv = wv[:,iIF[kIF]]
         wu = wu[:,jIF[kIF]]
         
-        for kIF in np.arange(0,self.nValidActuator):
+        for kIF in np.arange(0,self.nValidActuator[ndm]):
             buffer = np.transpose([wv[:,kIF]])*wu[:,kIF]     
             m_modes[:,kIF] = buffer.ravel() #buffer.A.ravel()
                 

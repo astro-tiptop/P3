@@ -162,6 +162,20 @@ class frequencyDomain():
             self.isAniso = False
             self.dphi_ani = None
         self.tani = 1000*(time.time()-t0)
+    
+    def __repr__(self):
+        
+        s = '__ FREQUENCY DOMAIN __\n' + '--------------------------------------------- \n'
+        s+= '. Reference wavelength : %.2f µm\n'%(self.wvlRef*1e6)
+        s+= '. Oversampling factor at the reference wavelength : %.2f\n'%(self.sampRef)
+        s+= '. Size of the frequency domain : %d pixels\n'%(self.nOtf)
+        s+= '. Pixel scale at the reference wavelength : %.4f m^-1\n'%(self.PSDstep)
+        s+= '. Instantiantion of the anisoplanatism model : %s\n'%(str(self.isAniso))
+        s+= '. Include a static aberrations map : %s\n'%(str(np.any(self.otfNCPA != self.otfDL)))
+
+        s+= '---------------------------------------------\n'
+        return s
+        
         
     def anisoplanatismPhaseStructureFunction(self):
         

@@ -190,7 +190,8 @@ class telemetryKeck:
         
         #2\ DM influence functions and filters
         if self.path_trs != None:
-            dm = deformableMirror(self.dm.nActuators,self.dm.pitch,heights=self.dm.heights,mechCoupling=self.dm.mechCoupling,modes=self.dm.modes)
+            dm = deformableMirror(self.dm.nActuators,self.dm.pitch,heights=self.dm.heights\
+                                  ,mechCoupling=self.dm.mechCoupling,modes=self.dm.modes)
             self.mat.dmIF     = dm.setInfluenceFunction(self.tel.resolution)
             self.mat.dmIF_inv = np.linalg.pinv(self.mat.dmIF,rcond=1/self.dm.condmax)
             self.mat.Hdm      = np.matmul(self.mat.dmIF,self.mat.dmIF_inv)

@@ -12,7 +12,7 @@ class processing:
         processing class to define the processing strategy to convert the detector image into an input for the RTC.
     """
     
-    def __init__(self,algorithm='wcog',settings=[5,0.0,0.0],noiseVar=None):
+    def __init__(self,algorithm='wcog',settings=[5,0.0,0.0],noiseVar=[None]):
         
         
         self.algorithm = algorithm
@@ -25,14 +25,14 @@ class processing:
                 
     def __repr__(self):
         
-        s = '__PROCESSING__\n'
+        s = '__ PROCESSING __\n'
         s += '.Algorithm : %s\n'%(self.algorithm)
         if self.algorithm.upper() == 'WCOG':
             s += '.Window radius : %d pixels\n'%(self.settings[0])
             s += '.Threshold : %.2f e-\n'%(self.settings[1])
             s += '.New value : %.2f e-\n'%(self.settings[2])
             
-        if np.any(self.noiseVar == None):
+        if self.noiseVar == [None]:
             s += '.Mean noise variance [rd^2] : %.f'%(0)
         else:
             s += '.Mean noise variance [rd^2] : %.f'%(np.mean(self.noiseVar))

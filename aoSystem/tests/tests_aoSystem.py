@@ -67,11 +67,13 @@ def InitSys(sysName,nargout=0):
     t0 = time.time()
     ao = aoSystem(path_ini)
     print(sysName + " system instantiation in %.2f ms  "%(1000*(time.time() - t0)))
+    print(ao.__repr__())
     
     # INIT THE FREQUENCY DOMAIN
     t0 = time.time()
     freq = frequencyDomain(ao)
     print("Frequency domain instantiation in %.2f ms  "%(1000*(time.time() - t0)))
+    print(freq.__repr__())
     
     if nargout==1:
         return ao
@@ -105,10 +107,14 @@ def TestFourierModel(sysName,calcPSF=False,getMetrics=False,nargout=0):
         path_ini = path_mod + '/parFiles/' + sysName + '.ini'
         
     # INIT THE fourierModel object
+    typeData = 'PSD'
+    if calcPSF == True:
+        typeData = 'PSF'
+        
     t0 = time.time()
     fao = fourierModel(path_ini,calcPSF=calcPSF,verbose=True,display=False,getErrorBreakDown=True,\
         getFWHM=getMetrics,getEncircledEnergy=getMetrics,getEnsquaredEnergy=getMetrics,displayContour=getMetrics)
-    print(sysName + " PSD model computation %.2f ms\n "%(1000*(time.time() - t0)))
+    print(sysName +  ' ' + typeData +  ' model computation %.2f ms\n '%(1000*(time.time() - t0)))
     
     if nargout == 1:
         return fao
