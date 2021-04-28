@@ -238,7 +238,74 @@ def telescopePsf(pupil,samp,kind='spline'):
     else:
         otf = interpolateSupport(telescopeOtf(pupil,2),nSize//samp,kind=kind)
         return interpolateSupport(otf2psf(otf),nSize,kind=kind)
-  
+
+
+def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0.]],bkg=0,xStat=[],theta_ext=0,nPix=None,otfPixel=1):
+        """
+          Computation of the PSF and the Strehl-ratio (from the OTF integral). The Phase structure function
+          must be expressed in nm^2 and of the size nPx x nPx x nSrc
+        """
+        
+        # INSTANTIATING THE OUTPUTS
+        if nPix == None:
+            nPix = freq.nOtf
+        PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
+        SR  = np.zeros((ao.src.nSrc,freq.nWvl))
+        
+        # DEFINING THE RESIDUAL JITTER KERNEL
+        if jitterX!=0 or jitterY!=0:        
+            # Gaussian kernel
+            # note 1 : Umax = self.samp*self.tel.D/self.wvlRef/(3600*180*1e3/np.pi) = 1/(2*psInMas)
+            # note 2 : the 1.16 factor is needed to get FWHM=jitter for jitter-limited PSF; needed to be figured out
+            Umax     = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
+            ff_jitter= 1.16
+            normFact = ff_jitter*np.max(Umax)**2 *(2 * np.sqrt(2*np.log(2)))**2 #1.16
+            Djitter  = normFact * (jitterX**2 * freq.U2_  + jitterY**2 * freq.V2_ + 2*jitterXY *freq.UV_)
+            Kjitter  = np.exp(-0.5 * Djitter)
+        else:
+            Kjitter = 1
+            
+        # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
+        if (dx!=0) or (dy!=0):
+            # shift by half a pixel
+            fftPhasor = np.exp(np.pi*complex(0,1)*(dx*freq.U_ + dy*freq.V_))
+        else:
+            fftPhasor = 1
+
+        # LOOP ON WAVELENGTHS   
+        for j in range(freq.nWvl):
+            
+            # UPDATE THE INSTRUMENTAL OTF
+            if (np.any(ao.tel.opdMap_ext != None) and freq.nWvl>1) or len(xStat)>0:
+                freq.otfNCPA, freq.otfDL, _ = getStaticOTF(ao.tel,int(freq.nPix*freq.k_[j]),\
+                                                        freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
+                
+            # UPDATE THE RESIDUAL JITTER
+            if freq.shannon == True and freq.nWvl > 1 and (np.any(ao.cam.spotFWHM)):
+                normFact2    = ff_jitter*(freq.samp[j]*ao.tel.D/freq.wvl[j]/(3600*180*1e3/np.pi))**2  * (2 * np.sqrt(2*np.log(2)))**2
+                Kjitter = np.exp(-0.5 * Djitter * normFact2/normFact)    
+                          
+            # OTF MULTIPLICATION
+            otfStat = freq.otfNCPA * fftPhasor * Kjitter * otfPixel    
+            otfStat = np.repeat(otfStat[:,:,np.newaxis],ao.src.nSrc,axis=2)      
+            otfTurb = np.exp(-0.5*sf*(2*np.pi*1e-9/freq.wvl[j])**2)
+            otfTot  = fft.fftshift(otfTurb * otfStat,axes=(0,1))
+            
+            # GET THE FINAL PSF
+            psf = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
+            # managing the undersampling
+            if freq.samp[j] <1: 
+                psf = interpolateSupport(psf,round(ao.tel.resolution*2*freq.samp[j]).astype('int'))
+            if nPix != freq.nOtf:
+                psf = cropSupport(psf,freq.nOtf/nPix)   
+
+            PSF[:,:,:,j] = psf * F[:,j]
+                
+            # STREHL-RATIO COMPUTATION
+            SR[:,j] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
+            
+        return np.squeeze(PSF)+bkg, SR
+    
 #%%  IMAGE PROCESSING
         
 def cropSupport(im,n):    

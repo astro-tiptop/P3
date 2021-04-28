@@ -718,12 +718,23 @@ class aoSystem():
         nrad  = np.array(range(nMin,nMax))
         self.wfe['HO Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.holoop['bandwidth'])\
                                     * Dr053 * np.sum((nrad+1)**(-2/3)))
-        # Noise errors
-        self.wfe['HO Noise'] = rad2nm(np.mean(self.wfs.NoiseVariance(self.atm.r0 ,self.atm.wvl)))
+        # Noise errors        
+        if self.wfs.processing.noiseVar == [None]:
+            varNoise = self.wfs.NoiseVariance(self.atm.r0 ,self.atm.wvl)
+        else:
+            varNoise = self.wfs.processing.noiseVar
+            
+        self.wfe['HO Noise'] = rad2nm(np.mean(varNoise))
         
         if hasattr(self.rtc,'ttloop') and self.tts !=None:
             self.wfe['TT Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.ttloop['bandwidth'])* Dr053 * 2**(-2/3))
-            self.wfe['TT Noise']     = rad2nm(np.mean(self.tts.NoiseVariance(self.atm.r0 ,self.atm.wvl)))
+            
+            if self.wfs.processing.noiseVar == [None]:
+                varNoise = self.tts.NoiseVariance(self.atm.r0 ,self.atm.wvl)
+            else:
+                varNoise = self.tts.processing.noiseVar
+            
+            self.wfe['TT Noise']     = rad2nm(np.mean(varNoise))
         else:
             self.wfe['TT Servo-lag'] = 0
             self.wfe['TT Noise'] = 0

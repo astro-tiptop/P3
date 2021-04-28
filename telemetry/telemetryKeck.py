@@ -87,38 +87,86 @@ class telemetryKeck:
         self.ngs.azimuth = [0.0]
         # LGS
         self.lgs = structtype()
-        self.lgs.height = 90e3
         self.lgs.zenith = [0.0]
         self.lgs.azimuth = [0.0]
+        self.lgs.height = 90e3
+
         # wfs
-        self.wfs = structtype()  
-        self.wfs.nSubap = [20]
-        self.wfs.nSl    = [608] # Number of slopes measurements within the pupil (x and y)
-        self.wfs.theta  = [90]
-        self.wfs.ron    = 3.0
+        self.wfs             = structtype()  
+        self.wfs.type        = 'Shack-Hartmann'
+        self.wfs.modulation  = None
         self.wfs.pixel_scale = 800
-        self.wfs.fov = 3200
+        self.wfs.fov         = 3200
+        self.wfs.binning     = 1
+        self.wfs.nph         = None
+        self.wfs.spot_fwhm   = [[0.0,0.0,0.0]]
+        self.wfs.bw          = 0.0
+        self.wfs.tr          = [1.0]
+        self.wfs.disp        = [[0.0],[0.0]]
+        self.wfs.ron         = 3.0
+        self.wfs.dark        = 0.0
+        self.wfs.sky         = 0.0
+        self.wfs.gain        = 1.0
+        self.wfs.excess      = 1.0
+        self.wfs.nSubap      = [20]
+        self.wfs.dsub        = [0.5625]
+        self.wfs.noiseVar    = [None]
+        self.wfs.algo        = 'cog'
+        self.wfs.win         = 2.0
+        self.wfs.thres       = 0.0
+        self.wfs.new         = 0.0
+        self.wfs.nSl         = [608] # Number of slopes measurements within the pupil (x and y)
+        self.wfs.theta       = [90]
+        
         # tipTilt
-        self.tipTilt = structtype()
-        self.tipTilt.tilt2meter = 12.68e-6 # arcsec of tilt to OPD over the Keckpupil 
-        self.tipTilt.ron    = 3.0
+        self.tipTilt             = structtype()
+        self.tipTilt.tilt2meter  = 12.68e-6 # arcsec of tilt to OPD over the Keckpupil 
+        self.tipTilt.pixel_scale = 800
+        self.tipTilt.fov         = 3200
+        self.tipTilt.binning     = 1
+        self.tipTilt.nph         = None
+        self.tipTilt.spot_fwhm   = [[0.0,0.0,0.0]]
+        self.tipTilt.bw          = 0.0
+        self.tipTilt.tr          = [1.0]
+        self.tipTilt.disp        = [[0.0],[0.0]]
+        self.tipTilt.ron         = 3.0
+        self.tipTilt.dark        = 0.0
+        self.tipTilt.sky         = 0.0
+        self.tipTilt.gain        = 1.0
+        self.tipTilt.excess      = 1.0
+        self.tipTilt.nSubap      = [1]
+        self.tipTilt.dsub        = [10.5]
+        self.tipTilt.noiseVar    = [None]
+        self.tipTilt.algo        = 'cog'
+        self.tipTilt.win         = 2.0
+        self.tipTilt.thres       = 0.0
+        self.tipTilt.new         = 0.0
+        
         # dm
-        self.dm = structtype()
+        self.dm              = structtype()
         self.dm.volt2meter   = 0.6e-6 # conversion factor from volts to meter OPD
         self.dm.nActuators   = [21]     # 1D Number of actuators                                            
         self.dm.nCom         = [349]   # Number of total actuators within the pupil
         self.dm.pitch        = [0.5625]
         self.dm.mechCoupling = [0.11]
         self.dm.heights      = [0.0]
-        self.dm.modes        = 'xinetics'
-        #self.dm.resolution   = 2*self.dm.nActuators-1
-        self.dm.condmax      = 1e2
+        self.dm.modes        = 'xinetics'        
+        self.dm.opt_cond     = 1e2
+        self.dm.opt_zen      = [0.0]
+        self.dm.opt_azi      = [0.0]
+        self.dm.opt_weight   = [1.0]
+        self.dm.nrec         = 7
+        self.dm.area         = 'circle'
+        
         # cam
         self.cam = structtype()
+        
         # rec
         self.rec = structtype()
+        
         # mat
         self.mat = structtype()
+        
         # holoop
         self.holoop = structtype()
         self.holoop.tf = structtype()
@@ -193,7 +241,7 @@ class telemetryKeck:
             dm = deformableMirror(self.dm.nActuators,self.dm.pitch,heights=self.dm.heights\
                                   ,mechCoupling=self.dm.mechCoupling,modes=self.dm.modes)
             self.mat.dmIF     = dm.setInfluenceFunction(self.tel.resolution)
-            self.mat.dmIF_inv = np.linalg.pinv(self.mat.dmIF,rcond=1/self.dm.condmax)
+            self.mat.dmIF_inv = np.linalg.pinv(self.mat.dmIF,rcond=1/self.dm.opt_cond)
             self.mat.Hdm      = np.matmul(self.mat.dmIF,self.mat.dmIF_inv)
         
         #3\ MASS/DIMM

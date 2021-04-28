@@ -137,7 +137,7 @@ class psfR:
         Cao  =  np.matmul(du.T,du)/du.shape[0]
        
         # Unbiasing noise and accounting for the wave number
-        Cao = (2*np.pi/self.freq.wvlRef)**2 * (Cao + self.trs.wfs.Cn_ao)
+        Cao = (2*np.pi/self.freq.wvlRef)**2 * (Cao - self.trs.wfs.Cn_ao)
         
         # Computing the phase structure function
         _,dphi_ao = psfrUtils.modes2Otf(Cao,self.trs.mat.dmIF,self.ao.tel.pupil,self.freq.nOtf,basis=basis,samp=self.freq.sampRef/2)
@@ -170,20 +170,30 @@ class psfR:
         otfPixel = np.sinc(self.freq.U_/2)* np.sinc(self.freq.V_/2)
         return otfPixel
 
-
+    def TotalPhaseStructureFunction(self,r0,gho,gtt,Cn2=[]):
+        # On-axis phase structure function
+        SF   = gho*self.dphi_ao + gtt*self.dphi_tt + r0**(-5/3) * (self.dphi_fit + self.dphi_alias)
+        # Anisoplanatism phase structure function
+        if self.freq.isAniso and (len(Cn2) == self.freq.dani_ang.shape[1]):
+            SF = SF[:,:,np.newaxis] + (self.freq.dphi_ani * Cn2).sum(axis=2)
+        else:
+            SF = np.repeat(SF[:,:,np.newaxis],self.ao.src.nSrc,axis=2)
+        return SF/(2*np.pi*1e-9/self.freq.wvlRef)**2
+    
     def __call__(self,x0,nPix=None):
         
-        if nPix == None:
-            nPix = self.freq.nPix
-        psf = np.zeros((self.ao.src.nSrc,nPix,nPix))
+#        if nPix == None:
+#            nPix = self.freq.nPix
+#        psf = np.zeros((self.ao.src.nSrc,nPix,nPix))
         
-        # GETTING THE PARAMETERS
+        # ----------------- GETTING THE PARAMETERS
         # Cn2 profile
         nL   = self.ao.atm.nL
         if nL > 1: # fit the Cn2 profile
             Cn2  = np.asarray(x0[0:nL])
             r0   = np.sum(Cn2)**(-3/5)
         else: #fit the r0
+            Cn2= []
             r0 = x0[0]
             
         # PSD
@@ -191,46 +201,68 @@ class psfR:
         gtt = x0[nL+1]
         
         # Astrometry/Photometry/Background
-        x0_stellar = list(x0[nL+2:nL+4+3*self.ao.src.nSrc])
+        x0_stellar = np.array(x0[nL+2:nL+4+3*self.ao.src.nSrc])
+        if len(x0_stellar):
+            F  = x0_stellar[0:self.ao.src.nSrc][:,np.newaxis] * np.array(self.trs.cam.transmission)[np.newaxis,:]
+            dx = x0_stellar[self.ao.src.nSrc:2*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
+            dy = x0_stellar[2*self.ao.src.nSrc:3*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
+            bkg= x0_stellar[3*self.ao.src.nSrc]
+        else:
+            F  = np.repeat(np.array(self.ao.cam.transmittance)[np.newaxis,:],self.ao.src.nSrc,axis=0)
+            dx = np.repeat(np.array(self.ao.cam.dispersion[0])[np.newaxis,:],self.ao.src.nSrc,axis=0)
+            dy = np.repeat(np.array(self.ao.cam.dispersion[1])[np.newaxis,:],self.ao.src.nSrc,axis=0)
+            bkg= 0.0
+            
         # Static aberrations
         if len(x0) > nL + 2 + 3*self.ao.src.nSrc + 1:
             x0_stat = list(x0[nL+3+3*self.ao.src.nSrc:])
         else:
             x0_stat = []   
-            
-        # INSTRUMENTAL OTF
-        if len(x0_stat) or self.freq.nWvl > 1:
-            self.otfStat, _, self.phaseMap = FourierUtils.getStaticOTF(\
-                self.ao.tel,self.freq.nOtf,self.freq.sampRef,self.freq.wvlRef,xStat=x0_stat)
-        else:
-            self.otfStat = self.freq.otfNCPA
-                            
-        self.dphi   = gho*self.dphi_ao + gtt*self.dphi_tt + r0**(-5/3) * (self.dphi_fit + self.dphi_alias)
+         
+        # ----------------- GETTING THE PHASE STRUCTURE FUNCTION    
+        self.SF = self.TotalPhaseStructureFunction(r0,gho,gtt,Cn2=Cn2)
         
-        for iSrc in range(self.ao.src.nSrc): # LOOP ON SOURCES
-            # Stellar parameters
-            if len(x0_stellar):
-                F   = x0_stellar[iSrc] * self.trs.cam.transmission
-                dx  = x0_stellar[iSrc + self.ao.src.nSrc] + self.trs.cam.dispersion[0][iSrc]
-                dy  = x0_stellar[iSrc + 2*self.ao.src.nSrc] + self.trs.cam.dispersion[1][iSrc]
-                bkg = x0_stellar[3*self.ao.src.nSrc]
-            else:
-                F   = self.trs.cam.transmission
-                dx  = self.trs.cam.dispersion[0][iSrc]
-                dy  = self.trs.cam.dispersion[1][iSrc]
-                bkg = 0.0
-                
-            # Phasor
-            if dx !=0 or dy!=0:
-                fftPhasor = np.exp(np.pi*complex(0,1)*(self.freq.U_*dx + self.freq.V_*dy))
-            else:
-                fftPhasor = 1
-                        
-            # Get the total OTF
-            self.otfTot = self.otfStat * np.exp(-0.5*(self.dphi + self.dphi_ani[iSrc])) * fftPhasor * self.otfPixel
+        # ----------------- COMPUTING THE PSF
+        PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
+                        F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel)
+        return PSF
     
-            # Get the PSF
-            psf_i = np.real(fft.fftshift(fft.ifft2(fft.fftshift(self.otfTot))))
-            psf[iSrc] = F*psf_i/psf_i.sum()
-
-        return np.squeeze(psf) + bkg        
+    #old : array([ 7.30271939e-01,  1.00000000e+00,  0.00000000e+00,  1.56859195e+00,
+    # 9.06751275e-01,  1.49738420e+00, -5.12759949e-06])
+        
+#        # INSTRUMENTAL OTF
+#        if len(x0_stat) or self.freq.nWvl > 1:
+#            self.otfStat, _, self.phaseMap = FourierUtils.getStaticOTF(\
+#                self.ao.tel,self.freq.nOtf,self.freq.sampRef,self.freq.wvlRef,xStat=x0_stat)
+#        else:
+#            self.otfStat = self.freq.otfNCPA
+#                            
+#        self.dphi   = gho*self.dphi_ao + gtt*self.dphi_tt + r0**(-5/3) * (self.dphi_fit + self.dphi_alias)
+#        
+#        for iSrc in range(self.ao.src.nSrc): # LOOP ON SOURCES
+#            # Stellar parameters
+#            if len(x0_stellar):
+#                F   = x0_stellar[iSrc] * self.trs.cam.transmission
+#                dx  = x0_stellar[iSrc + self.ao.src.nSrc] + self.trs.cam.dispersion[0][iSrc]
+#                dy  = x0_stellar[iSrc + 2*self.ao.src.nSrc] + self.trs.cam.dispersion[1][iSrc]
+#                bkg = x0_stellar[3*self.ao.src.nSrc]
+#            else:
+#                F   = self.trs.cam.transmission
+#                dx  = self.trs.cam.dispersion[0][iSrc]
+#                dy  = self.trs.cam.dispersion[1][iSrc]
+#                bkg = 0.0
+#                
+#            # Phasor
+#            if dx !=0 or dy!=0:
+#                fftPhasor = np.exp(np.pi*complex(0,1)*(self.freq.U_*dx + self.freq.V_*dy))
+#            else:
+#                fftPhasor = 1
+#                        
+#            # Get the total OTF
+#            self.otfTot = self.otfStat * np.exp(-0.5*(self.dphi + self.dphi_ani[iSrc])) * fftPhasor * self.otfPixel
+#    
+#            # Get the PSF
+#            psf_i = np.real(fft.fftshift(fft.ifft2(fft.fftshift(self.otfTot))))
+#            psf[iSrc] = F*psf_i/psf_i.sum()
+#
+#        return np.squeeze(psf) + bkg        

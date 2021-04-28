@@ -145,7 +145,11 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
         result.opd = (psfModelInst.ao.tel.statModes*result.x[-nModes:]).sum(axis=2)
     
     # 95% confidence interval
-    result.xerr   = mini2input(confidence_interval(result.fun,result.jac),forceZero=True)
+    try:
+        result.xerr = mini2input(confidence_interval(result.fun,result.jac),forceZero=True)
+    except:
+        print('Identification of the confidence interval failed ')
+        result.xerr = []
     
     return result
 

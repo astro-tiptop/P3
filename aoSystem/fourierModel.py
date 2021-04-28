@@ -121,7 +121,10 @@ class fourierModel:
                 
             # COMPUTE THE PSD
             self.PSD = self.powerSpectrumDensity()
-                
+            
+            # COMPUTE THE PHASE STRUCTURE FUNCTION
+            self.SF  = self.phaseStructureFunction()
+            
             # COMPUTE THE PSF
             if calcPSF:
                 self.PSF, self.SR = self.pointSpreadFunction(verbose=verbose,fftphasor=fftphasor)
@@ -733,7 +736,13 @@ class fourierModel:
         self.t_chromatismPSD = 1000*(time.time() - tstart)
         return psd
     
-    
+    def phaseStructureFunction(self):
+       '''
+           GET THE AO RESIDUAL PHASE STRUCTURE FUNCTION   
+       '''
+       cov = fft.fftshift(fft.fftn(fft.fftshift(self.PSD,axes=(0,1)),axes=(0,1)),axes=(0,1))
+       return 2*np.real(cov.max(axis=(0,1)) - cov)
+       
 #%% AO ERROR BREAKDOWN
     def errorBreakDown(self,verbose=True):
         """ AO error breakdown from the PSD integrals
@@ -837,77 +846,79 @@ class fourierModel:
             dy      = x0[3+2*self.ao.src.nSrc:3+3*self.ao.src.nSrc] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
             bkg     = x0[3+3*self.ao.src.nSrc]
             
-        if nPix == None:
-            nPix = self.freq.nOtf
-         
-        PSF = np.zeros((nPix,nPix,self.ao.src.nSrc,self.freq.nWvl))
-        SR  = np.zeros((self.ao.src.nSrc,self.freq.nWvl))
-     
-        # GET THE AO RESIDUAL PHASE STRUCTURE FUNCTION    
-        cov = fft.fftshift(fft.fftn(fft.fftshift(self.PSD,axes=(0,1)),axes=(0,1)),axes=(0,1))
-        self.sf  = 2*np.real(cov.max(axis=(0,1)) - cov)
-        
-        # DEFINING THE RESIDUAL JITTER KERNEL
-        if jitterX!=0 or jitterY!=0:        
-            # Gaussian kernel
-            # note 1 : Umax = self.samp*self.tel.D/self.wvlRef/(3600*180*1e3/np.pi) = 1/(2*psInMas)
-            # note 2 : the 1.16 factor is needed to get FWHM=jitter for jitter-limited PSF; needed to be figured out
-            Umax         = self.freq.samp*self.ao.tel.D/self.freq.wvl/(3600*180*1e3/np.pi)
-            ff_jitter    = 1.16
-            normFact     = ff_jitter*np.max(Umax)**2 *(2 * np.sqrt(2*np.log(2)))**2 #1.16
-            Djitter      = normFact * (jitterX**2 * self.freq.U2_  + jitterY**2 * self.freq.V2_ + 2*jitterXY *self.freq.UV_)
-            self.Kjitter = np.exp(-0.5 * Djitter)
-        else:
-            self.Kjitter = 1
+        PSF, SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
+                                      jitterX=jitterX,jitterY=jitterY,jitterXY=jitterXY,\
+                                      F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix)
+#        if nPix == None:
+#            nPix = self.freq.nOtf
+#         
+#        PSF = np.zeros((nPix,nPix,self.ao.src.nSrc,self.freq.nWvl))
+#        SR  = np.zeros((self.ao.src.nSrc,self.freq.nWvl))
+#     
+#        
+#        
+#        # DEFINING THE RESIDUAL JITTER KERNEL
+#        if jitterX!=0 or jitterY!=0:        
+#            # Gaussian kernel
+#            # note 1 : Umax = self.samp*self.tel.D/self.wvlRef/(3600*180*1e3/np.pi) = 1/(2*psInMas)
+#            # note 2 : the 1.16 factor is needed to get FWHM=jitter for jitter-limited PSF; needed to be figured out
+#            Umax         = self.freq.samp*self.ao.tel.D/self.freq.wvl/(3600*180*1e3/np.pi)
+#            ff_jitter    = 1.16
+#            normFact     = ff_jitter*np.max(Umax)**2 *(2 * np.sqrt(2*np.log(2)))**2 #1.16
+#            Djitter      = normFact * (jitterX**2 * self.freq.U2_  + jitterY**2 * self.freq.V2_ + 2*jitterXY *self.freq.UV_)
+#            self.Kjitter = np.exp(-0.5 * Djitter)
+#        else:
+#            self.Kjitter = 1
+#            
+#        # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
+#        if fftphasor:
+#            # shift by half a pixel
+#            self.fftPhasor = np.exp(np.pi*complex(0,1)*(dx*self.freq.U_ + dy*self.freq.V_))
+#        else:
+#            self.fftPhasor = 1
+#
+#        # LOOP ON WAVELENGTHS   
+#        for j in range(self.freq.nWvl):
+#            
+#            # UPDATE THE INSTRUMENTAL OTF
+#            if np.any(self.ao.tel.opdMap_ext != None) and self.freq.nWvl>1:
+#                self.freq.otfNCPA, self.freq.otfDL, _ = FourierUtils.getStaticOTF(self.ao.tel,\
+#                                                        int(self.freq.nPix*self.freq.k_[j]),\
+#                                                        self.freq.samp[j],self.freq.wvl[j])
+#                
+#            # UPDATE THE RESIDUAL JITTER
+#            if self.freq.shannon == True and self.freq.nWvl > 1 and (np.any(self.ao.cam.detector.spotFWHM)):
+#                normFact2    = ff_jitter*(self.freq.samp[j]*self.ao.tel.D/self.freq.wvl[j]/(3600*180*1e3/np.pi))**2  * (2 * np.sqrt(2*np.log(2)))**2
+#                self.Kjitter = np.exp(-0.5 * Djitter * normFact2/normFact)    
+#                          
+#            # OTF MULTIPLICATION
+#            otfStat = self.freq.otfNCPA * self.fftPhasor * self.Kjitter    
+#            otfStat = np.repeat(otfStat[:,:,np.newaxis],self.ao.src.nSrc,axis=2)      
+#            otfTurb = np.exp(-0.5*self.sf*(2*np.pi*1e-9/self.freq.wvl[j])**2)
+#            otfTot  = fft.fftshift(otfTurb * otfStat,axes=(0,1))
+#            
+#            # GET THE FINAL PSF
+#            psf = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
+#            # managing the undersampling
+#            if self.freq.samp[j] <1: 
+#                psf = FourierUtils.interpolateSupport(psf,round(self.ao.tel.resolution*2*self.freq.samp[j]).astype('int'))
+#            if nPix != self.freq.nOtf:
+#                psf = FourierUtils.cropSupport(psf,self.freq.nOtf/nPix)   
+#
+#            PSF[:,:,:,j] = psf/psf.sum() * F[np.newaxis,np.newaxis,np.newaxis,j]
+#                
+#            # STREHL-RATIO COMPUTATION
+#            SR[:,j] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(self.freq.otfDL.sum())
+#        PSF += bkg
             
-        # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
-        if fftphasor:
-            # shift by half a pixel
-            self.fftPhasor = np.exp(np.pi*complex(0,1)*(dx*self.freq.U_ + dy*self.freq.V_))
-        else:
-            self.fftPhasor = 1
-
-        # LOOP ON WAVELENGTHS   
-        for j in range(self.freq.nWvl):
-            
-            # UPDATE THE INSTRUMENTAL OTF
-            if np.any(self.ao.tel.opdMap_ext != None) and self.freq.nWvl>1:
-                self.freq.otfNCPA, self.freq.otfDL, _ = FourierUtils.getStaticOTF(self.ao.tel,\
-                                                        int(self.freq.nPix*self.freq.k_[j]),\
-                                                        self.freq.samp[j],self.freq.wvl[j])
-                
-            # UPDATE THE RESIDUAL JITTER
-            if self.freq.shannon == True and self.freq.nWvl > 1 and (np.any(self.ao.cam.detector.spotFWHM)):
-                normFact2    = ff_jitter*(self.freq.samp[j]*self.ao.tel.D/self.freq.wvl[j]/(3600*180*1e3/np.pi))**2  * (2 * np.sqrt(2*np.log(2)))**2
-                self.Kjitter = np.exp(-0.5 * Djitter * normFact2/normFact)    
-                          
-            # OTF MULTIPLICATION
-            otfStat = self.freq.otfNCPA * self.fftPhasor * self.Kjitter    
-            otfStat = np.repeat(otfStat[:,:,np.newaxis],self.ao.src.nSrc,axis=2)      
-            otfTurb = np.exp(-0.5*self.sf*(2*np.pi*1e-9/self.freq.wvl[j])**2)
-            otfTot  = fft.fftshift(otfTurb * otfStat,axes=(0,1))
-            
-            # GET THE FINAL PSF
-            psf = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
-            # managing the undersampling
-            if self.freq.samp[j] <1: 
-                psf = FourierUtils.interpolateSupport(psf,round(self.ao.tel.resolution*2*self.samp[j]).astype('int'))
-            if nPix != self.freq.nOtf:
-                psf = FourierUtils.cropSupport(psf,self.freq.nOtf/nPix)   
-
-            PSF[:,:,:,j] = psf/psf.sum() * F[np.newaxis,np.newaxis,np.newaxis,j]
-                
-            # STREHL-RATIO COMPUTATION
-            SR[:,j] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(self.freq.otfDL.sum())
-
         self.t_getPSF = 1000*(time.time() - tstart)
         
-        return PSF+bkg, SR
+        return PSF, SR
 
     def __call__(self,x0,nPix=None):
         
         psf,_ = self.pointSpreadFunction(x0=x0,nPix=nPix,verbose=False,fftphasor=True)
-        return psf[:,:,0,0]    
+        return psf#[:,:,0,0]    
     
     
   #%% METRICS COMPUTATION

@@ -64,8 +64,9 @@ def getScale(hdr):
         return None
 
 def getPA(hdr):
-    theta = float(hdr['ROTPOSN']) - float(hdr['EL']) - getInstAngle(hdr)
-    return 90 + theta
+    #theta = float(hdr['ROTPOSN']) - float(hdr['EL']) - getInstAngle(hdr)
+    theta = float(hdr['ROTPOSN']) - getInstAngle(hdr)
+    return theta
 
 def getPupilMask(hdr):    
     return hdr['PMSNAME']

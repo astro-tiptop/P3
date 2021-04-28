@@ -105,8 +105,8 @@ def AnisokinetismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp):
     from aoSystem.zernike import zernike
 
     zern = zernike([2,3],nOtf)
-    X    = zern.modes[0]
-    Y    = zern.modes[1]
+    X    = zern.modes[0]/4
+    Y    = zern.modes[1]/4
     X2   = X**2
     Y2   = Y**2
     XY   = X*Y.T

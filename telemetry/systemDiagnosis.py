@@ -39,7 +39,8 @@ class systemDiagnosis:
         
         # noise
         self.noiseMethod = noiseMethod
-        self.trs.wfs.nph,self.trs.wfs.ron,self.trs.tipTilt.nph,self.trs.tipTilt.ron = self.GetNumberPhotons()
+        if hasattr(self.trs.wfs,'intensity'):
+            self.trs.wfs.nph,self.trs.wfs.ron,self.trs.tipTilt.nph,self.trs.tipTilt.ron = self.GetNumberPhotons()
         self.trs.wfs.Cn_ao,self.trs.tipTilt.Cn_tt = self.GetNoiseVariance(noiseMethod=self.noiseMethod,nshift=nshift,nfit=nfit)
         
         # GET THE VARIANCE
@@ -116,21 +117,17 @@ class systemDiagnosis:
         nExp, nS, _ = self.trs.wfs.intensity.shape
         maps = self.trs.wfs.intensity.reshape((nExp,nS**2))
         if np.any(maps):
-            pixInt = np.sort(maps,axis=1)
+            pixInt = np.sort(maps/self.trs.wfs.gain ,axis=1)
             nSl_c  = np.count_nonzero(self.trs.mat.R[100,:,0])
             pixCog = pixInt[:,-nSl_c//2:]
-            nph = np.mean(pixCog*self.trs.holoop.freq/self.trs.dm.pitch[0]**2) # in ADU/m2/s
-            
+            nph = np.mean(pixCog) # in photo-events/frame/subap            
             # Read-out noise estimation
-            tmp = np.mean(pixInt,axis=0)
-            tmp2= tmp[tmp>0]
-            idx = tmp2.argmin() #find(tmp2 == min(tmp2))
-            idx2 = np.argwhere(tmp == tmp2[idx])
-            ron  = np.std(pixInt[idx2,:]) #in ADU    
+            ron = np.median(np.std(pixCog,axis=0))
+ 
         
         if self.trs.aoMode == 'LGS':
-              nph = np.mean(self.trs.tipTilt.intensity)/self.trs.tel.D*self.trs.ttloop.freq# % in ADU/m2/s
-              ron = np.std(self.trs.tipTilt.intensity)
+              nph = np.mean(self.trs.tipTilt.intensity/self.trs.tipTilt.gain)
+              ron = np.std(self.trs.tipTilt.intensity/self.trs.tipTilt.gain)
         else:
             nph_tt = nph
             ron_tt =ron
@@ -193,19 +190,6 @@ class systemDiagnosis:
             Cn_ao = 0
             Cn_tt = 0
             
-        if noiseMethod == 'theoretical':
-            
-            # Noise variance in pix^2
-            psInRad = arc2rad*self.trs.wfs.pixelScale/1e3
-            varPix = (4*np.pi**2*(self.trs.wfs.ron/self.trs.wfs.nph)**2 + np.pi**2/self.trs.wfs.nph )*(self.trs.wfs.wavelength/(2*np.pi*self.trs.dm.pitch*psInRad))**2
-            #Propagation through the reconstructor    
-            Cn_ao = varPix*self.trs.mat.R*self.trs.mat.R.T    
-            #tip-tilt
-            if self.trs.aoMode == 'LGS':
-                varPix_tt = (4*np.pi**2*(self.trs.tipTilt.ron/self.trs.tipTilt.nph)**2 + np.pi**2/self.trs.tipTilt.nph )*(self.trs.tipTilt.wavelength/(2*np.pi*self.trs.tel.D*psInRad))**2
-                Cn_tt     = varPix_tt*self.trs.mat.Rtt*self.trs.mat.Rtt.T
-            else:
-                Cn_tt = 0
         else:
             rtf  = self.trs.holoop.tf.ctf/self.trs.holoop.tf.wfs
             Cn_ao = SlopesToNoise(self.trs.dm.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit,rtf=rtf)
