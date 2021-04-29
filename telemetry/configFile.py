@@ -163,17 +163,16 @@ class configFile():
         parser.set('sensor_science','PixelScale', str(sysdiag.trs.cam.psInMas))
         parser.set('sensor_science','SigmaRON', str(sysdiag.trs.cam.ron))
         parser.set('sensor_science','Gain', str(sysdiag.trs.cam.gain))
-        if len(sysdiag.trs.cam.wvl) > 1:
-            parser.set('sensor_science','Transmittance', str(sysdiag.trs.cam.transmission))
-            parser.set('sensor_science','SpectralBandwidth', str(sysdiag.trs.cam.bw))
-            parser.set('sensor_science','Dispersion', str(sysdiag.trs.cam.dispersion))
+        parser.set('sensor_science','Transmittance', str(sysdiag.trs.cam.transmission))
+        parser.set('sensor_science','SpectralBandwidth', str(sysdiag.trs.cam.bw))
+        parser.set('sensor_science','Dispersion', str(sysdiag.trs.cam.dispersion))
        
         # jitter
         Cj = np.sqrt(np.dot(sysdiag.trs.tipTilt.slopes.T,sysdiag.trs.tipTilt.slopes)/sysdiag.trs.tipTilt.slopes.shape[0])
         Cj*= 1000/sysdiag.trs.tipTilt.tilt2meter
         psInMas = sysdiag.trs.cam.psInMas 
         #1 mas = rad2mas * 4/D * 1e-9 * 1nm
-        parser.set('sensor_science','spotFWHM', str([[np.hypot(Cj[1,1],psInMas/2), np.hypot(Cj[0,0],psInMas/2), np.hypot(Cj[0,1],psInMas/2)]]))
+        parser.set('sensor_science','SpotFWHM', str([[np.hypot(Cj[1,1],psInMas/2), np.hypot(Cj[0,0],psInMas/2), np.hypot(Cj[0,1],psInMas/2)]]))
         
         with open(self.path_ini, 'w') as configfile:
             parser.write(configfile)

@@ -190,7 +190,8 @@ class telemetryKeck:
         self.tel.pupilMaskName= keckUtils.getPupilMask(hdr)
         _,self.aoMode         = keckUtils.getStagePositionWFS(hdr)        
         self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_largeHex_272px.fits'
-        self.tel.path_telstat = self.path_calib + '/KECK_STAT/keck_piston_modes_200px_all_lr.fits'
+        self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_open2_240px.fits'
+        self.tel.path_telstat = self.path_calib + '/KECK_STAT/keck_piston_modes_200px.fits'
         
         # 3\ Restore the instrument configuration
         self.cam.name = keckUtils.getInstName(hdr)

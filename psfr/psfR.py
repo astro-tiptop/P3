@@ -203,7 +203,7 @@ class psfR:
         # Astrometry/Photometry/Background
         x0_stellar = np.array(x0[nL+2:nL+4+3*self.ao.src.nSrc])
         if len(x0_stellar):
-            F  = x0_stellar[0:self.ao.src.nSrc][:,np.newaxis] * np.array(self.trs.cam.transmission)[np.newaxis,:]
+            F  = x0_stellar[0:self.ao.src.nSrc][:,np.newaxis] * np.array(self.ao.cam.transmittance)[np.newaxis,:]
             dx = x0_stellar[self.ao.src.nSrc:2*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
             dy = x0_stellar[2*self.ao.src.nSrc:3*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
             bkg= x0_stellar[3*self.ao.src.nSrc]
