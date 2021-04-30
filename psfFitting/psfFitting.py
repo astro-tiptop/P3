@@ -11,9 +11,10 @@ import numpy as np
 from scipy.optimize import least_squares
 import aoSystem.FourierUtils as FourierUtils
 from psfFitting.confidenceInterval import confidence_interval
+import matplotlib.pyplot as plt
 
 #%%
-def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
+def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normType=1,\
                ftol=1e-8,xtol=1e-8,gtol=1e-8,max_nfev=1000,verbose=0,getMetrics=False):
     """Fit a PSF with a parametric model solving the least-square problem
        epsilon(x) = SUM_pixel { weights * (amp * Model(x) + bck - psf)² }
@@ -33,26 +34,15 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
     fixed : numpy.ndarray
         Fix some parameters to their initial value (default: None)
     method : str or callable, optional : trf, dogbox or lm
-    tol:float, optional
-        Tolerance for termination. For detailed control, use solver-specific options.
-    options:dict, optional
-        A dictionary of solver options. All methods accept the following generic options:
-        maxiterint
-            Maximum number of iterations to perform. Depending on the method each iteration may use several function evaluations.
-        dispbool
-            Set to True to print convergence messages.
-        For method-specific options, see show_options.
-   constraints:list of dictionaries. Each dictionary with fields:
-    type:str
-        Constraint type: ‘eq’ for equality, ‘ineq’ for inequality.
-    fun:callable
-        The function defining the constraint.
-    jac:callable, optional
-        The Jacobian of fun (only for SLSQP).
-    args:sequence, optional
-        Extra arguments to be passed to the function and Jacobian.
-        Equality constraint means that the constraint function result is to be zero whereas 
-        inequality means that it is to be non-negative. Note that COBYLA only supports inequality constraints.
+    ftol, xtol, gtol:float, optional
+        Tolerance for termination on the funcion, inputs and gradient. For detailed control, use solver-specific options.
+    max_nfev : int, optionnal
+        Maximal number of function evaluation
+    verbose : int, optional
+        Print information about the fitting during the minimization
+            0 : progress bar only
+            1: number of iteration
+            2: minimization details for each iteration
         
     Returns
     -------
@@ -78,9 +68,14 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
            Value of cost function at optimum
     """
     
+    # WEIGHTS
     if weights is None: weights = np.ones_like(image)
     elif len(image)!=len(weights): raise ValueError("Keyword `weights` must have same number of elements as `psf`")
     sqW = np.sqrt(weights)
+    
+    # NORMALIZING THE IMAGE
+    im_norm,param = FourierUtils.normalizeImage(image,normType=normType)
+    
     
     # DEFINING THE COST FUNCTIONS
     class CostClass(object):
@@ -90,7 +85,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
             if (self.iter%3)==0 and (method=='lm' or verbose == 0 or verbose == 1): print("-",end="")
             self.iter += 1
             im_est = psfModelInst(mini2input(y))
-            return (sqW * (im_est - image)).reshape(-1)
+            return (sqW * (im_est - im_norm)).reshape(-1)
     cost = CostClass()   
     
     # DEFINING THE BOUNDS
@@ -125,6 +120,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
                 xall[INDFREE[i]] = y[i]
         return xall
     
+    
     # PERFORMING MINIMIZATION WITH CONSTRAINS AND BOUNDS
     if method == 'trf':
         result = least_squares(cost,input2mini(x0),method='trf',bounds=get_bounds(psfModelInst),\
@@ -134,9 +130,11 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
                                ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0))
 
     # update parameters
-    result.x      =  mini2input(result.x)
+    result.x      = mini2input(result.x)
     result.xinit  = x0
     result.im_sky = image
+    # scale fitted image
+    result.im_fit = FourierUtils.normalizeImage(psfModelInst(result.x),param=param,normType=normType)
     result        = evaluateFittingQuality(result,psfModelInst)
     
     # static map
@@ -156,11 +154,6 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',\
 
 def evaluateFittingQuality(result,psfModelInst):
     
-    # DERIVING THE OPTIMAL MODEL
-    result.im_fit = psfModelInst(result.x)
-    #result.im_fit = result.im_fit
-    #result.psf    = psfModelInst(list(result.x[0:-3]) + [1,0,0,0])
-    
     # ESTIMATING IMAGE-BASED METRICS
     def meanErrors(sky,fit):
         mse = 1e2*np.sqrt(np.sum((sky-fit)**2))/sky.sum()
@@ -175,3 +168,75 @@ def evaluateFittingQuality(result,psfModelInst):
     result.mse, result.mae , result.fvu = meanErrors(result.im_sky,result.im_fit)
     
     return result
+
+def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10abs'):
+    """
+        Displaying PSF and key metrics
+    """
+    
+    # RETRIEVING LABELS
+    psfrLabel = psfModelInst.tag
+    instLabel = psfModelInst.ao.cam.tag
+    
+    # MANAGING THE IMAGE SIZE TO BE DIPSLAYED
+    nPix  = res.im_sky.shape[0]
+    if nBox != None and nBox < nPix:
+        nCrop = nPix/nBox
+        im_sky = FourierUtils.cropSupport(res.im_sky,nCrop)
+        im_fit = FourierUtils.cropSupport(res.im_fit,nCrop)
+    else:
+        im_sky = res.im_sky
+        im_fit = res.im_fit
+    
+    im_diff= im_fit - im_sky
+    
+    # DEFINING THE FUNCTION TO APPLY
+    if scale == 'log10abs':
+        fun = lambda x: np.log10(abs(x))
+    elif scale == 'arcsinh':
+        fun = lambda x: np.arcsinh(x)
+    elif scale == 'linear':
+        fun = lambda x: x
+    else:
+        scale = 'linear'
+        print('Scale input is not recognized, go linear')
+        fun = lambda x: x
+            
+    # MANAGING THE IMAGE RANGE
+    if vmin == None:
+        if scale =='log10abs':
+            vmin = 0
+        else:
+            vmin = np.min( [np.min(fun(im_sky)), np.min(fun(im_fit))])
+    if vmax == None:
+        vmax = np.max([np.max(fun(im_sky)), np.max(fun(im_fit))])
+    
+    # IMAGES
+    plt.close('all')
+    plt.subplot(231)
+    plt.imshow(fun(im_sky),vmin=vmin,vmax=vmax)
+    plt.title(instLabel)
+    plt.colorbar()
+    plt.axis('off')
+    plt.subplot(232)
+    plt.imshow(fun(im_fit),vmin=vmin,vmax=vmax)
+    plt.title(psfrLabel)
+    plt.colorbar()
+    plt.axis('off')  
+    plt.subplot(233)
+    plt.imshow(fun(im_diff),vmin=vmin,vmax=vmax)
+    plt.title(psfrLabel+' - ' + instLabel)
+    plt.axis('off')
+    plt.colorbar()
+    
+    # AZIMUTHAL AVERAGES
+    x,prof_sky = FourierUtils.radial_profile(im_sky,pixelscale=psfModelInst.ao.cam.psInMas)
+    prof_fit   = FourierUtils.radial_profile(im_fit,nargout=1)    
+    plt.subplot(212)
+    plt.plot(x,fun(prof_sky),label=instLabel)
+    plt.plot(x,fun(prof_fit),label=psfrLabel)
+    
+    #plt.ylim([vmin,vmax])
+    plt.legend()
+    plt.ylabel('Azimuthal profile ('+ scale +'-scale)')
+    plt.xlabel('Distance from on-axis [mas]')

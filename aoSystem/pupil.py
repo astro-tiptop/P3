@@ -34,8 +34,6 @@ plt.rcParams.update({
     
 # ISSUES : 
 # case nPixels ~= 200 for the segment leads to overimposition of segments
-# no zernike class so far
-
     
 #%% CLASS DEFINITION
 

@@ -17,9 +17,7 @@ class configFile():
         # create the .ini file
         file = sysdiag.trs.tel.name + '_' + sysdiag.trs.cam.name + '_' + sysdiag.trs.obsdate + '_' + sysdiag.trs.acqtime + '.ini'
         self.path_ini = sysdiag.trs.path_save + '/'+ file
-        if not os.path.exists(self.path_ini):
-            with open(sysdiag.trs.path_ini, 'w'): pass
-        else:
+        if os.path.exists(self.path_ini):
             print('WARNING: the .ini file already exists')
 
         # open the .ini file
@@ -159,6 +157,7 @@ class configFile():
         #%% SCIENCE SOURCES AND DETECTOR    
         if not parser.has_section('sensor_science'):
             parser.add_section('sensor_science')
+        parser.set('sensor_science','Name', str('\''+sysdiag.trs.cam.name+'\''))
         parser.set('sensor_science','FiedOfView', str(sysdiag.trs.cam.fov))
         parser.set('sensor_science','PixelScale', str(sysdiag.trs.cam.psInMas))
         parser.set('sensor_science','SigmaRON', str(sysdiag.trs.cam.ron))

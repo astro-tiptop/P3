@@ -40,7 +40,7 @@ class psfR:
         self.trs       = trs
         self.theta_ext = theta_ext
         self.ao        = aoSystem(self.path_ini)
-        
+        self.tag       = 'PSF-R'
         if self.ao.error == False:
             
             # DEFINING THE FREQUENCY DOMAIN
@@ -181,11 +181,7 @@ class psfR:
         return SF/(2*np.pi*1e-9/self.freq.wvlRef)**2
     
     def __call__(self,x0,nPix=None):
-        
-#        if nPix == None:
-#            nPix = self.freq.nPix
-#        psf = np.zeros((self.ao.src.nSrc,nPix,nPix))
-        
+                
         # ----------------- GETTING THE PARAMETERS
         # Cn2 profile
         nL   = self.ao.atm.nL
@@ -226,43 +222,3 @@ class psfR:
         PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
                         F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel)
         return PSF
-    
-    #old : array([ 7.30271939e-01,  1.00000000e+00,  0.00000000e+00,  1.56859195e+00,
-    # 9.06751275e-01,  1.49738420e+00, -5.12759949e-06])
-        
-#        # INSTRUMENTAL OTF
-#        if len(x0_stat) or self.freq.nWvl > 1:
-#            self.otfStat, _, self.phaseMap = FourierUtils.getStaticOTF(\
-#                self.ao.tel,self.freq.nOtf,self.freq.sampRef,self.freq.wvlRef,xStat=x0_stat)
-#        else:
-#            self.otfStat = self.freq.otfNCPA
-#                            
-#        self.dphi   = gho*self.dphi_ao + gtt*self.dphi_tt + r0**(-5/3) * (self.dphi_fit + self.dphi_alias)
-#        
-#        for iSrc in range(self.ao.src.nSrc): # LOOP ON SOURCES
-#            # Stellar parameters
-#            if len(x0_stellar):
-#                F   = x0_stellar[iSrc] * self.trs.cam.transmission
-#                dx  = x0_stellar[iSrc + self.ao.src.nSrc] + self.trs.cam.dispersion[0][iSrc]
-#                dy  = x0_stellar[iSrc + 2*self.ao.src.nSrc] + self.trs.cam.dispersion[1][iSrc]
-#                bkg = x0_stellar[3*self.ao.src.nSrc]
-#            else:
-#                F   = self.trs.cam.transmission
-#                dx  = self.trs.cam.dispersion[0][iSrc]
-#                dy  = self.trs.cam.dispersion[1][iSrc]
-#                bkg = 0.0
-#                
-#            # Phasor
-#            if dx !=0 or dy!=0:
-#                fftPhasor = np.exp(np.pi*complex(0,1)*(self.freq.U_*dx + self.freq.V_*dy))
-#            else:
-#                fftPhasor = 1
-#                        
-#            # Get the total OTF
-#            self.otfTot = self.otfStat * np.exp(-0.5*(self.dphi + self.dphi_ani[iSrc])) * fftPhasor * self.otfPixel
-#    
-#            # Get the PSF
-#            psf_i = np.real(fft.fftshift(fft.ifft2(fft.fftshift(self.otfTot))))
-#            psf[iSrc] = F*psf_i/psf_i.sum()
-#
-#        return np.squeeze(psf) + bkg        

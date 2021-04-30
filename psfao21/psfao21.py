@@ -30,8 +30,8 @@ class psfao21:
         self.file      = path_ini
         self.antiAlias = antiAlias
         self.ao        = aoSys(path_ini)    
-        self.isStatic = self.ao.tel.nModes > 0
-        
+        self.isStatic  = self.ao.tel.nModes > 0
+        self.tag       = 'PSFAO21'
         if self.ao.error==False:
             
             # DEFINING THE FREQUENCY DOMAIN
@@ -103,21 +103,17 @@ class psfao21:
         
     def __call__(self,x0,nPix=None):
         
-        # INSTANTIATING
-#        if nPix == None:
-#            nPix = self.freq.nPix
-#        psf = np.zeros((self.ao.src.nSrc,nPix,nPix))
-        
         # ----------------- GETTING THE PARAMETERS
         xall = x0       
         # Cn2 profile
         nL   = self.ao.atm.nL
-        if nL > 1: # fit the Cn2 profile
+        if nL > 1 and self.ao.dms.nRecLayers > 1: # fit the Cn2 profile
             Cn2  = np.asarray(x0[0:nL])
             r0   = np.sum(Cn2)**(-3/5)
         else: #fit the r0
             Cn2= []
             r0 = x0[0]
+            nL = 1
             
         # PSD
         x0_psd = list(xall[nL:nL+6])
@@ -146,10 +142,6 @@ class psfao21:
         self.psd = self.getPSD([r0]+ x0_psd)
         if self.antiAlias:
             	self.psd = np.pad(self.psd,(self.freq.nOtf//2,self.freq.nOtf//2)) 
-#        #covariance map
-#        Bphi  = fft.fft2(fft.fftshift(self.psd)) / (self.ao.tel.D * self.freq.sampRef)**2       
-#        # phase structure function
-#        self.SF   = fft.fftshift(np.real(2*(Bphi.max() - Bphi)))
         self.SF = self.getSF(Cn2=Cn2)
         if self.antiAlias:
             	self.SF   = FourierUtils.interpolateSupport(self.Dphi,self.freq.nOtf)    
@@ -159,80 +151,8 @@ class psfao21:
         PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
                         jitterX=x0_jitter[0],jitterY=x0_jitter[1],jitterXY=x0_jitter[2],\
                         F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat)
-        return np.squeeze(PSF)
-#        # ADDITIONAL JITTER
-#        if len(x0_jitter) and (x0_jitter[0]!=0 or x0_jitter[1]!=0): # note sure about the normalization
-#            self.Djitter = (x0_jitter[0]**2 * self.freq.U2_ + x0_jitter[1]**2 * self.freq.V2_+ \
-#                    2*x0_jitter[0] * x0_jitter[1] * x0_jitter[2] * self.freq.UV_)
-#            Kjitter = np.exp(-0.5 * self.Djitter * (np.sqrt(2)/self.ao.cam.psInMas)**2)
-#        else:
-#            Kjitter = 1
-#                               
-#        for l in range(self.freq.nWvl): # LOOP ON WAVELENGTH
-#            
-#            # WAVELENGTH
-#            wvl_l       = self.freq.wvl[l]
-#            wvlRatio    = (self.freq.wvlRef/wvl_l) ** 2           
-#            
-#            # STATIC OTF
-#            if len(x0_stat) or self.freq.nWvl > 1:
-#                self.otfStat, self.otfDL, self.phaseMap = \
-#                FourierUtils.getStaticOTF(self.ao.tel,int(self.freq.nPix*self.freq.k_[l]),self.freq.samp[l],wvl_l,xStat=x0_stat)
-#            else:
-#                self.otfStat = self.freq.otfNCPA
-#              
-#            # ON-AXIS OTF
-#            otfOn = self.otfStat * np.exp(-0.5*self.Dphi * wvlRatio)
-#            
-#            for iSrc in range(self.ao.src.nSrc): # LOOP ON SOURCES
-#                
-#                # ANISOPLANATISM
-#                if self.freq.isAniso and (len(Cn2) == self.freq.dani_ang.shape[1]):
-#                    Dani = (self.Dani_l[iSrc].T * Cn2 * wvlRatio).sum(axis=2)
-#                    Kaniso = np.exp(-0.5 * Dani)
-#                else:
-#                    Kaniso = 1.0#self.Kaniso[iSrc,l]
-#                    
-#                # Stellar parameters
-#                if len(x0_stellar):
-#                    F   = x0_stellar[iSrc]* self.ao.cam.transmittance[l]
-#                    dx  = x0_stellar[iSrc + self.ao.src.nSrc] + self.ao.cam.dispersion[0][l]
-#                    dy  = x0_stellar[iSrc + 2*self.ao.src.nSrc] + self.ao.cam.dispersion[1][l]
-#                    bkg = x0_stellar[3*self.ao.src.nSrc]
-#                else:
-#                    F   = self.ao.cam.transmittance[l]
-#                    dx  = self.ao.cam.dispersion[0][l]
-#                    dy  = self.ao.cam.dispersion[1][l]
-#                    bkg = 0
-                
-#                # Phasor
-#                if dx !=0 or dy!=0:
-#                    fftPhasor = np.exp(np.pi*complex(0,1)*(self.freq.U_*dx + self.freq.V_*dy))
-#                else:
-#                    fftPhasor = 1
-#                    
-#                # Get the total OTF
-#                self.otfTot = otfOn * fftPhasor * Kaniso * Kjitter
-#                
-#                # Get the PSF
-#                psf_i = np.real(fft.fftshift(fft.ifft2(fft.fftshift(self.otfTot))))
-#                
-#                # CROPPING
-#                if self.freq.k_[l]> 1:
-#                        psf_i = FourierUtils.interpolateSuport(psf_i,nPix);            
-#                    
-#                if nPix != self.freq.nPix:
-#                    psf_i = FourierUtils.cropSupport(psf_i,nPix/self.freq.nPix)
-#                
-#                # SCALING
-#                psf[iSrc] += F * psf_i/psf_i.sum()
-#        
-#        # DEFINING THE OUTPUT FORMAT
-#        if self.isCube:
-#            return np.squeeze(psf) + bkg
-#        else:
-#            return np.squeeze(psf.sum(axis=0)) + bkg
-        
+        return PSF
+
     def moffat(self,kx,ky,x0):
         
         # parsing inputs

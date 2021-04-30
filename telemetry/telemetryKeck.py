@@ -184,13 +184,15 @@ class telemetryKeck:
         self.acqtime = hdr['EXPSTOP'].replace(':','_')
         
         # 2\ Restore the telescope configuration
-        self.tel.name         = hdr['TELESCOP'].replace(' ','_')
+        self.tel.name         = hdr['TELESCOP'].replace(' ','')
         self.tel.zenith_angle, self.tel.airmass = keckUtils.getTelescopeAirmass(hdr)
         self.tel.pupilAngle   = keckUtils.getPA(hdr)
         self.tel.pupilMaskName= keckUtils.getPupilMask(hdr)
-        _,self.aoMode         = keckUtils.getStagePositionWFS(hdr)        
-        self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_largeHex_272px.fits'
-        self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_open2_240px.fits'
+        _,self.aoMode         = keckUtils.getStagePositionWFS(hdr)   
+        if self.tel.pupilMaskName.upper() == 'LARGEHEX':
+            self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_largeHex_272px.fits'
+        else:
+            self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_open2_240px.fits'
         self.tel.path_telstat = self.path_calib + '/KECK_STAT/keck_piston_modes_200px.fits'
         
         # 3\ Restore the instrument configuration

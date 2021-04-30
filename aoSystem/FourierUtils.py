@@ -444,7 +444,56 @@ def interpolateSupport(image,nRes,kind='spline'):
             return fun_real(unew,vnew)
             
 
+def normalizeImage(im,normType=1,param=None):
+    ''' Returns the normalized PSF :
+        normtype = 0 : no normalization
+        normType = 1 : Normalization by the sum of pixels
+        normtype = 2 : min-max normalization
+        normtype = 3 : Normalization by the flux estimates
+        normtype = 4 : Normalization by the sum of positive pixels
+        normtype > 4 : Normalization by the normType value
+        
+        If param is provided, the functions does unormalize
+    '''
 
+    if param == None:
+        "NORMALIZATION"
+        if normType == 0:
+            param = 1
+            im_n  = im
+        elif normType == 1:
+            param = im.sum()
+            im_n  = np.copy(im)/param
+        elif normType == 2:
+            param = [im.min(),im.max()]
+            im_n  = (np.copy(im)-param[0])/(param[1] - param[2])
+        elif normType == 3:
+            param = abs(getFlux(im))
+            im_n  = np.copy(im)/param
+        elif normType == 4:
+            param = im[im>0].sum()
+            im_n  = np.copy(im)/param
+        else:
+            param = normType
+            im_n  = np.copy(im)/normType
+        
+        return im_n, param
+    else:
+        "UNORMALIZATION"
+        if normType == 0:
+            return im
+        elif normType == 1:
+            return np.copy(im) * param
+        elif normType == 2:
+            param = [im.min(),im.max()]
+            return np.copy(im)*(param[1] - param[2]) + param[0]
+        elif normType == 3:
+            return np.copy(im) * param
+        elif normType == 4:
+            return np.copy(im) * param
+        else:
+            return np.copy(im) * param
+    
 #%%  IMAGE PROCESSING TOOLS
 
 def addNoise(im,ron,darkBg,skyBg,DIT,nDIT):

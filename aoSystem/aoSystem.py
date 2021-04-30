@@ -580,6 +580,11 @@ class aoSystem():
       
 #%% SCIENCE DETECTOR
         
+        if config.has_option('sensor_science','Name'):
+            camName = eval(config['sensor_science']['Name'])
+        else:
+            camName = 'SCIENCE CAM'
+            
         if config.has_option('sensor_science','PixelScale'):
             psInMas = eval(config['sensor_science']['PixelScale'])
         else:
@@ -648,10 +653,10 @@ class aoSystem():
             excess = eval(config['sensor_science']['ExcessNoiseFactor'])
         else:
             excess = 1.0
-            
+        
         self.cam = detector(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
                             nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
-                       gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,tag="SCIENCE DETECTOR")
+                       gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,tag=camName)
         
     #%% AO mode
         self.aoMode = 'SCAO'
