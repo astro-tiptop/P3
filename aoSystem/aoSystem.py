@@ -23,7 +23,7 @@ from aoSystem.rtc import rtc
 #%%
 class aoSystem():
     
-    def __init__(self,path_ini,nLayer=None):
+    def __init__(self,path_ini,path_root='',nLayer=None):
                             
         self.error = False
         # verify if the file exists
@@ -70,7 +70,7 @@ class aoSystem():
             
         #----- PUPIL
         if config.has_option('telescope','PathPupil'):
-            path_pupil = eval(config['telescope']['PathPupil'])
+            path_pupil = path_root + eval(config['telescope']['PathPupil'])
         else:
             path_pupil = ''
                   
@@ -80,19 +80,19 @@ class aoSystem():
             pupilAngle = 0.0
         
         if config.has_option('telescope','PathStatic'):
-            path_static = eval(config['telescope']['PathStatic'])
+            path_static = path_root + eval(config['telescope']['PathStatic'])
         else:
             path_static = None       
                          
         #----- APODIZER
         if config.has_option('telescope','PathApodizer'):
-            path_apodizer = eval(config['telescope']['PathApodizer'])
+            path_apodizer = path_root + eval(config['telescope']['PathApodizer'])
         else:
             path_apodizer = ''
                 
         #----- TELESCOPE ABERRATIONS
         if config.has_option('telescope', 'PathStatModes'):
-            path_statModes = eval(config['telescope']['PathStatModes'])
+            path_statModes = path_root + eval(config['telescope']['PathStatModes'])
         else:
             path_statModes = ''
             

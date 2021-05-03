@@ -65,7 +65,7 @@ def InitSys(sysName,nargout=0):
         
     # INIT THE AO SYSTEM
     t0 = time.time()
-    ao = aoSystem(path_ini)
+    ao = aoSystem(path_ini,path_root='/'.join(aoSystemMain.__file__.split('/')[0:-2]))
     print(sysName + " system instantiation in %.2f ms  "%(1000*(time.time() - t0)))
     print(ao.__repr__())
     
@@ -112,7 +112,7 @@ def TestFourierModel(sysName,calcPSF=False,getMetrics=False,nargout=0):
         typeData = 'PSF'
         
     t0 = time.time()
-    fao = fourierModel(path_ini,calcPSF=calcPSF,verbose=True,display=False,getErrorBreakDown=True,\
+    fao = fourierModel(path_ini,calcPSF=calcPSF,verbose=True,display=False,path_root='./',getErrorBreakDown=True,\
         getFWHM=getMetrics,getEncircledEnergy=getMetrics,getEnsquaredEnergy=getMetrics,displayContour=getMetrics)
     print(sysName +  ' ' + typeData +  ' model computation %.2f ms\n '%(1000*(time.time() - t0)))
     

@@ -64,7 +64,7 @@ class telescope:
         self.path_pupil= path_pupil
         self.path_apodizer= path_apodizer
         self.path_statModes= path_statModes
-        
+        self.path_static   = path_static
         #----- PUPIL DEFINITION        
         
         pupil = [] 
@@ -88,10 +88,11 @@ class telescope:
             P   = (R <= self.R) * (R > self.R*self.obsRatio)
             self.pupil = P
             self.verb = False
+            self.path_pupil= ''
     
     
         # static aberrations
-        self.path_static   = path_static
+        
               
         if path_static != None and ospath.isfile(path_static) == True and re.search(".fits",path_static)!=None:
             self.opdMap_ext = fits.getdata(path_static)
@@ -99,6 +100,7 @@ class telescope:
             self.opdMap_ext = FourierUtils.interpolateSupport(self.opdMap_ext,resolution,kind='linear')
         else:
             self.opdMap_ext = None
+            self.path_static= ''
             
         #----- APODIZER
         print(path_apodizer)
@@ -108,6 +110,7 @@ class telescope:
             self.apodizer = FourierUtils.interpolateSupport(self.apodizer,resolution,kind='linear')
         else:
             self.apodizer = 1.0
+            self.path_apodizer = ''
             
         #----- MODAL BASIS FOR TELESCOPE ABERRATIONS
         if path_statModes!='' and ospath.isfile(path_statModes) == True and re.search(".fits",path_statModes)!=None:                
@@ -129,6 +132,7 @@ class telescope:
         else:
             self.statModes = None
             self.nModes = 0
+            self.path_statModes = ''
             
         if self.verbose:
             self

@@ -52,7 +52,7 @@ class fourierModel:
     """
     
     # CONTRUCTOR
-    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,displayContour=False,\
+    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,path_root='',displayContour=False,\
                  getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,\
                  getEncircledEnergy=False,fftphasor=False,MV=0):
         
@@ -67,7 +67,7 @@ class fourierModel:
         self.calcPSF           = calcPSF
         self.tag               = 'TIPTOP'
         # GRAB PARAMETERS
-        self.ao = aoSystem(path_ini)
+        self.ao = aoSystem(path_ini,path_root=path_root)
         self.t_initAO = 1000*(time.time() - tstart)
         
         if self.ao.error==False:

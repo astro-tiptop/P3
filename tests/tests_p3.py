@@ -59,7 +59,7 @@ def TestPsfao21Instantiation():
     '''
     # instantiating the model
     path_ini = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
-    psfao    = psfao21(path_ini)
+    psfao    = psfao21(path_ini,path_root=path_p3)
     plt.close('all')
     kx  = psfao.freq.kx_[psfao.freq.nOtf//2+1:,psfao.freq.nOtf//2]/psfao.freq.kc_
     nCases = 5
@@ -194,7 +194,7 @@ def TestPsfao21Fitting():
     '''
     # instantiating the model
     path_ini = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
-    psfao    = psfao21(path_ini)
+    psfao    = psfao21(path_ini,path_root=path_p3)
     # loading the data
     path_img = path_p3 + '/data/20130801_n0004.fits'
     im_nirc2 = fits.getdata(path_img)

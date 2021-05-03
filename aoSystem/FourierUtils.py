@@ -266,7 +266,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             Kjitter = 1
             
         # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
-        if (dx!=0) or (dy!=0):
+        if np.any(dx!=0) or np.any(dy!=0):
             # shift by half a pixel
             fftPhasor = np.exp(np.pi*complex(0,1)*(dx*freq.U_ + dy*freq.V_))
         else:
