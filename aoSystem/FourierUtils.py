@@ -304,7 +304,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             # STREHL-RATIO COMPUTATION
             SR[:,j] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
             
-        return np.squeeze(PSF)+bkg, SR
+        return PSF + bkg, SR
     
 #%%  IMAGE PROCESSING
         

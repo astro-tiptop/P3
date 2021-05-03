@@ -833,9 +833,9 @@ class fourierModel:
             jitterX = self.ao.cam.spotFWHM[0][0]
             jitterY = self.ao.cam.spotFWHM[0][1]
             jitterXY= self.ao.cam.spotFWHM[0][2]
-            F  = np.array(self.ao.cam.transmittance)
-            dx = np.array(self.ao.cam.dispersion[0])
-            dy = np.array(self.ao.cam.dispersion[1])
+            F  = np.array(self.ao.cam.transmittance)[np.newaxis,:]
+            dx = np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
+            dy = np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
             bkg= 0.0
         else:
             jitterX = x0[0]

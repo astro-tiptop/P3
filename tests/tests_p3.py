@@ -85,7 +85,7 @@ def TestPsfao21Instantiation():
             x0  = [0.8,4e-2,0.5,1e-2,1,0,1.5,0,0,0,1.0,0,0,0]
             
         idlab = '$r_0 = $' + str(x0[0]) + ' m'
-        psf = psfao(x0)
+        psf = np.squeeze(psfao(x0))
         psd = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
         kx  = psfao.freq.kx_[psfao.freq.nOtf//2+1:,psfao.freq.nOtf//2]/psfao.freq.kc_
         
@@ -115,7 +115,7 @@ def TestPsfao21Instantiation():
             x0  = [0.4,4e-2,1,1e-2,1,0,1.5,0,0,0,1.0,0,0,0]
             
         idlab = '$\sigma^2 = $' + str(x0[2]) + ' rad$^2$'
-        psf = psfao(x0)
+        psf = np.squeeze(psfao(x0))
         psd = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
         kx  = psfao.freq.kx_[psfao.freq.nOtf//2+1:,psfao.freq.nOtf//2]/psfao.freq.kc_
         
@@ -145,7 +145,7 @@ def TestPsfao21Instantiation():
             x0  = [0.4,4e-2,0.5,1e0,1,0,1.5,0,0,0,1.0,0,0,0]
             
         idlab = r'$\alpha = $' + str(x0[3]) + ' m$^{-1}$'
-        psf = psfao(x0)
+        psf = np.squeeze(psfao(x0))
         psd = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
         kx  = psfao.freq.kx_[psfao.freq.nOtf//2+1:,psfao.freq.nOtf//2]/psfao.freq.kc_
         
@@ -175,7 +175,7 @@ def TestPsfao21Instantiation():
             x0  = [0.4,4e-2,0.5,1e-2,1,0,3.8,0,0,0,1.0,0,0,0]
             
         idlab = r'$\beta = $' + str(x0[6])
-        psf = psfao(x0)
+        psf = np.squeeze(psfao(x0))
         psd = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
         
         # Display

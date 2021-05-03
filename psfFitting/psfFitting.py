@@ -83,7 +83,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
         def __call__(self,y):
             if (self.iter%3)==0 and (method=='lm' or verbose == 0 or verbose == 1): print("-",end="")
             self.iter += 1
-            im_est = psfModelInst(mini2input(y))
+            im_est = np.squeeze(psfModelInst(mini2input(y)))
             return (sqW * (im_est - im_norm)).reshape(-1)
     cost = CostClass()   
     
@@ -135,12 +135,12 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
     result.xinit  = x0
     result.im_sky = image
     # scale fitted image
-    result.im_fit = FourierUtils.normalizeImage(psfModelInst(result.x),param=param,normType=normType)
+    result.im_fit = FourierUtils.normalizeImage(np.squeeze(psfModelInst(result.x)),param=param,normType=normType)
     # psf
     xpsf          = np.copy(result.x)
     xpsf[10]      = 1.0 # flux=1
     xpsf[11:14]   = 0.0 # dx,dy,bkcg=0
-    result.psf    = psfModelInst(xpsf)
+    result.psf    = np.squeeze(psfModelInst(xpsf))
     result        = evaluateFittingQuality(result,psfModelInst)
     
     # static map
