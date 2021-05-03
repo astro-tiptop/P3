@@ -49,35 +49,58 @@ class psfao21:
         return 'PSFAO21 model'
     
     def defineBounds(self):
-          #Cn2/r0 , C , A , ax , p , theta , beta , sx , sy , sxy , F , dx , dy , bg , stat
-          _EPSILON = np.sqrt(sys.float_info.epsilon)
+        """
+        Defining bounds on the PSFAO21 parameters based physics-based a priori
+        """
+        #Cn2/r0 , C , A , ax , p , theta , beta , sx , sy , sxy , F , dx , dy , bg , stat
+        _EPSILON = np.sqrt(sys.float_info.epsilon)
           
-          # Bounds on r0
-          bounds_down = list(np.ones(self.ao.atm.nL)*_EPSILON)
-          bounds_up   = list(np.inf * np.ones(self.ao.atm.nL))          
-          # PSD Parameters
-          bounds_down += [0,0,_EPSILON,_EPSILON,-np.pi,1+_EPSILON]
-          bounds_up   += [np.inf,np.inf,np.inf,np.inf,np.pi,5]         
-          # Jitter
-          bounds_down += [0,0,-1]
-          bounds_up   += [np.inf,np.inf,1]
-          # Photometry
-          bounds_down += list(np.zeros(self.ao.src.nSrc))
-          bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
-          # Astrometry
-          bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
-          bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
-          # Background
-          bounds_down += [-np.inf]
-          bounds_up   += [np.inf]
-          # Static aberrations
-          bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
-          bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
-          return (bounds_down,bounds_up)
+        # Bounds on r0
+        bounds_down = list(np.ones(self.ao.atm.nL)*_EPSILON)
+        bounds_up   = list(np.inf * np.ones(self.ao.atm.nL))          
+        # PSD Parameters
+        bounds_down += [0,0,_EPSILON,_EPSILON,-np.pi,1+_EPSILON]
+        bounds_up   += [np.inf,np.inf,np.inf,np.inf,np.pi,5]         
+        # Jitter
+        bounds_down += [0,0,-1]
+        bounds_up   += [np.inf,np.inf,1]
+        # Photometry
+        bounds_down += list(np.zeros(self.ao.src.nSrc))
+        bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
+        # Astrometry
+        bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+        bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+        # Background
+        bounds_down += [-np.inf]
+        bounds_up   += [np.inf]
+        # Static aberrations
+        bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
+        bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
         
+        return (bounds_down,bounds_up)
+        
+    def updateBounds(self,xfinal,xerr,sig=5):
+        '''
+            Defining bounds on the PSFAO21 parameters based on the first step of the split fitting
+        '''
+        
+        # lower bounds
+        bounds_low_psd = list(xfinal[0:7] - sig/3*xerr[0:7])
+        bounds_low     = bounds_low_psd\
+                        + [-np.inf,-np.inf,-np.inf,0,-np.inf,-np.inf,-np.inf]\
+                        + [-self.freq.wvlRef*1e9/2,]*self.ao.tel.nModes
+        
+        #upper bounds
+        bounds_up_psd  = list(xfinal[0:7] + sig/3*xerr[0:7])
+        bounds_up      = bounds_up_psd\
+                        + [np.inf,np.inf,np.inf,np.inf,np.inf,np.inf,np.inf]\
+                        + [self.freq.wvlRef*1e9/2,]*self.ao.tel.nModes
+        
+        return (bounds_low,bounds_up)
         
     def getPSD(self,x0):
         # Get the moffat PSD
+
         psd = self.moffat(self.freq.kx_,self.freq.ky_,list(x0[3:])+[0,0])
         # Piston filtering
         psd = self.freq.pistonFilter_ * psd
@@ -85,7 +108,7 @@ class psfao21:
         A_emp = np.trapz(np.trapz(psd,self.freq.ky_[0]),self.freq.ky_[0])
         psd   = x0[0]**(-5/3) * self.freq.psdKolmo_ + self.freq.mskIn_ * (x0[1] + psd/A_emp * x0[2] )
         # Wavefront error
-        self.wfe     = np.sqrt( np.trapz(np.trapz(psd,self.freq.ky_[0]),self.freq.kx_[0]) ) * self.freq.wvlRef*1e9/2/np.pi
+        self.wfe     = np.sqrt( np.trapz(np.trapz(psd,self.freq.kx_[:,0]),self.freq.kx_[:,0]) ) * self.freq.wvlRef*1e9/2/np.pi
         self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * self.freq.wfe_fit_norm  * self.freq.wvlRef*1e9/2/np.pi
         return psd
     
@@ -169,7 +192,7 @@ class psfao21:
         c       = np.cos(theta)
         s       = np.sin(theta)
         s2      = np.sin(2.0 * theta)
-           
+
         Rxx = (c/ax)**2 + (s/ay)**2
         Ryy = (c/ay)**2 + (s/ax)**2
         Rxy =  s2/ay**2 -  s2/ax**2

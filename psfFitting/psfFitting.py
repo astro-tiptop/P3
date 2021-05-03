@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 #%%
 def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normType=1,\
-               ftol=1e-8,xtol=1e-8,gtol=1e-8,max_nfev=1000,verbose=0,getMetrics=False):
+               bounds=None,ftol=1e-8,xtol=1e-8,gtol=1e-8,max_nfev=1000,verbose=0):
     """Fit a PSF with a parametric model solving the least-square problem
        epsilon(x) = SUM_pixel { weights * (amp * Model(x) + bck - psf)² }
     
@@ -76,7 +76,6 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
     # NORMALIZING THE IMAGE
     im_norm,param = FourierUtils.normalizeImage(image,normType=normType)
     
-    
     # DEFINING THE COST FUNCTIONS
     class CostClass(object):
         def __init__(self):
@@ -95,11 +94,14 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
         INDFREE = np.where(FREE)[0]
         
     def get_bounds(inst):
-        b_low = inst.bounds[0]
-        if fixed is not None: b_low = np.take(b_low,INDFREE)
-        b_up = inst.bounds[1]
-        if fixed is not None: b_up = np.take(b_up,INDFREE)
-        return (b_low,b_up)
+        if bounds == None:
+            b_low = inst.bounds[0]
+            if fixed is not None: b_low = np.take(b_low,INDFREE)
+            b_up = inst.bounds[1]
+            if fixed is not None: b_up = np.take(b_up,INDFREE)
+            return (b_low,b_up)
+        else:
+            return (np.take(bounds[0],INDFREE),np.take(bounds[1],INDFREE))
     
     def input2mini(x):
         # Transform user parameters to minimizer parameters
@@ -119,8 +121,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
             for i in range(len(y)):
                 xall[INDFREE[i]] = y[i]
         return xall
-    
-    
+            
     # PERFORMING MINIMIZATION WITH CONSTRAINS AND BOUNDS
     if method == 'trf':
         result = least_squares(cost,input2mini(x0),method='trf',bounds=get_bounds(psfModelInst),\
@@ -135,6 +136,11 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
     result.im_sky = image
     # scale fitted image
     result.im_fit = FourierUtils.normalizeImage(psfModelInst(result.x),param=param,normType=normType)
+    # psf
+    xpsf          = np.copy(result.x)
+    xpsf[10]      = 1.0 # flux=1
+    xpsf[11:14]   = 0.0 # dx,dy,bkcg=0
+    result.psf    = psfModelInst(xpsf)
     result        = evaluateFittingQuality(result,psfModelInst)
     
     # static map
@@ -212,7 +218,7 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
         vmax = np.max([np.max(fun(im_sky)), np.max(fun(im_fit))])
     
     # IMAGES
-    plt.close('all')
+    plt.figure()
     plt.subplot(231)
     plt.imshow(fun(im_sky),vmin=vmin,vmax=vmax)
     plt.title(instLabel)

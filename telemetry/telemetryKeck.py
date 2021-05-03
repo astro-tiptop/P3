@@ -120,7 +120,7 @@ class telemetryKeck:
         
         # tipTilt
         self.tipTilt             = structtype()
-        self.tipTilt.tilt2meter  = 12.68e-6 # arcsec of tilt to OPD over the Keckpupil 
+        self.tipTilt.tilt2meter  = [] # arcsec of tilt to OPD over the Keckpupil 
         self.tipTilt.pixel_scale = 800
         self.tipTilt.fov         = 3200
         self.tipTilt.binning     = 1
@@ -145,8 +145,8 @@ class telemetryKeck:
         # dm
         self.dm              = structtype()
         self.dm.volt2meter   = 0.6e-6 # conversion factor from volts to meter OPD
-        self.dm.nActuators   = [21]     # 1D Number of actuators                                            
-        self.dm.nCom         = [349]   # Number of total actuators within the pupil
+        self.dm.nActuators   = [21]   # 1D Number of actuators                                            
+        self.dm.nCom         = []     # Number of total actuators within the pupil
         self.dm.pitch        = [0.5625]
         self.dm.mechCoupling = [0.11]
         self.dm.heights      = [0.0]
@@ -302,7 +302,7 @@ class telemetryKeck:
         # 2\ Get AO control loop data                 
     
         #2.1. Get slopes in pixels unit
-        self.wfs.slopes = trsData.A['OFFSETCENTROID'][0]
+        self.wfs.slopes = np.copy(trsData.A['OFFSETCENTROID'][0])
         self.wfs.nSl    = self.wfs.slopes.shape[1]
         self.wfs.nExp   = self.wfs.slopes.shape[0]
     
@@ -314,7 +314,7 @@ class telemetryKeck:
             self.wfs.intensity[:,self.wfs.validSubaperture.reshape(-1)] = trsData.A['SUBAPINTENSITY'][0]
             self.wfs.intensity = self.wfs.intensity.reshape((self.wfs.nExp,self.wfs.nSubap[0],self.wfs.nSubap[0]))
         else:
-            self.wfs.intensity = trsData.A['SUBAPINTENSITY'][0]
+            self.wfs.intensity = np.copy(trsData.A['SUBAPINTENSITY'][0])
         self.wfs.wvl = keckUtils.getWFSwavelength(hdr)
         
         #2.3. Get DMs commands in OPD units
@@ -323,15 +323,16 @@ class telemetryKeck:
         
         #2.4. Get tip-tilt measurements and conversion into OPD
         if 'b' in trsData:
-            self.tipTilt.slopes    = trsData.B['DTTCENTROIDS'][0]
-            self.tipTilt.com       = trsData.B['DTTCOMMANDS'][0]
-            self.tipTilt.intensity = trsData.B['APDCOUNTS'][0]
-            self.tipTilt.tilt2meter= 3.2*1.268e-05
+            self.tipTilt.tilt2meter= 3.2*1.268e-05 # to be verified
+            self.tipTilt.slopes    = np.copy(trsData.B['DTTCENTROIDS'][0])
+            self.tipTilt.com       = np.copy(trsData.B['DTTCOMMANDS'][0])
+            self.tipTilt.intensity = np.copy(trsData.B['APDCOUNTS'][0])
         else:
-            self.tipTilt.tilt2meter = 12.68e-6
-            self.tipTilt.slopes  = trsData.A['RESIDUALWAVEFRONT'][0][:,self.dm.nCom:self.dm.nCom+2]# %angle in arcsec
-            self.tipTilt.com     = trsData.A['TTCOMMANDS'][0]
-       
+            self.tipTilt.tilt2meter = 12.68e-6 # should be np.pi*tel.D/4/3600/180
+            self.tipTilt.slopes     = np.copy(trsData.A['RESIDUALWAVEFRONT'][0][:,self.dm.nCom:self.dm.nCom+2])# %angle in arcsec
+            self.tipTilt.com        = np.copy(trsData.A['TTCOMMANDS'][0])
+            self.tipTilt.intensity  = None 
+            
         self.tipTilt.slopes  = self.tipTilt.tilt2meter*self.tipTilt.slopes
         self.tipTilt.slopes -= np.mean(self.tipTilt.slopes,axis=0) 
         self.tipTilt.com     = self.tipTilt.tilt2meter*self.tipTilt.com
@@ -341,15 +342,16 @@ class telemetryKeck:
         # 3\ Get system matrices and reconstructed wavefront
         
         #3.1\ Get DM commands reconstructors from slopes
-        MC            = np.reshape(trsData['rx'],(self.dm.nCom+3,self.wfs.nSl,trsData['NREC'])) #command matrix
+        MC            = np.copy(trsData['rx'])
+        MC            = np.reshape(MC,(self.dm.nCom+3,self.wfs.nSl,trsData['NREC'])) #command matrix
         self.mat.R    = self.dm.volt2meter*MC[:self.dm.nCom,:,:]
         self.mat.Rtt  = self.tipTilt.tilt2meter*MC[self.dm.nCom:self.dm.nCom+2,:,:]
         
         #3.2\ Get the reconstructed wavefront in OPD and in the actuators space
         self.rec.res   = self.dm.volt2meter*trsData.A['RESIDUALWAVEFRONT'][0][:,0:self.dm.nCom]
         self.rec.res  -= np.mean(self.rec.res,axis=0) 
-        self.rec.focus = trsData.A['RESIDUALWAVEFRONT'][0][-1,:]
-        self.rec.res  -= np.mean(self.rec.focus,axis=0) 
+        self.rec.focus = np.copy(trsData.A['RESIDUALWAVEFRONT'][0][-1,:]) # note : if not multiplyied by a factor, the array is read-only
+        self.rec.focus-= np.mean(self.rec.focus,axis=0) 
         
         # fill vector to get 21x21 actuators
         if np.any(self.dm.validActuators):   
@@ -360,10 +362,6 @@ class telemetryKeck:
             u            = np.zeros((self.wfs.nExp,self.dm.nActuators[0]**2))
             u[:,idG]     = self.dm.com
             self.dm.com  = u
-        else:
-            self.rec.res = self.rec.res
-            self.dm.com  = self.dm.com
-        
 
         # 4\ Get the loop status and model transfer function
         #4.1. Delays

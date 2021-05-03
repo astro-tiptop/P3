@@ -108,7 +108,7 @@ class frequencyDomain():
             self.mskOutAO_ = np.logical_or(abs(self.kxAO_) >= self.kcMin_, abs(self.kyAO_) >= self.kcMin_)
 
         self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.ao.atm.L0**2) + self.k2_) ** (-11.0/6.0)
-        self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kx_[0]),self.kx_[0]))
+        self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kx_[:,0]),self.kx_[:,0]))
     
     @property
     def kcInMas(self):

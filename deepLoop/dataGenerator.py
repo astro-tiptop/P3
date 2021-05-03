@@ -18,8 +18,8 @@ import aoSystem.FourierUtils as FourierUtils
 np.random.seed(69)
 
 
-def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=False,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=0,\
-                normType=1,savePath='',nRound=7,bounds=[[0.05,1e-3,80,1e-3,0.5,1.1,-0.5],[0.3,5e-2,390,5e-2,2,3.0,0.5]]):
+def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=0,\
+                normType=1,savePath='',nRound=7,bounds=[[0.05,1e-3,100,1e-3,0.5,1.1,-0.5],[0.4,5e-2,390,1e-1,2,3.0,0.5]]):
     
     tstart = time.time()
     #%% MODEL INSTANTIATION
@@ -174,7 +174,7 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=False,mag=0,
     print('Simulation of %d PSF done in %.2fs'%(nPSFperFolder*nSubFolder,time.time()-tstart))
     
     # Computation time profiling
-    # nonoise_nostatic : 100s for 3,5000 PSFs - > expected: 1000s for 350,000 PSFs
-    # nonoise_static   : 127s for 3,5000 PSFs - > expected: 1270s for 350,000 PSFs
-    # noise_nostatic   : 130s for 3,5000 PSFs - > expected: 1300s for 350,000 PSFs
-    # noise_static     : 152s for 3,5000 PSFs - > expected: 1520s for 350,000 PSFs
+    # nonoise_nostatic : 100s for 35,000 PSFs - > expected: 1000s for 350,000 PSFs
+    # nonoise_static   : 127s for 35,000 PSFs - > expected: 1270s for 350,000 PSFs
+    # noise_nostatic   : 130s for 35,000 PSFs - > expected: 1300s for 350,000 PSFs
+    # noise_static     : 152s for 35,000 PSFs - > expected: 1520s for 350,000 PSFs

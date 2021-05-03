@@ -62,11 +62,12 @@ class psfR:
             self.dphi_ao = self.aoResidualStructureFunction()
                 
             # INSTANTIATING THE TT RESIDUAL PHASE STRUCTURE FUNCTION IN LGS MODE
-            # IN NGS MODE, THE TIP-TILT CONTRIBUTION IS CONTAINED IN THE WFS MEASUREMENTS 
-            if self.trs.aoMode == 'LGS':
-                self.dphi_tt = self.tipTiltPhaseStructureFunction()
-            else:
-                self.dphi_tt = 0
+            # IN NGS MODE, THE TIP-TILT CONTRIBUTION IS CONTAINED IN THE WFS MEASUREMENTS  -> TO BE VERIFIED !!
+            #if self.trs.aoMode == 'LGS':
+            self.dphi_tt = self.tipTiltPhaseStructureFunction()
+            
+            #else:
+            #    self.dphi_tt = 0
             
             # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
             self.dphi_ani = anisoplanatismStructureFunction(\
@@ -147,8 +148,8 @@ class psfR:
     def tipTiltPhaseStructureFunction(self):
         """
         """
-        # computing the empirical covariance matrix of the residual tip-tilt
-        Ctt   =  np.matmul(self.trs.tipTilt.com.T,self.trs.tipTilt.com)/self.trs.tipTilt.nExp
+        # computing the empirical covariance matrix of the residual tip-tilt in meter
+        Ctt = np.matmul(self.trs.tipTilt.slopes.T,self.trs.tipTilt.slopes)/self.trs.tipTilt.nExp
         
         # computing the coefficients of the Gaussian Kernel in rad^2
         Guu = (2*np.pi/self.freq.wvlRef)**2 *(Ctt - self.trs.tipTilt.Cn_tt) 
@@ -159,9 +160,9 @@ class psfR:
         Vr  =-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang)  
         
         # computing the Gaussian-Kernel
-        dphi_tt   = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 + Guu[0,1]*Ur*Vr.T + Guu[1,0]*Vr*Ur.T
+        dphi_tt = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 + Guu[0,1]*Ur*Vr.T + Guu[1,0]*Vr*Ur.T
         
-        return dphi_tt
+        return dphi_tt * (self.ao.tel.D/2)**2
     
     def pixelOpticalTransferFunction(self):
         """
