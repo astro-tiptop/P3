@@ -164,7 +164,7 @@ class atmosphere:
         s+=('\n------------------------------------------------------\n')
         s+=(' Layer\t Height [m]\t Weight\t L0 [m]\t wind([m/s] [deg])\n')
         for l in np.arange(0,self.nL):
-            s = s + '%2d\t\t %8.2f\t  %4.2f\t %4.2f\t (%5.2f %6.2f)\n'%(l,\
+            s = s + '%2d\t %8.2f\t  %4.2f\t %4.2f\t (%5.2f %6.2f)\n'%(l,\
                 self.layer[l].height,
                 self.layer[l].weight,
                 self.layer[l].L0,

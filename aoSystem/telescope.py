@@ -138,8 +138,8 @@ class telescope:
         s = "___TELESCOPE___\n -------------------------------------------------------------------------------- \n"
         s += '. Aperture diameter \t:%.2fm \n'%(self.D)
         s += '. Central obstruction \t:%.2f%s \n'%(self.obsRatio*1e2,'%')
-        s += '. Collecting area \t\t:%.2fm^2\n'%(self.area)
-        s += '. Pupil resolution \t\t:%dX%d pixels'%(self.resolution,self.resolution)
+        s += '. Collecting area \t:%.2fm^2\n'%(self.area)
+        s += '. Pupil resolution \t:%dX%d pixels'%(self.resolution,self.resolution)
         if self.path_pupil != '':
             s+= '\n. User-defined pupil at :\n ' + self.path_pupil
         if self.path_apodizer != '':

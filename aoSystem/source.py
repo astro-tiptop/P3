@@ -94,7 +94,7 @@ class source:
         s += '--------------------------------------------------------------------------\n'
         s += ' Obj\t Zenith [arcsec]\t Azimuth [deg]\t height [m]\t wavelength [micron]\n'
         for kObj in range(self.nSrc):
-            s += ' %d\t\t\t %.2f\t\t\t\t %.2f\t\t\t %g\t\t\t %.3f\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
+            s += ' %d\t %.2f\t\t\t %.2f\t\t %g\t\t %.3f\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
                             self.height[kObj],self.wvl[kObj]*1e6)
         s +='--------------------------------------------------------------------------\n'
         

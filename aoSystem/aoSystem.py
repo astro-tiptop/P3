@@ -714,7 +714,7 @@ class aoSystem():
         self.wfe['WFS aliasing'] = rad2nm(0.07*dsubr053)      
         # Servo-lag errors
         ff = np.pi*0.5**2 # to account for the loss of valid actuator outside the pupil
-        nMax = int(np.sqrt(ff)*(self.dms.nControlledRadialOrder+1))
+        nMax = int(np.sqrt(ff)*(self.dms.nControlledRadialOrder[0]+1))
         if hasattr(self.rtc,'ttloop') and self.tts !=None :
             nMin = 3
         else:

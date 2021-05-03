@@ -19,7 +19,7 @@ class deformableMirror:
     @property
     def nControlledRadialOrder(self):
         # nZernike = 0.5 * (nActu + 1) **2
-        return int(np.sqrt(2*np.array(self.nValidActuator))-1)
+        return np.sqrt(2*np.array(self.nValidActuator)).astype(int) - 1
     @property
     def nControlledRadialOrderTipTiltExcluded(self):
         return int(np.sqrt(2*np.array(self.nValidActuator))-3)
@@ -155,10 +155,10 @@ class deformableMirror:
         s += ' Obj\t #Actuators\t Pitch [m]\t Heights [m]\t modes type\t Coupling\t #Controlled modes\n'
         for kObj in range(self.nDMs):
             if self.heights[kObj] == 0:
-                s += ' %d\t\t\t %d\t\t %.4f\t\t %.1f\t\t\t %s\t %.2f\t\t %d\n'%(kObj,self.nActu1D[kObj],self.pitch[kObj],
+                s += ' %d\t %d\t\t %.4f\t\t %.1f\t\t %s\t %.2f\t\t %d\n'%(kObj,self.nActu1D[kObj],self.pitch[kObj],
                             float(self.heights[kObj]),self.modes,self.mechCoupling[kObj], self.nValidActuator[kObj])
             else:
-                s += ' %d\t\t\t %d\t\t %.4f\t\t %.0f\t\t\t %s\t %.2f\t\t %d\n'%(kObj,self.nActu1D[kObj],self.pitch[kObj],
+                s += ' %d\t %d\t\t %.4f\t\t %.0f\t\t %s\t %.2f\t\t %d\n'%(kObj,self.nActu1D[kObj],self.pitch[kObj],
                             float(self.heights[kObj]),self.modes,self.mechCoupling[kObj], self.nValidActuator[kObj])
         s +='----------------------------------------------------------------------------------------------\n'
         
