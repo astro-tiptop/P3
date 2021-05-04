@@ -93,7 +93,7 @@ class frequencyDomain():
         self.kxAO_,self.kyAO_ = FourierUtils.freq_array(self.resAO,offset=1e-10,L=self.PSDstep)
         self.k2AO_            = self.kxAO_**2 + self.kyAO_**2   
         self.pistonFilterAO_  = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2AO_))
-        
+        self.pistonFilterAO_[self.resAO//2,self.resAO//2] = 0
         # ---- DEFINING MASKS
         if self.ao.dms.AoArea == 'circle':
             self.mskOut_  = (self.k2_ >= self.kcMin_**2)
@@ -122,7 +122,7 @@ class frequencyDomain():
         return max(2,int(np.ceil(self.nOtf/self.resAO/2)))
     
     
-    def __init__(self,aoSys,kcExt=None,Shannon=False):
+    def __init__(self,aoSys,kcExt=None,nyquistSampling=False):
         
         # PARSING INPUTS TO GET THE SAMPLING VALUES
         self.ao     = aoSys
@@ -130,12 +130,12 @@ class frequencyDomain():
         # MANAGING THE PIXEL SCALE
         t0 = time.time()
         self.nWvl   = len(np.unique(self.ao.src.wvl))
-        if Shannon:
-            self.shannon    = True
-            self.psInMas    = self.ao.src.wvl/self.al.tel.D/2
+        if nyquistSampling:
+            self.nyquistSampling = True
+            self.psInMas         = rad2mas*self.ao.src.wvl/self.ao.tel.D/2
         else:
-            self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl)
-            self.shannon    = False
+            self.psInMas         = self.ao.cam.psInMas * np.ones(self.nWvl)
+            self.nyquistSampling = False
                            
         self.kcExt  = kcExt
         self.nPix   = self.ao.cam.fovInPix

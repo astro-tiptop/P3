@@ -54,7 +54,7 @@ class fourierModel:
     # CONTRUCTOR
     def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,path_root='',displayContour=False,\
                  getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,\
-                 getEncircledEnergy=False,fftphasor=False,MV=0):
+                 getEncircledEnergy=False,fftphasor=False,MV=0,nyquistSampling=False):
         
         tstart = time.time()
         
@@ -73,7 +73,7 @@ class fourierModel:
         if self.ao.error==False:
             
             # DEFINING THE FREQUENCY DOMAIN
-            self.freq = frequencyDomain(self.ao)
+            self.freq = frequencyDomain(self.ao,nyquistSampling=nyquistSampling)
             
             # DEFINING THE GUIDE STAR AND THE STRECHING FACTOR
             if self.ao.lgs:
@@ -91,7 +91,7 @@ class fourierModel:
                 wSpeed_mod = np.linspace(min(self.ao.atm.wSpeed),max(self.ao.atm.wSpeed),num=self.ao.dms.nRecLayers)
                 wDir_mod   = np.linspace(min(self.ao.atm.wDir),max(self.ao.atm.wDir),num=self.ao.dms.nRecLayers)
                 if self.ao.lgs:
-                    self.strechFactor_mod = 1.0/(1.0 - self.atm_mod.heights/self.gs.height[0])
+                    self.strechFactor_mod = 1.0/(1.0 - heights_mod/self.gs.height[0])
             else:
                 weights_mod    = self.ao.atm.weights
                 heights_mod    = self.ao.atm.heights
@@ -259,15 +259,10 @@ class fourierModel:
         gPSD       = abs(self.SxAv)**2 + abs(self.SyAv)**2 + MV*self.Wn/Watm
         self.Rx    = np.conj(self.SxAv)/gPSD
         self.Ry    = np.conj(self.SyAv)/gPSD
-        
-        # Manage NAN value if any   
-        self.Rx[np.isnan(self.Rx)] = 0
-        self.Ry[np.isnan(self.Ry)] = 0
-        
+
         # Set central point (i.e. kx=0,ky=0) to zero
-        N = int(np.ceil((self.freq.kxAO_.shape[0]-1)/2))
-        self.Rx[N,N] = 0
-        self.Ry[N,N] = 0
+        self.Rx[self.freq.resAO//2,self.freq.resAO//2] = 0
+        self.Ry[self.freq.resAO//2,self.freq.resAO//2] = 0
             
         self.t_reconstructor = 1000*(time.time()  - tstart)
         
@@ -586,7 +581,8 @@ class fourierModel:
         return  psd
     
     def servoLagPSD(self):
-        """ Servo-lag power spectrum density
+        """ Servo-lag power spectrum density.
+        Note : sometimes the sum becomes negative, a further analysis is needed
         """
         tstart  = time.time()    
         psd = np.zeros((self.freq.resAO,self.freq.resAO))    
@@ -601,7 +597,7 @@ class fourierModel:
             psd = (1.0 + abs(F)**2*self.h2 - 2*np.real(F*self.h1))*Watm
         
         self.t_servoLagPSD = 1000*(time.time() - tstart)
-        return self.freq.mskInAO_ * psd
+        return self.freq.mskInAO_ * abs(psd)
     
     def spatioTemporalPSD(self):
         """%% Power spectrum density including reconstruction, field variations and temporal effects
@@ -771,8 +767,8 @@ class fourierModel:
                                   + self.wfeST**2 + self.wfeN**2 + self.wfeDiffRef**2\
                                   + self.wfeChrom**2 + self.wfeJitter**2)
             
-            # Maréchal appoximation to ge tthe Strehl-ratio
-            self.SRmar  = 100*np.exp(-(self.wfeTot*2*np.pi*1e-9/self.freq.wvl)**2)
+            # Maréchal appoximation to get the Strehl-ratio
+            self.SRmar  = 100*np.exp(-(self.wfeTot*2*np.pi*1e-9/self.freq.wvlRef)**2)
             
             # bonus
             self.psdS = self.servoLagPSD()

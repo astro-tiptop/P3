@@ -281,7 +281,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
                                                         freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
                 
             # UPDATE THE RESIDUAL JITTER
-            if freq.shannon == True and freq.nWvl > 1 and (np.any(ao.cam.spotFWHM)):
+            if freq.nyquistSampling == True and freq.nWvl > 1 and (np.any(ao.cam.spotFWHM)):
                 normFact2    = ff_jitter*(freq.samp[j]*ao.tel.D/freq.wvl[j]/(3600*180*1e3/np.pi))**2  * (2 * np.sqrt(2*np.log(2)))**2
                 Kjitter = np.exp(-0.5 * Djitter * normFact2/normFact)    
                           

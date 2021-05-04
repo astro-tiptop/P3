@@ -32,7 +32,7 @@ class processing:
             s += '.Threshold : %.2f e-\n'%(self.settings[1])
             s += '.New value : %.2f e-\n'%(self.settings[2])
             
-        if self.noiseVar == [None]:
+        if np.any(self.noiseVar == [None]):
             s += '.Mean noise variance [rd^2] : %.f'%(0)
         else:
             s += '.Mean noise variance [rd^2] : %.f'%(np.mean(self.noiseVar))
