@@ -138,8 +138,12 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
     result.im_fit = FourierUtils.normalizeImage(np.squeeze(psfModelInst(result.x)),param=param,normType=normType)
     # psf
     xpsf          = np.copy(result.x)
-    xpsf[10]      = 1.0 # flux=1
-    xpsf[11:14]   = 0.0 # dx,dy,bkcg=0
+    nparam        = len(result.x) - 3*psfModelInst.ao.src.nSrc - 1
+    if nparam > psfModelInst.ao.tel.nModes:
+        nparam -= psfModelInst.ao.tel.nModes
+        
+    xpsf[nparam]  = 1.0 # flux=1
+    xpsf[nparam+1:nparam+3*psfModelInst.ao.src.nSrc+1]   = 0.0 # dx,dy,bkcg=0
     result.psf    = np.squeeze(psfModelInst(xpsf))
     result        = evaluateFittingQuality(result,psfModelInst)
     

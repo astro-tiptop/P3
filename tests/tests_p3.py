@@ -8,18 +8,12 @@ Created on Thu Apr 29 18:17:49 2021
 
 #%% IMPORTING LIBRARIES
 import numpy as np
-import sys
-import time
 from astropy.io import fits
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
 
-from aoSystem.aoSystem import aoSystem
-from aoSystem.pupil import pupil
-from aoSystem.segment import segment
-from aoSystem.spiders import spiders
-from aoSystem.frequencyDomain import frequencyDomain
+from aoSystem.fourierModel import fourierModel
 import aoSystem.FourierUtils as FourierUtils
 
 import psfao21 as psfao21Main
@@ -27,12 +21,15 @@ from telemetry.telemetryKeck import telemetryKeck
 from telemetry.systemDiagnosis import systemDiagnosis
 from telemetry.configFile import configFile
 from psfr.psfR import psfR
+import psfr.psfrUtils as psfrUtils
+
 from psfao21.psfao21 import psfao21
 from psfFitting.psfFitting import psfFitting
 from psfFitting.psfFitting import displayResults
 
 
 path_p3 = '/'.join(psfao21Main.__file__.split('/')[0:-2])
+path_ini = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
 
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
@@ -48,17 +45,39 @@ plt.rcParams.update({
     "font.serif": ["Palatino"],
 })
     
-    
-#%% TEST THE PSFAO21 MODEL
-
 rad2mas = 3600 * 180 * 1e3/np.pi
+    
+#%% TEST THE SPATIAL FREQUENCY ADAPTIVE OPTICS MODEL
+
+def TestFourierFitting():
+    '''
+       Test the fitting of the Fourier model 
+    '''
+    
+    
+    #instantiating the model
+    fao = fourierModel(path_ini,path_root=path_p3,calcPSF=False,display=False)
+    
+    # loading the data
+    path_img = path_p3 + '/data/20130801_n0004.fits'
+    im_nirc2 = fits.getdata(path_img)
+    
+    # fitting the residual jitter + astrometry/photometry
+    x0  = [fao.ao.cam.spotFWHM[0][0],fao.ao.cam.spotFWHM[0][1],fao.ao.cam.spotFWHM[0][2],1,0,0,0]
+    res_Fourier = psfFitting(im_nirc2,fao,x0,verbose=2,fixed=(False,False,False,False,False,False,False))
+    
+    # display
+    displayResults(fao,res_Fourier,nBox=90,scale='log10abs')
+    
+    return res_Fourier, fao
+
+#%% TEST THE PSFAO21 MODEL
 
 def TestPsfao21Instantiation():
     '''
         Test the instantiation of the PSFAO21 model
     '''
     # instantiating the model
-    path_ini = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
     psfao    = psfao21(path_ini,path_root=path_p3)
     plt.close('all')
     kx  = psfao.freq.kx_[psfao.freq.nOtf//2+1:,psfao.freq.nOtf//2]/psfao.freq.kc_
@@ -193,7 +212,6 @@ def TestPsfao21Fitting():
             - split fitting : PSD parameters first, redefinition of the bounds as xf+-5/3xerr and fit of the static aberrations
     '''
     # instantiating the model
-    path_ini = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
     psfao    = psfao21(path_ini,path_root=path_p3)
     # loading the data
     path_img = path_p3 + '/data/20130801_n0004.fits'
@@ -270,3 +288,18 @@ def TestPsfao21Fitting():
     #fig.colorbar(imm, cax=cbar_ax)
     fig.colorbar(imm, ax=axs.ravel().tolist(), shrink=0.6)
     return res_psfao21, res_psfao21_split, res_psfao21_joint
+
+
+#%% PSF RECONSTRUCTION
+
+        
+def TestTelemetry(path_trs):
+    ''' Test the instantiation of the telemetryKeck object
+    '''
+    
+    filename = 'n0004_fullNGS_trs.sav'
+    psfrU
+    
+    path_img = path_p3 + '/data/20130801_n0004.fits'
+    path_calib = path_p3 + '/aoSystem/data/KECK_CALIBRATION/'
+    trs = telemetryKeck(path_trs,path_img,path_calib,nLayer=1)

@@ -9,9 +9,17 @@ Created on Fri Jun 15 14:57:49 2018
 # Libraries
 import numpy as np
 import numpy.fft as fft
-import scipy.special as ssp
 import aoSystem.FourierUtils as FourierUtils
+import urllib.request
+import os
 
+#%% DATA TRANSFER
+def get_data_file(path_sav,filename):
+    if not os.path.isfile(path_sav + f"/{filename}"):
+        print('Downloading of the file %s in the folder %s'%(filename,path_sav))
+        urllib.request.urlretrieve(f"https://nuage.osupytheas.fr/s/WjeQ8BB3wp2mEyL/download?files={filename}",
+                                   path_sav + f"{filename}")
+        
 #%%  PSF-R FACILITIES               
 def getOLslopes(s,u,MI,dt):    
     return s + MI*(dt*np.roll(u,(-2,2)) + (1-dt)*np.roll(u,(-1,2)))
