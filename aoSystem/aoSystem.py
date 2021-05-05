@@ -685,7 +685,8 @@ class aoSystem():
                 self.aoMode = 'SLAO'
     
     #%% ERROR BREAKDOWN
-        self.errorBreakdown()
+        if self.rtc.holoop['gain'] > 0:
+            self.errorBreakdown()
     
     def __repr__(self):
         

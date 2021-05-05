@@ -1038,11 +1038,11 @@ class fourierModel:
         print("Required time for AO system model init (ms)\t : {:f}".format(self.t_initAO))
         if self.ao.error == False:
             print("Required time for frequency domain init (ms)\t : {:f}".format(self.t_initFreq))
-            print("Required time for reconstructors init (ms)\t : {:f}".format(self.t_reconstructor))
             print("Required time for final PSD calculation (ms)\t : {:f}".format(self.t_powerSpectrumDensity))
 
             # Reconstructors
             if self.ao.rtc.holoop['gain'] > 0:
+                print("Required time for WFS reconstructors init (ms)\t : {:f}".format(self.t_reconstructor))
                 if self.nGs > 1:
                     print("Required time for optimization init (ms)\t : {:f}".format(self.t_finalReconstructor))
                     print("Required time for tomography init (ms)\t\t : {:f}".format(self.t_tomo))
