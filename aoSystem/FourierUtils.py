@@ -277,7 +277,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             
             # UPDATE THE INSTRUMENTAL OTF
             if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(xStat)>0:
-                freq.otfNCPA, freq.otfDL, _ = getStaticOTF(ao.tel,int(freq.nPix*freq.k_[j]),\
+                freq.otfNCPA, freq.otfDL, _ = getStaticOTF(ao.tel,int(freq.nOtf),\
                                                         freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
                 
             # UPDATE THE RESIDUAL JITTER
@@ -299,8 +299,6 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             if nPix != freq.nOtf:
                 psf = cropSupport(psf,freq.nOtf/nPix)   
 
-            #import pdb
-            #pdb.set_trace()
             PSF[:,:,:,j] = psf * F[:,j]
                 
             # STREHL-RATIO COMPUTATION

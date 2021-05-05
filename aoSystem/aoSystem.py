@@ -188,7 +188,7 @@ class aoSystem():
             self.error = True
             return
         #----- class definition
-        self.src  = source(wvlSrc,zenithSrc,azimuthSrc,tag="SCIENCE SOURCE",verbose=True)   
+        self.src  = source(wvlSrc,zenithSrc,azimuthSrc,tag="SCIENCE",verbose=True)   
  
         #%%  GUIDE STARS 
         if config.has_option('sources_HO','Wavelength'):

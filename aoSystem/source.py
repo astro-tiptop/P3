@@ -45,7 +45,7 @@ class source:
             height= np.array([height])
         
         
-         # PARSING INPUTS
+        # PARSING INPUTS
         self.wvl       = wvl       # Wavelength value in meter             
         self.zenith    = zenith     # Zenith angle in arcsec
         self.azimuth   = azimuth    # Azimuth angle in degree
@@ -56,12 +56,12 @@ class source:
         
         
         test= lambda x: len(x) == 1
-        if (test(zenith)) & (test(azimuth)):
+        if (test(zenith)) and (test(azimuth)) and (test(wvl)):
             self.nSrc    = 1                        
-        elif (test(zenith)) & (not test(azimuth)):    
+        elif (test(zenith)) and (not test(azimuth)) and (test(wvl)):    
             self.nSrc    = len(azimuth)
             self.zenith  = zenith[0]*np.ones(self.nSrc)            
-        elif (not test(zenith)) & (test(azimuth)):   
+        elif (not test(zenith)) and (test(azimuth)) and (test(wvl)):   
             self.nSrc    = len(zenith)
             self.azimuth = azimuth[0]*np.ones(self.nSrc)           
         else:
@@ -69,8 +69,12 @@ class source:
        
         # Vectorizes source properties
         if len(wvl) == 1 and self.nSrc>1:
-            print('Vectorize the wavelength value to cope with the number of sources')
+            print('Vectorize the wavelength value to cope with the number of ' + self.tag + ' sources')
             self.wvl = self.wvl[0]*np.ones(self.nSrc)
+            self.nWvl=1
+        else:
+            self.nWvl = len(wvl)
+            
         if self.height != 0:
             self.height = self.height*np.ones(self.nSrc)
         else:
@@ -92,9 +96,26 @@ class source:
         s = '___ ' + self.tag + '___\n'
         s += '--------------------------------------------------------------------------\n'
         s += ' Obj\t Zenith [arcsec]\t Azimuth [deg]\t height [m]\t wavelength [micron]\n'
-        for kObj in range(self.nSrc):
-            s += ' %d\t %.2f\t\t\t %.2f\t\t %g\t\t %.3f\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
-                            self.height[kObj],self.wvl[kObj]*1e6)
+        
+        if self.nSrc > 0 and self.nWvl == 1: 
+            for kObj in range(self.nSrc):
+                s += ' %d\t\t %.2f\t\t\t %.2f\t\t\t %g\t\t\t %.3f\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
+                                self.height[kObj],self.wvl[0]*1e6)
+        elif self.nSrc == 1 and self.nWvl > 1:
+            for kObj in range(self.nWvl):
+                s += ' %d\t\t %.2f\t\t\t %.2f\t\t\t %g\t\t\t %.3f\n'%(kObj,self.zenith[0],self.azimuth[0],
+                                self.height[0],self.wvl[kObj]*1e6)
+        else:
+            for kObj in range(self.nSrc):
+                s += ' %d\t\t %.2f\t\t\t %.2f\t\t\t %g\t\t\t %s\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
+                                self.height[kObj],str(self.wvl*1e6))
         s +='--------------------------------------------------------------------------\n'
         
         return s
+    
+    def polar(self):
+        import matplotlib.pyplot as plt
+        deg2rad = np.pi/180
+        plt.figure()
+        plt.polar(self.azimuth*deg2rad,self.zenith,'ro',markersize=7, label=self.tag + ' sources')
+        plt.legend(bbox_to_anchor=(1.05, 1))

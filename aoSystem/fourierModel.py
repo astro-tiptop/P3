@@ -709,9 +709,8 @@ class fourierModel:
             arg_k= np.arctan2(self.freq.kyAO_,self.freq.kxAO_)
             azimuth = self.ao.src.azimuth
         
-        
+            theta = differentialRefractiveAnisoplanatism(self.ao.tel.zenith_angle*np.pi/180,self.gs.wvl[0], self.freq.wvlRef)
             for s in range(self.ao.src.nSrc):
-                theta = differentialRefractiveAnisoplanatism(self.ao.tel.zenith_angle*np.pi/180,self.gs.wvl[0], self.ao.src.wvl[s])
                 for l in range(self.ao.atm.nL):
                     A   = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*k*np.tan(theta)*np.cos(arg_k-azimuth[s])))            
                 psd[:,:,s] = self.freq.mskInAO_ *A*Watm
@@ -726,7 +725,7 @@ class fourierModel:
         psd= np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc))
         n2 =  23.7+6839.4/(130-(self.gs.wvl[0]*1.e6)**(-2))+45.47/(38.9-(self.gs.wvl[0]*1.e6)**(-2))
         for s in range(self.ao.src.nSrc):
-            n1 =  23.7+6839.4/(130-(self.ao.src.wvl[s]*1.e6)**(-2))+45.47/(38.9-(self.ao.src.wvl[s]*1.e6)**(-2))     
+            n1 =  23.7+6839.4/(130-(self.freq.wvlRef*1.e6)**(-2))+45.47/(38.9-(self.freq.wvlRef*1.e6)**(-2))     
             psd[:,:,s] = ((n2-n1)/n2)**2 * Watm
        
         self.t_chromatismPSD = 1000*(time.time() - tstart)
@@ -829,9 +828,9 @@ class fourierModel:
             jitterX = self.ao.cam.spotFWHM[0][0]
             jitterY = self.ao.cam.spotFWHM[0][1]
             jitterXY= self.ao.cam.spotFWHM[0][2]
-            F  = np.array(self.ao.cam.transmittance)[np.newaxis,:]
-            dx = np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
-            dy = np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
+            F  = np.repeat(np.array(self.ao.cam.transmittance)[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
+            dx = np.repeat(np.array(self.ao.cam.dispersion[0])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
+            dy = np.repeat(np.array(self.ao.cam.dispersion[1])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
             bkg= 0.0
         else:
             jitterX = x0[0]

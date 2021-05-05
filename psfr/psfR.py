@@ -204,9 +204,9 @@ class psfR:
             dy = x0_stellar[2*self.ao.src.nSrc:3*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
             bkg= x0_stellar[3*self.ao.src.nSrc]
         else:
-            F  = np.repeat(np.array(self.ao.cam.transmittance)[np.newaxis,:],self.ao.src.nSrc,axis=0)
-            dx = np.repeat(np.array(self.ao.cam.dispersion[0])[np.newaxis,:],self.ao.src.nSrc,axis=0)
-            dy = np.repeat(np.array(self.ao.cam.dispersion[1])[np.newaxis,:],self.ao.src.nSrc,axis=0)
+            F  = np.repeat(np.array(self.ao.cam.transmittance)[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
+            dx = np.repeat(np.array(self.ao.cam.dispersion[0])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
+            dy = np.repeat(np.array(self.ao.cam.dispersion[1])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
             bkg= 0.0
             
         # Static aberrations
