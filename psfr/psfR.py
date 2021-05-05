@@ -63,11 +63,10 @@ class psfR:
                 
             # INSTANTIATING THE TT RESIDUAL PHASE STRUCTURE FUNCTION IN LGS MODE
             # IN NGS MODE, THE TIP-TILT CONTRIBUTION IS CONTAINED IN THE WFS MEASUREMENTS  -> TO BE VERIFIED !!
-            #if self.trs.aoMode == 'LGS':
-            self.dphi_tt = self.tipTiltPhaseStructureFunction()
-            
-            #else:
-            #    self.dphi_tt = 0
+            if self.trs.aoMode == 'LGS':
+                self.dphi_tt = self.tipTiltPhaseStructureFunction()
+            else:
+                self.dphi_tt = 0
             
             # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
             self.dphi_ani = anisoplanatismStructureFunction(\

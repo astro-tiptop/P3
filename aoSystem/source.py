@@ -68,8 +68,7 @@ class source:
             self.nSrc    = len(zenith)           
        
         # Vectorizes source properties
-        test= lambda x: (np.array(x).size != self.nSrc)
-        if test(wvl):
+        if len(wvl) == 1 and self.nSrc>1:
             print('Vectorize the wavelength value to cope with the number of sources')
             self.wvl = self.wvl[0]*np.ones(self.nSrc)
         if self.height != 0:

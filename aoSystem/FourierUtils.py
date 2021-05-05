@@ -299,6 +299,8 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             if nPix != freq.nOtf:
                 psf = cropSupport(psf,freq.nOtf/nPix)   
 
+            #import pdb
+            #pdb.set_trace()
             PSF[:,:,:,j] = psf * F[:,j]
                 
             # STREHL-RATIO COMPUTATION

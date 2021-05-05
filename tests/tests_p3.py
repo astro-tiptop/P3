@@ -298,7 +298,6 @@ def TestTelemetry(path_trs):
     '''
     
     filename = 'n0004_fullNGS_trs.sav'
-    psfrU
     
     path_img = path_p3 + '/data/20130801_n0004.fits'
     path_calib = path_p3 + '/aoSystem/data/KECK_CALIBRATION/'
