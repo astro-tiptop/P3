@@ -52,19 +52,22 @@ class telescope:
     
     # CONSTRUCTOR
     def __init__(self,D,resolution, zenith_angle=0.0,obsRatio=0.0,pupilAngle = 0.0,\
-                 path_pupil='', path_static='', path_apodizer='', path_statModes='', verbose=True):
+                 path_pupil='', path_static_on='', path_static_off='', path_static_pos='',\
+                 path_apodizer='', path_statModes='', verbose=True):
         
         # PARSING INPUTS
-        self.D         = D          # in meter
-        self.zenith_angle = zenith_angle  # in degree
-        self.obsRatio  = obsRatio   # Ranges from 0 to 1
-        self.resolution= resolution # In pixels
-        self.verbose   = verbose
-        self.pupilAngle= pupilAngle
-        self.path_pupil= path_pupil
-        self.path_apodizer= path_apodizer
-        self.path_statModes= path_statModes
-        self.path_static   = path_static
+        self.D               = D            # primary mirror diameter in meters
+        self.zenith_angle    = zenith_angle # telescope zenith angle in degrees
+        self.obsRatio        = obsRatio     # secondary mirror diameter in D units
+        self.resolution      = resolution   # pupil resolution in pixels
+        self.verbose         = verbose
+        self.pupilAngle      = pupilAngle
+        self.path_pupil      = path_pupil
+        self.path_static_on  = path_static_on
+        self.path_static_pos = path_static_off
+        self.path_apodizer   = path_apodizer
+        self.path_statModes  = path_statModes
+        
         #----- PUPIL DEFINITION        
         
         pupil = [] 
@@ -91,16 +94,33 @@ class telescope:
             self.path_pupil= ''
     
     
-        # static aberrations
+        #----- NCPA
         
-              
-        if path_static != None and ospath.isfile(path_static) == True and re.search(".fits",path_static)!=None:
-            self.opdMap_ext = fits.getdata(path_static)
-            self.opdMap_ext[self.opdMap_ext!=self.opdMap_ext] = 0
-            self.opdMap_ext = FourierUtils.interpolateSupport(self.opdMap_ext,resolution,kind='linear')
+        if path_static_on != None and ospath.isfile(path_static_on) == True and re.search(".fits",path_static_on)!=None:
+            self.opdMap_on = fits.getdata(path_static_on)
+            self.opdMap_on[self.opdMap_on!=self.opdMap_on] = 0
+            self.opdMap_on = FourierUtils.interpolateSupport(self.opdMap_on,resolution,kind='linear')
         else:
-            self.opdMap_ext = None
-            self.path_static= ''
+            self.opdMap_on = None
+            self.path_static_on= ''
+            
+        #----- FIELD-DEPENDANT STATIC ABERRATIONS
+        if path_static_off != None and ospath.isfile(path_static_off) == True and re.search(".fits",path_static_off)!=None:   
+            if path_static_pos != None and ospath.isfile(path_static_pos) == True and re.search(".fits",path_static_pos)!=None:   
+                opdMap_off = fits.getdata(path_static_off)
+                opdMap_pos = fits.getdata(path_static_pos)
+                if opdMap_pos.shape[0] != opdMap_off[0]:
+                    raise ValueError('You must provide as many positions values as maps')
+                else:
+                    self.opdMap_off = opdMap_off
+                    self.opdMap_pos = opdMap_pos
+            else:
+                raise ValueError('Positions (zenith in arcsec, azimuth in radian) of the field-dependent aberrations must be provided as well as the maps')
+        else:
+            self.opdMap_off = None #center of the fov
+            self.opdMap_pos = None #center of the fov
+            self.path_static_off= ''
+            self.path_static_pos= ''
             
         #----- APODIZER
         print(path_apodizer)
@@ -148,8 +168,10 @@ class telescope:
             s+= '\n. User-defined pupil at :\n ' + self.path_pupil
         if self.path_apodizer != '':
             s+= '\n. User-defined amplitude apodizer at :\n ' + self.path_apodizer
-        if self.path_static != '':
-            s+= '\n. User-defined static aberrations map at :\n ' + self.path_static
+        if self.path_static_on != '':
+            s+= '\n. User-defined on-axis static aberrations map at :\n ' + self.path_static_on
+        if self.path_static_off != '':
+            s+= '\n. User-defined off-axis static aberrations maps at :\n ' + self.path_static_off
         if self.path_statModes != '':
             s+= '\n. User-defined modes of static aberrations at :\n ' + self.path_statModes
         s = s +"\n--------------------------------------------------------------------------------\n"

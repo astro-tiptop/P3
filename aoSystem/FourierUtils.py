@@ -63,10 +63,10 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0):
         
         # ADDING STATIC MAP
         phaseStat = np.zeros((nPup,nPup))
-        if np.any(tel.opdMap_ext):
+        if np.any(tel.opdMap_on):
             if theta_ext:
-                tel.opdMap_ext = scnd.rotate(tel.opdMap_ext,theta_ext,reshape=False)
-            phaseStat = (2*np.pi*1e-9/wvl) * tel.opdMap_ext
+                tel.opdMap_on = scnd.rotate(tel.opdMap_on,theta_ext,reshape=False)
+            phaseStat = (2*np.pi*1e-9/wvl) * tel.opdMap_on
             
         # ADDING USER-SPECIFIED STATIC MODES
         xStat = np.asarray(xStat)
@@ -276,7 +276,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         for j in range(freq.nWvl):
             
             # UPDATE THE INSTRUMENTAL OTF
-            if (np.any(ao.tel.opdMap_ext != None) and freq.nWvl>1) or len(xStat)>0:
+            if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(xStat)>0:
                 freq.otfNCPA, freq.otfDL, _ = getStaticOTF(ao.tel,int(freq.nPix*freq.k_[j]),\
                                                         freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
                 

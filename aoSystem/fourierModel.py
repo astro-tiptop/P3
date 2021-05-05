@@ -749,8 +749,8 @@ class fourierModel:
             # Derives wavefront error
             rad2nm      = (2*self.freq.kcMin_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
             
-            if np.any(self.ao.tel.opdMap_ext):
-                self.wfeNCPA= np.std(self.ao.tel.opdMap_ext[self.ao.tel.pupil!=0])
+            if np.any(self.ao.tel.opdMap_on):
+                self.wfeNCPA= np.std(self.ao.tel.opdMap_on[self.ao.tel.pupil!=0])
             else:
                 self.wfeNCPA = 0.0
                 

@@ -79,11 +79,21 @@ class aoSystem():
         else:
             pupilAngle = 0.0
         
-        if config.has_option('telescope','PathStatic'):
-            path_static = path_root + eval(config['telescope']['PathStatic'])
+        if config.has_option('telescope','PathStaticOn'):
+            path_static_on = path_root + eval(config['telescope']['PathStaticOn'])
         else:
-            path_static = None       
-                         
+            path_static_on = None       
+        
+        if config.has_option('telescope','PathStaticOff'):
+            path_static_off = path_root + eval(config['telescope']['PathStaticOff'])
+        else:
+            path_static_off = None
+        
+        if config.has_option('telescope','PathStaticPos'):
+            path_static_pos = path_root + eval(config['telescope']['PathStaticPos'])
+        else:
+            path_static_pos = None
+            
         #----- APODIZER
         if config.has_option('telescope','PathApodizer'):
             path_apodizer = path_root + eval(config['telescope']['PathApodizer'])
@@ -97,9 +107,10 @@ class aoSystem():
             path_statModes = ''
             
         #----- class definition     
-        self.tel = telescope(D,nPup,zenith_angle=zenithAngle,obsRatio=obsRatio,\
-                        pupilAngle=pupilAngle,path_pupil=path_pupil,path_static=path_static,\
-                        path_apodizer=path_apodizer,path_statModes=path_statModes)                     
+        self.tel = telescope(D,nPup,zenith_angle=zenithAngle,obsRatio=obsRatio,pupilAngle=pupilAngle,\
+                             path_pupil=path_pupil,path_static_on=path_static_on,\
+                             path_static_off=path_static_off,path_static_pos=path_static_pos,\
+                             path_apodizer=path_apodizer,path_statModes=path_statModes)                     
 
         #%% ATMOSPHERE
         
