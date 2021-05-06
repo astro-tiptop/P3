@@ -137,7 +137,10 @@ class fourierModel:
                 # DISPLAYING THE PSFS
                 if display:
                     self.displayResults(displayContour=displayContour)
-              
+                
+                # DEFINING BOUNDS
+                self.bounds = self.defineBounds()
+                
             # COMPUTE THE ERROR BREAKDOWN
             if self.getErrorBreakDown:
                 self.errorBreakDown(verbose=self.verbose)
@@ -148,8 +151,7 @@ class fourierModel:
         if verbose:
             self.displayExecutionTime()
           
-        # DEFINING BOUNDS
-        self.bounds = self.defineBounds()
+        
             
     def __repr__(self):
         s = '\t\t\t\t________________________ FOURIER MODEL ________________________\n\n'
