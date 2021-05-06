@@ -119,7 +119,7 @@ class frequencyDomain():
     @property
     def nTimes(self):
         """"""
-        return max(2,int(np.ceil(self.nOtf/self.resAO/2)))
+        return min(4,max(2,int(np.ceil(self.nOtf/self.resAO/2))))
     
     
     def __init__(self,aoSys,kcExt=None,nyquistSampling=False):

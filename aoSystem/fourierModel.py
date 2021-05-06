@@ -965,7 +965,7 @@ class fourierModel:
         
         self.t_displayResults = 1000*(time.time() - tstart)
             
-    def displayPsfMetricsContours(self,eeRadiusInMas=75):
+    def displayPsfMetricsContours(self,eeRadiusInMas=75,wvlIndex=0):
 
         tstart  = time.time()
         # Polar to cartesian
@@ -973,59 +973,61 @@ class fourierModel:
         y = self.ao.src.zenith * np.sin(np.pi/180*self.ao.src.azimuth)
     
 
-        nn          = int(np.sqrt(self.SR.shape[0]))
+        nn = int(np.sqrt(self.SR.shape[0]))
+        
         if nn**2 == self.SR.shape[0]:
             nIntervals  = nn
             X           = np.reshape(x,(nn,nn))    
             Y           = np.reshape(y,(nn,nn))
         
             # Strehl-ratio
-            SR = np.reshape(self.SR[:,0],(nn,nn))
-            plt.figure()
-            contours = plt.contour(X, Y, SR, nIntervals, colors='black')
-            plt.clabel(contours, inline=True,fmt='%1.1f')
-            plt.contourf(X,Y,SR)
-            plt.title("Strehl-ratio at {:.1f} nm (percents)".format(self.freq.wvlRef*1e9))
-            plt.colorbar()
+            if hasattr(self,'SR') and  np.any(self.SR): 
+                SR = np.reshape(self.SR[:,wvlIndex],(nn,nn))
+                plt.figure()
+                contours = plt.contour(X, Y, SR, nIntervals, colors='black')
+                plt.clabel(contours, inline=True,fmt='%1.1f')
+                plt.contourf(X,Y,SR)
+                plt.title("Strehl-ratio at {:.1f} nm (percents)".format(self.freq.wvl[wvlIndex]*1e9))
+                plt.colorbar()
         
             # FWHM
-            if np.any(self.FWHM) and self.FWHM.size > 1:
-                FWHM = np.reshape(0.5*(self.FWHM[0,:,0] + self.FWHM[1,:,0]),(nn,nn))
+            if hasattr(self,'FWHM') and np.any(self.FWHM) and self.FWHM.size > 1:
+                FWHM = np.reshape(0.5*(self.FWHM[0,:,wvlIndex] + self.FWHM[1,:,wvlIndex]),(nn,nn))
                 plt.figure()
                 contours = plt.contour(X, Y, FWHM, nIntervals, colors='black')
                 plt.clabel(contours, inline=True,fmt='%1.1f')
                 plt.contourf(X,Y,FWHM)
-                plt.title("Mean FWHM at {:.1f} nm (mas)".format(self.wvlSrc[0]*1e9))
+                plt.title("Mean FWHM at {:.1f} nm (mas)".format(self.freq.wvl[wvlIndex]*1e9))
                 plt.colorbar()
         
             # Ensquared Enery
-            if np.any(self.EnsqE) and self.EnsqE.shape[1] > 1:
+            if hasattr(self,'EnsqE') and np.any(self.EnsqE) and self.EnsqE.shape[1] > 1:
                 nntrue      = eeRadiusInMas/self.freq.psInMas[0]
                 nn2         = int(nntrue)
-                EEmin       = self.EnsqE[nn2,:,0]
-                EEmax       = self.EnsqE[nn2+1,:,0]
+                EEmin       = self.EnsqE[nn2,:,wvlIndex]
+                EEmax       = self.EnsqE[nn2+1,:,wvlIndex]
                 EEtrue      = (nntrue - nn2)*EEmax + (nn2+1-nntrue)*EEmin
                 EE          = np.reshape(EEtrue,(nn,nn))
                 plt.figure()
                 contours = plt.contour(X, Y, EE, nIntervals, colors='black')
                 plt.clabel(contours, inline=True,fmt='%1.1f')
                 plt.contourf(X,Y,EE)
-                plt.title("{:.1f}-mas-side Ensquared energy at {:.1f} nm (percents)".format(eeRadiusInMas*2,self.wvlSrc[0]*1e9))
+                plt.title("{:.1f}-mas-side Ensquared energy at {:.1f} nm (percents)".format(eeRadiusInMas*2,self.freq.wvl[wvlIndex]*1e9))
                 plt.colorbar()
             
             # Encircled Enery
-            if np.any(self.EncE) and self.EncE.shape[1] > 1:
-                nntrue      = eeRadiusInMas/self.freq.psInMas[0]
+            if hasattr(self,'EncE') and np.any(self.EncE) and self.EncE.shape[1] > 1:
+                nntrue      = eeRadiusInMas/self.freq.psInMas[wvlIndex]
                 nn2         = int(nntrue)
-                EEmin       = self.EncE[nn2,:,0]
-                EEmax       = self.EncE[nn2+1,:,0]
+                EEmin       = self.EncE[nn2,:,wvlIndex]
+                EEmax       = self.EncE[nn2+1,:,wvlIndex]
                 EEtrue      = (nntrue - nn2)*EEmax + (nn2+1-nntrue)*EEmin
                 EE          = np.reshape(EEtrue,(nn,nn))
                 plt.figure()
                 contours = plt.contour(X, Y, EE, nIntervals, colors='black')
                 plt.clabel(contours, inline=True,fmt='%1.1f')
                 plt.contourf(X,Y,EE)
-                plt.title("{:.1f}-mas-diameter Encircled energy at {:.1f} nm (percents)".format(eeRadiusInMas*2,self.wvlSrc[0]*1e9))
+                plt.title("{:.1f}-mas-diameter Encircled energy at {:.1f} nm (percents)".format(eeRadiusInMas*2,self.freq.wvl[wvlIndex]*1e9))
                 plt.colorbar()
         else:
             print('You must define a square grid for PSF evaluations directions - no contours plots avalaible')
