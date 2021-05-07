@@ -67,7 +67,7 @@ class psfR:
                 self.dphi_tt = self.tipTiltPhaseStructureFunction()
             else:
                 self.dphi_tt = 0
-            
+
             # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
             self.dphi_ani = anisoplanatismStructureFunction(\
             self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,\

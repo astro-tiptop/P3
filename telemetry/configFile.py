@@ -34,7 +34,7 @@ class configFile():
         parser.set('telescope','Resolution', str(sysdiag.trs.tel.resolution))
         parser.set('telescope','PupilAngle', str(sysdiag.trs.tel.pupilAngle))
         parser.set('telescope','PathPupil','\'' + sysdiag.trs.tel.path_pupil + '\'')
-        parser.set('telescope','PathStatic','\'' + sysdiag.trs.cam.path_ncpa + '\'')
+        parser.set('telescope','PathStaticOn','\'' + sysdiag.trs.cam.path_ncpa + '\'')
         parser.set('telescope','PathStatModes','\'' + sysdiag.trs.tel.path_telstat + '\'')
         
         #%% ATMOSPHERE         

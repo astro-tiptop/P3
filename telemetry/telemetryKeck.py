@@ -35,7 +35,7 @@ class telemetryKeck:
             # Check the telemetry file
             if os.path.isfile(path_trs) == False:
                 print('%%%%%%%% ERROR %%%%%%%%')
-                print('The self file does not exist\n')
+                print('The sav file does not exist\n')
                 return
             
         # Check the presence of the calibration folder

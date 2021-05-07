@@ -12,6 +12,7 @@ from astropy.io import fits
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
+import os
 
 from aoSystem.fourierModel import fourierModel
 import aoSystem.FourierUtils as FourierUtils
@@ -291,14 +292,66 @@ def TestPsfao21Fitting():
 
 
 #%% PSF RECONSTRUCTION
+def TestPSFR(path_trs):
+    ''' Test the PSF reconstruction
+    '''
+    
+    # Get the telemetry
+    trs = TestTelemetry(path_trs)
+    sd  = TestSystemDiagnosis(trs)
+    TestConfigFile(sd)
+    
+    # Get the PSF
+    psfr = psfR(sd.trs)
+    x0   = [0.7,1.0,1.0,1.0,0.0,0.0,0.0]
+    psf  = np.squeeze(psfr(x0))
+   
+    plt.figure()
+    plt.imshow(np.log10(psf))
+    
+    return psfr
 
-        
+def TestPSFRFitting(psfr):
+    ''' Test the PRIME
+    '''
+    # Do the fitting of photometri/astrometri/background
+    x0   = [0.7,1.0,1.0,1.0,0.0,0.0,0.0]
+    res = psfFitting(psfr.trs.cam.image,psfr,x0,verbose=2,fixed=(False,False,False,False,False,False,False))
+    # Display
+    displayResults(psfr,res,nBox=90,scale='log10abs')
+    
+    return res
+       
 def TestTelemetry(path_trs):
     ''' Test the instantiation of the telemetryKeck object
     '''
     
+    #load the telemetry
     filename = 'n0004_fullNGS_trs.sav'
+    path_sav = path_trs + '/' + filename
     
+    if not os.path.isfile(path_sav):
+        psfrUtils.get_data_file(path_trs,filename)
+        
+    # path image/calibration
     path_img = path_p3 + '/data/20130801_n0004.fits'
     path_calib = path_p3 + '/aoSystem/data/KECK_CALIBRATION/'
-    trs = telemetryKeck(path_trs,path_img,path_calib,nLayer=1)
+    trs = telemetryKeck(path_sav,path_img,path_calib,path_save=path_trs,nLayer=1)
+    
+    return trs
+
+def TestSystemDiagnosis(trs):
+    ''' Test the instantiation of the telemetryKeck and systemDiagnosis objects
+    '''
+    
+    sd  = systemDiagnosis(trs)
+    
+    return sd
+
+def TestConfigFile(sd):
+    ''' Test the instantiation of the telemetryKeck, systemDiagnosis and configFile objects
+    '''
+
+    cfg = configFile(sd)
+    
+    return cfg
