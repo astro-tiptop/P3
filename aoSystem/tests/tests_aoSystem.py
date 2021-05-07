@@ -20,7 +20,7 @@ from aoSystem.frequencyDomain import frequencyDomain
 from aoSystem.fourierModel import fourierModel
 
 
-
+path_p3 = '/'.join(aoSystemMain.__file__.split('/')[0:-2])
 #%% TEST THE PUPIL MAKER
 
 def MakeKeckPupil(nargout=0):
@@ -93,11 +93,13 @@ def TestInitSys():
     # ERIS
     InitSys('eris')
     # MAVIS
-    InitSys('mavis')
+    InitSys('MavisMCAO')
     # HARMONI SCAO
     InitSys('HarmoniSCAO')
     # HARMONI LTAO
     InitSys('HarmoniLTAO')
+    # MOSAIC GLAO
+    InitSys('MosaicGLAO')
     
 #%% TEST THE FOURIER MODELING
     
@@ -132,12 +134,14 @@ def TestPSD():
     TestFourierModel('irdis')
     # ERIS
     TestFourierModel('eris')
-    # MAVIS
-    TestFourierModel('mavis')
+    # MAVIS MCAO
+    TestFourierModel('MavisMCAO')
     # HARMONI SCAO
     TestFourierModel('HarmoniSCAO')
     # HARMONI LTAO
     TestFourierModel('HarmoniLTAO')
+    # MOSAIC GLAO
+    TestFourierModel('MosaicGLAO')
 
 def TestPSF():
 
@@ -148,8 +152,10 @@ def TestPSF():
     # ERIS
     TestFourierModel('eris',calcPSF=True, getMetrics=True)
     # MAVIS
-    TestFourierModel('mavis',calcPSF=True, getMetrics=True)
+    TestFourierModel('MavisMCAO',calcPSF=True, getMetrics=True)
     # HARMONI SCAO
     TestFourierModel('HarmoniSCAO',calcPSF=True, getMetrics=True)
     # HARMONI LTAO
     TestFourierModel('HarmoniLTAO',calcPSF=True, getMetrics=True)
+     # MOSAIC GLAO
+    TestFourierModel('MosaicGLAO',calcPSF=True, getMetrics=True)

@@ -886,20 +886,19 @@ class fourierModel:
         """
         """
         tstart  = time.time()
-        
+        # GEOMETRY
+        plt.figure()
+        plt.polar(self.ao.src.azimuth*deg2rad,self.ao.src.zenith,'ro',markersize=7,label='PSF evaluation (arcsec)')
+        plt.polar(self.gs.azimuth*deg2rad,self.gs.zenith,'bs',markersize=7,label='GS position')
+        plt.polar(self.ao.dms.opt_dir[1]*deg2rad,self.ao.dms.opt_dir[0],'kx',markersize=10,label='Optimization directions')
+        plt.legend(bbox_to_anchor=(1.05, 1))
+                
         if hasattr(self,'PSF'):
             if (self.PSF.ndim == 2):
                 plt.figure()
                 plt.imshow(np.log10(np.abs(self.PSF)))   
             
             else:
-                # GEOMETRY
-                plt.figure()
-                plt.polar(self.ao.src.azimuth*deg2rad,self.ao.src.zenith,'ro',markersize=7,label='PSF evaluation (arcsec)')
-                plt.polar(self.gs.azimuth*deg2rad,self.gs.zenith,'bs',markersize=7,label='GS position')
-                plt.polar(self.ao.dms.opt_dir[1]*deg2rad,self.ao.dms.opt_dir[0],'kx',markersize=10,label='Optimization directions')
-                plt.legend(bbox_to_anchor=(1.05, 1))
-                   
                 # PSFs
                 if np.any(self.PSF):   
                     nmin = self.ao.src.zenith.argmin()

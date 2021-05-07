@@ -99,15 +99,15 @@ class source:
         
         if self.nSrc > 0 and self.nWvl == 1: 
             for kObj in range(self.nSrc):
-                s += ' %d\t\t %.2f\t\t\t %.2f\t\t\t %g\t\t\t %.3f\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
+                s += ' %d\t\t\t %.2f\t\t\t %.2f\t\t\t %g\t\t\t %.3f\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
                                 self.height[kObj],self.wvl[0]*1e6)
         elif self.nSrc == 1 and self.nWvl > 1:
             for kObj in range(self.nWvl):
-                s += ' %d\t\t %.2f\t\t\t %.2f\t\t\t %g\t\t\t %.3f\n'%(kObj,self.zenith[0],self.azimuth[0],
+                s += ' %d\t\t\t %.2f\t\t\t %.2f\t\t\t %g\t\t\t %.3f\n'%(kObj,self.zenith[0],self.azimuth[0],
                                 self.height[0],self.wvl[kObj]*1e6)
         else:
             for kObj in range(self.nSrc):
-                s += ' %d\t\t %.2f\t\t\t %.2f\t\t\t %g\t\t\t %s\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
+                s += ' %d\t\t\t %.2f\t\t\t %.2f\t\t\t %g\t\t\t %s\n'%(kObj,self.zenith[kObj],self.azimuth[kObj],
                                 self.height[kObj],str(self.wvl*1e6))
         s +='--------------------------------------------------------------------------\n'
         
