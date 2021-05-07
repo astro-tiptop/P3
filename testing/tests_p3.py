@@ -29,8 +29,7 @@ from psfFitting.psfFitting import psfFitting
 from psfFitting.psfFitting import displayResults
 
 
-path_p3 = '/'.join(psfao21Main.__file__.split('/')[0:-2])
-path_ini = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
+path_ini = 'aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
 
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
@@ -57,10 +56,10 @@ def TestFourierFitting():
     
     
     #instantiating the model
-    fao = fourierModel(path_ini,path_root=path_p3,calcPSF=False,display=False)
+    fao = fourierModel(path_ini,calcPSF=False,display=False)
     
     # loading the data
-    path_img = path_p3 + '/data/20130801_n0004.fits'
+    path_img = 'data/20130801_n0004.fits'
     im_nirc2 = fits.getdata(path_img)
     
     # fitting the residual jitter + astrometry/photometry
@@ -79,7 +78,7 @@ def TestPsfao21Instantiation():
         Test the instantiation of the PSFAO21 model
     '''
     # instantiating the model
-    psfao    = psfao21(path_ini,path_root=path_p3)
+    psfao    = psfao21(path_ini)
     plt.close('all')
     kx  = psfao.freq.kx_[psfao.freq.nOtf//2+1:,psfao.freq.nOtf//2]/psfao.freq.kc_
     nCases = 5
@@ -213,9 +212,9 @@ def TestPsfao21Fitting():
             - split fitting : PSD parameters first, redefinition of the bounds as xf+-5/3xerr and fit of the static aberrations
     '''
     # instantiating the model
-    psfao    = psfao21(path_ini,path_root=path_p3)
+    psfao    = psfao21(path_ini)
     # loading the data
-    path_img = path_p3 + '/data/20130801_n0004.fits'
+    path_img = 'data/20130801_n0004.fits'
     im_nirc2 = fits.getdata(path_img)
     
     # -------- Joint fitting the 7 PSD parameters + static aberrations
@@ -334,8 +333,8 @@ def TestTelemetry(path_trs):
         psfrUtils.get_data_file(path_trs,filename)
         
     # path image/calibration
-    path_img = path_p3 + '/data/20130801_n0004.fits'
-    path_calib = path_p3 + '/aoSystem/data/KECK_CALIBRATION/'
+    path_img = 'data/20130801_n0004.fits'
+    path_calib = 'aoSystem/data/KECK_CALIBRATION/'
     trs = telemetryKeck(path_sav,path_img,path_calib,path_save=path_trs,nLayer=1)
     
     return trs

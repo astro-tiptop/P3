@@ -24,11 +24,7 @@ from aoSystem.fourierModel import fourierModel
 #%% TEST THE PUPIL MAKER
 
 def MakeKeckPupil(nargout=0):
-    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
-    if sys.platform[0:3] == 'win':
-        path_txt = path_mod + '\_txtFile\Keck_segmentVertices.txt'
-    else:
-        path_txt = path_mod + '/_txtFile/Keck_segmentVertices.txt'
+    path_txt = 'aoSystem/_txtFile/Keck_segmentVertices.txt'
     
     t0 = time.time()
     spiRef   = spiders([0,60,120],0.0254,symetric=True,D=10.5) 
@@ -39,11 +35,7 @@ def MakeKeckPupil(nargout=0):
         return keckPup
     
 def MakeELTPupil(nargout=0):
-    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
-    if sys.platform[0:3] == 'win':
-        path_txt = path_mod + '\_txtFile\ELT_segmentVertices.txt'
-    else:
-        path_txt = path_mod + '/_txtFile/ELT_segmentVertices.txt'
+    path_txt = 'aoSystem/_txtFile/ELT_segmentVertices.txt'
     
     t0 = time.time()
     spiRef   = spiders([0,60,120],0.5,symetric=True,D=39) 
@@ -58,18 +50,11 @@ def MakeELTPupil(nargout=0):
 def InitSys(sysName,nargout=0):
     
     # RETIEVING THE .INI FILE
-    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
-    if sys.platform[0:3] == 'win':
-        path_ini = path_mod + '\parFiles\\' + sysName + '.ini'
-        path_p3 = '\\'.join(aoSystemMain.__file__.split('/')[0:-2])
-    else:
-        path_ini = path_mod + '/parFiles/' + sysName + '.ini'
-        path_p3 = '/'.join(aoSystemMain.__file__.split('/')[0:-2])
-
+    path_ini = 'aoSystem/parFiles/' + sysName + '.ini'
         
     # INIT THE AO SYSTEM
     t0 = time.time()
-    ao = aoSystem(path_ini,path_root=path_p3)
+    ao = aoSystem(path_ini)
     print(sysName + " system instantiation in %.2f ms  "%(1000*(time.time() - t0)))
     print(ao.__repr__())
     
@@ -104,11 +89,7 @@ def TestInitSys():
 def TestFourierModel(sysName,calcPSF=False,getMetrics=False,nargout=0):
 
     # RETIEVING THE .INI FILE
-    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
-    if sys.platform[0:3] == 'win':
-        path_ini = path_mod + '\parFiles\\' + sysName + '.ini'
-    else:
-        path_ini = path_mod + '/parFiles/' + sysName + '.ini'
+    path_ini = 'aoSystem/parFiles/' + sysName + '.ini'
         
     # INIT THE fourierModel object
     typeData = 'PSD'
@@ -116,7 +97,7 @@ def TestFourierModel(sysName,calcPSF=False,getMetrics=False,nargout=0):
         typeData = 'PSF'
         
     t0 = time.time()
-    fao = fourierModel(path_ini,calcPSF=calcPSF,verbose=True,display=False,path_root=path_p3,getErrorBreakDown=True,\
+    fao = fourierModel(path_ini,calcPSF=calcPSF,verbose=True,display=False,getErrorBreakDown=True,\
         getFWHM=getMetrics,getEncircledEnergy=getMetrics,getEnsquaredEnergy=getMetrics,displayContour=getMetrics)
     print(sysName +  ' ' + typeData +  ' model computation %.2f ms\n '%(1000*(time.time() - t0)))
     

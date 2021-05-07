@@ -26,7 +26,7 @@ class psfR:
     """
     """
     # INIT
-    def __init__(self,trs,path_root='',nLayer=None,theta_ext=0):
+    def __init__(self,trs,nLayer=None,theta_ext=0):
         """
         """
         # READ PARFILE        
@@ -39,7 +39,7 @@ class psfR:
         self.path_ini  = trs.path_ini
         self.trs       = trs
         self.theta_ext = theta_ext
-        self.ao        = aoSystem(self.path_ini,path_root=path_root)
+        self.ao        = aoSystem(self.path_ini)
         self.tag       = 'PSF-R'
         if self.ao.error == False:
             

@@ -22,14 +22,14 @@ rad2arc = rad2mas / 1000
 
 class psfao21:
     # INIT
-    def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False):
+    def __init__(self,path_ini,antiAlias=False,fitCn2=False):
         
         tstart = time.time()
         
         # PARSING INPUTS
         self.file      = path_ini
         self.antiAlias = antiAlias
-        self.ao        = aoSys(path_ini,path_root=path_root)    
+        self.ao        = aoSys(path_ini)
         self.isStatic  = self.ao.tel.nModes > 0
         self.tag       = 'PSFAO21'
         if self.ao.error==False:

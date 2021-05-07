@@ -23,7 +23,7 @@ from aoSystem.rtc import rtc
 #%%
 class aoSystem():
     
-    def __init__(self,path_ini,path_root='',nLayer=None):
+    def __init__(self,path_ini, nLayer=None):
                             
         self.error = False
         # verify if the file exists
@@ -70,7 +70,7 @@ class aoSystem():
             
         #----- PUPIL
         if config.has_option('telescope','PathPupil'):
-            path_pupil = path_root + eval(config['telescope']['PathPupil'])
+            path_pupil = eval(config['telescope']['PathPupil'])
         else:
             path_pupil = ''
                   
@@ -80,29 +80,29 @@ class aoSystem():
             pupilAngle = 0.0
         
         if config.has_option('telescope','PathStaticOn'):
-            path_static_on = path_root + eval(config['telescope']['PathStaticOn'])
+            path_static_on =  eval(config['telescope']['PathStaticOn'])
         else:
             path_static_on = None       
         
         if config.has_option('telescope','PathStaticOff'):
-            path_static_off = path_root + eval(config['telescope']['PathStaticOff'])
+            path_static_off = eval(config['telescope']['PathStaticOff'])
         else:
             path_static_off = None
         
         if config.has_option('telescope','PathStaticPos'):
-            path_static_pos = path_root + eval(config['telescope']['PathStaticPos'])
+            path_static_pos = eval(config['telescope']['PathStaticPos'])
         else:
             path_static_pos = None
             
         #----- APODIZER
         if config.has_option('telescope','PathApodizer'):
-            path_apodizer = path_root + eval(config['telescope']['PathApodizer'])
+            path_apodizer = eval(config['telescope']['PathApodizer'])
         else:
             path_apodizer = ''
                 
         #----- TELESCOPE ABERRATIONS
         if config.has_option('telescope', 'PathStatModes'):
-            path_statModes = path_root + eval(config['telescope']['PathStatModes'])
+            path_statModes = eval(config['telescope']['PathStatModes'])
         else:
             path_statModes = ''
             

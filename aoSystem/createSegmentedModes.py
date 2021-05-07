@@ -19,8 +19,7 @@ import aoSystem.FourierUtils as FourierUtils
 
 #%% CREATING THE PUPIL CLASS 
 nPx     = 200
-path_mod = '/'.join(aoSystem.__file__.split('/')[0:-1])
-path_txt = path_mod + '/_txtFile/Keck_segmentVertices.txt'
+path_txt = 'aoSystem/_txtFile/Keck_segmentVertices.txt'
 pupSeg   = pupil(segClass=segment(6,0.9,nPx),segCoord=path_txt)
 nSeg     = pupSeg.nSegments
 

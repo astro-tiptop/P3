@@ -190,10 +190,10 @@ class telemetryKeck:
         self.tel.pupilMaskName= keckUtils.getPupilMask(hdr)
         _,self.aoMode         = keckUtils.getStagePositionWFS(hdr)   
         if self.tel.pupilMaskName.upper() == 'LARGEHEX':
-            self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_largeHex_272px.fits'
+            self.tel.path_pupil   = self.path_calib + 'NIRC2_MASK/keck_pupil_largeHex_272px.fits'
         else:
-            self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_open2_240px.fits'
-        self.tel.path_telstat = self.path_calib + '/KECK_STAT/keck_piston_modes_200px.fits'
+            self.tel.path_pupil   = self.path_calib + 'NIRC2_MASK/keck_pupil_open2_240px.fits'
+        self.tel.path_telstat = self.path_calib + 'KECK_STAT/keck_piston_modes_200px.fits'
         
         # 3\ Restore the instrument configuration
         self.cam.name = keckUtils.getInstName(hdr)
@@ -208,7 +208,7 @@ class telemetryKeck:
             self.cam.azimuth = [0.0]
             
             # wavelengths and transmission
-            self.path_filter = self.path_calib + '/NIRC2_FILTERS/'
+            self.path_filter = self.path_calib + 'NIRC2_FILTERS/'
             self.cam.wvl, self.cam.bw, self.cam.transmission, self.cam.dispersion = keckUtils.samplingFilterProfile(self.path_filter,hdr)
             
             # exposure configuration
@@ -219,7 +219,7 @@ class telemetryKeck:
             # ron in e- and gain in e-/DN
             self.cam.ronDN = np.sqrt(self.cam.coadds)*self.cam.ron/self.cam.gain
             # NCPA
-            self.cam.path_ncpa = self.path_calib + '/NIRC2_STAT/' +  keckUtils.getNCPAstr(hdr)
+            self.cam.path_ncpa = self.path_calib + 'NIRC2_STAT/' +  keckUtils.getNCPAstr(hdr)
             
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
@@ -231,11 +231,11 @@ class telemetryKeck:
             Collecting calibration data for the Keck AO system
         """
         #1\ Valid apertures/actuators
-        file = open(self.path_calib + '/KECKAO/keckValidActuatorMap.txt','r')
+        file = open(self.path_calib + 'KECKAO/keckValidActuatorMap.txt','r')
         self.dm.validActuators = np.array(np.genfromtxt(file)).astype('bool')
         file.close()
         
-        file = open(self.path_calib + '/KECKAO/keckValidSubapMap.txt','r')
+        file = open(self.path_calib + 'KECKAO/keckValidSubapMap.txt','r')
         self.wfs.validSubaperture = np.array(np.genfromtxt(file)).astype('bool')
         file.close()
         
@@ -249,9 +249,9 @@ class telemetryKeck:
         
         #3\ MASS/DIMM
         # managing the saving folder
-        if not os.path.isdir(self.path_calib+'/MASSDIMM/'):
-            os.mkdir(self.path_calib+'/MASSDIMM/')
-        self.path_massdimm = self.path_calib+'/MASSDIMM/'+self.obsdate+'/'
+        if not os.path.isdir(self.path_calib+'MASSDIMM/'):
+            os.mkdir(self.path_calib+'MASSDIMM/')
+        self.path_massdimm = self.path_calib+'MASSDIMM/'+self.obsdate+'/'
         if not os.path.isfile(self.path_massdimm):
             status = fetch_data(self.obsdate,self.path_massdimm)
         
