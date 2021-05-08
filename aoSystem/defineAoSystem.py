@@ -4,6 +4,9 @@
 Created on Mon Apr  5 14:42:49 2021
 
 @author: omartin
+
+# CHECK - Repetition between defineAOSystem and aoSystem
+# CHECK - Do the defineAoSystem and aoSystem serve the same purpose? 
 """
 
 # IMPORTING PYTHON LIBRAIRIES
@@ -20,6 +23,7 @@ from aoSystem.deformableMirror import deformableMirror
 from aoSystem.detector import detector
 
 #INIT 
+
 
 class aoSystem():
     
