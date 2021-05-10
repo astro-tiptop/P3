@@ -21,8 +21,8 @@ from aoSystem.fourierModel import fourierModel
 
 
 path_p3 = '/'.join(aoSystemMain.__file__.split('/')[0:-2])
-#%% TEST THE PUPIL MAKER
 
+#%% TEST THE PUPIL MAKER
 def MakeKeckPupil(nargout=0):
     path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
     if sys.platform[0:3] == 'win':
@@ -159,3 +159,11 @@ def TestPSF():
     TestFourierModel('HarmoniLTAO',calcPSF=True, getMetrics=True)
      # MOSAIC GLAO
     TestFourierModel('MosaicGLAO',calcPSF=True, getMetrics=True)
+    
+#%% RUN FUNCTIONS
+
+MakeKeckPupil()
+MakeELTPupil()
+TestInitSys()
+TestPSD()
+TestPSF()
