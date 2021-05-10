@@ -11,10 +11,12 @@ import sys
 
 # grab the path
 import aoSystem as aoSystemMain
-path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
+
 if sys.platform[0:3] == 'win':
+    path_mod = '\\'.join(aoSystemMain.__file__.split('\\')[0:-1])
     path_file = path_mod + '\parFiles\\'
 else:
+    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
     path_file = path_mod + '/parFiles/'
         
         

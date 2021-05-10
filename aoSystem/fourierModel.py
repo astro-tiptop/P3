@@ -138,13 +138,13 @@ class fourierModel:
                 if display:
                     self.displayResults(displayContour=displayContour)
                 
-                # DEFINING BOUNDS
-                self.bounds = self.defineBounds()
-                
             # COMPUTE THE ERROR BREAKDOWN
             if self.getErrorBreakDown:
                 self.errorBreakDown(verbose=self.verbose)
                     
+        # DEFINING BOUNDS
+        self.bounds = self.defineBounds()
+                
         self.t_init = 1000*(time.time()  - tstart)
         
         # DISPLAYING EXECUTION TIMES

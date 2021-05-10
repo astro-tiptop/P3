@@ -10,6 +10,7 @@ Created on Mon Apr  5 14:42:49 2021
 import os.path as ospath
 from configparser import ConfigParser
 import numpy as np
+import sys
 
 # IMPORTING P3 MODULES
 from aoSystem.telescope import telescope
@@ -106,7 +107,16 @@ class aoSystem():
         else:
             path_statModes = ''
             
-        #----- class definition     
+            
+        # ----- managing paths for Windows OS
+        if sys.platform[0:3] == 'win':
+            path_pupil     = path_pupil.replace('/','\\')
+            path_static_on = path_static_on.replace('/','\\')
+            path_static_off= path_static_off.replace('/','\\')
+            path_static_pos= path_static_pos.replace('/','\\')
+            path_apodizer  = path_apodizer.replace('/','\\')
+            path_statModes = path_statModes.replace('/','\\')
+        # ----- class definition     
         self.tel = telescope(D,nPup,zenith_angle=zenithAngle,obsRatio=obsRatio,pupilAngle=pupilAngle,\
                              path_pupil=path_pupil,path_static_on=path_static_on,\
                              path_static_off=path_static_off,path_static_pos=path_static_pos,\
