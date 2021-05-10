@@ -24,7 +24,7 @@ class deformableMirror:
     def nControlledRadialOrderTipTiltExcluded(self):
         return int(np.sqrt(2*np.array(self.nValidActuator))-3)
     
-    def __init__(self,nActu1D,pitch,heights=[0.0],mechCoupling=[0.2],modes='gaussian',opt_dir=[[0.0],[0.0]], opt_weights=[1.0],\
+    def __init__(self,nActu1D,pitch,heights=[0.0],mechCoupling=[0.2],modes='gaussian',opt_dir=[[0.0],[0.0]], opt_weights=[1.0],
                  opt_cond=1e2, n_rec=None, validActuator=None,offset = [[0,0]],AoArea='circle',resolution=None):
         # PARSING INPUTS
         if np.isscalar(nActu1D):

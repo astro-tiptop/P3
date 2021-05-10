@@ -12,13 +12,11 @@ from astropy.io import fits
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
-import os
-import sys
+import os.path
 
 from aoSystem.fourierModel import fourierModel
 import aoSystem.FourierUtils as FourierUtils
 
-import psfao21 as psfao21Main
 from telemetry.telemetryKeck import telemetryKeck
 from telemetry.systemDiagnosis import systemDiagnosis
 from telemetry.configFile import configFile
@@ -47,22 +45,14 @@ plt.rcParams.update({
 rad2mas = 3600 * 180 * 1e3/np.pi
     
 #%% MANAGING PATHS
+path_p3 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# path_ini = os.path.join(path_p3, 'aoSystem', 'parFiles', 'KECKII_NIRC2_20130801_12_00_19.254.ini')
+path_ini = os.path.join(path_p3, 'data', 'KECKII_NIRC2_20130801_12_00_19.254.ini')
+path_img = os.path.join(path_p3, 'data', '20130801_n0004.fits')
+path_calib = os.path.join(path_p3, 'aoSystem', 'data', 'KECK_CALIBRATION')
+path_trs = os.path.join(path_p3, 'data')
 
-if sys.platform[0:3] == 'win':
-    path_root  = '\\'.join(psfao21Main.__file__.split('\\')[0:-3]) + '\\'
-    path_p3    = '\\'.join(psfao21Main.__file__.split('\\')[0:-2])
-    path_ini   = path_p3 + '\aoSystem\parFiles\KECKII_NIRC2_20130801_12_00_19.254.ini'
-    path_img   = path_p3 + '\data\20130801_n0004.fits'
-    path_calib = path_p3 + '\aoSystem\data\KECK_CALIBRATION\\'
-else:
-    path_root  = '/'.join(psfao21Main.__file__.split('/')[0:-3]) + '/'
-    path_p3    = '/'.join(psfao21Main.__file__.split('/')[0:-2])
-    path_ini   = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
-    path_img   = path_p3 + '/data/20130801_n0004.fits'
-    path_calib = path_p3 + '/aoSystem/data/KECK_CALIBRATION/'
-
-im_nirc2 = fits.getdata(path_img)    
-filename   = 'n0004_fullNGS_trs.sav'
+im_nirc2 = fits.getdata(path_img)
 
 #%% TEST THE SPATIAL FREQUENCY ADAPTIVE OPTICS MODEL
 
@@ -72,7 +62,7 @@ def TestFourierFitting():
     '''
       
     #instantiating the model
-    fao = fourierModel(path_ini,path_root=path_p3,calcPSF=False,display=False)
+    fao = fourierModel(path_ini,calcPSF=False,display=False)
     
     # loading the data
     
@@ -93,7 +83,7 @@ def TestPsfao21Instantiation():
         Test the instantiation of the PSFAO21 model
     '''
     # instantiating the model
-    psfao    = psfao21(path_ini,path_root=path_p3)
+    psfao    = psfao21(path_ini)
     plt.close('all')
     kx  = psfao.freq.kx_[psfao.freq.nOtf//2+1:,psfao.freq.nOtf//2]/psfao.freq.kc_
     nCases = 5
@@ -227,7 +217,7 @@ def TestPsfao21Fitting():
             - split fitting : PSD parameters first, redefinition of the bounds as xf+-5/3xerr and fit of the static aberrations
     '''
     # instantiating the model
-    psfao    = psfao21(path_ini,path_root=path_p3)
+    psfao    = psfao21(path_ini)
     
     # -------- Joint fitting the 7 PSD parameters + static aberrations
     x0    = [0.7,4e-2,0.5,1e-2,1,0,1.8,0,0,0,1.0,0,0,0] + list(np.zeros((psfao.ao.tel.nModes)))
@@ -249,8 +239,8 @@ def TestPsfao21Fitting():
     fixed = (False, False, False, False, False, False, False) +(True,)*3 + (False,False,False,False) + (False,)*36
     # redefining bounds
     bounds= psfao.updateBounds(res_psfao21.x,res_psfao21.xerr,sig=5)
-    res_psfao21_split  = psfFitting(im_nirc2,psfao,x0,verbose=2,\
-                        fixed=fixed,ftol=1e-5,gtol=1e-5,xtol=1e-5,bounds=bounds)
+    res_psfao21_split  = psfFitting(im_nirc2,psfao,x0,verbose=2,
+                                    fixed=fixed,ftol=1e-5,gtol=1e-5,xtol=1e-5,bounds=bounds)
     
     displayResults(psfao,res_psfao21_split,nBox=90,scale='log10abs')
     psd_stat2 = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
@@ -303,12 +293,12 @@ def TestPsfao21Fitting():
 
 
 #%% PSF RECONSTRUCTION
-def TestPSFR(path_trs):
+def TestPSFR():
     ''' Test the PSF reconstruction
     '''
     
     # Get the telemetry
-    trs = TestTelemetry(path_trs)
+    trs = TestTelemetry()
     sd  = TestSystemDiagnosis(trs)
     TestConfigFile(sd)
     
@@ -333,21 +323,18 @@ def TestPSFRFitting(psfr):
     
     return res
        
-def TestTelemetry(path_trs):
+def TestTelemetry():
     ''' Test the instantiation of the telemetryKeck object
     '''
     
     #load the telemetry
-    if sys.platform[0:3] == 'win':
-        path_sav = path_trs + '\\' + filename
-    else:
-        path_sav = path_trs + '/' + filename
-    
+
+    path_sav = os.path.join(path_trs, 'n0004_fullNGS_trs.sav')
     if not os.path.isfile(path_sav):
-        psfrUtils.get_data_file(path_trs,filename)
+        psfrUtils.get_data_file(path_sav)
         
     # path image/calibration
-    trs = telemetryKeck(path_sav,path_img,path_calib,path_save=path_trs,nLayer=1)
+    trs = telemetryKeck(path_sav, path_img, path_calib, path_save=path_trs, nLayer=1)
     
     return trs
 
@@ -367,9 +354,11 @@ def TestConfigFile(sd):
     
     return cfg
 
+
 #%% RUN FUNCTIONS
-TestFourierFitting()
-TestPsfao21Instantiation()
-TestPsfao21Fitting()
-psfr = TestPSFR(path_root)
-TestPSFRFitting(psfr)
+if __name__ == '__main__':
+    psfr = TestPSFR()
+    TestPSFRFitting(psfr)
+    TestFourierFitting()
+    TestPsfao21Instantiation()
+    TestPsfao21Fitting()

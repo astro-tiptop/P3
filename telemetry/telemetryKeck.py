@@ -27,27 +27,27 @@ class telemetryKeck:
         
         # Check the telemetry path
         self.path_trs = path_trs
-        if path_trs == None or path_trs == [] or path_trs == '':
+        if path_trs is None or path_trs == [] or path_trs == '':
             print('No telemetry file')
             self.path_trs = None
             self.path_calib = None
         else:
             # Check the telemetry file
-            if os.path.isfile(path_trs) == False:
+            if not os.path.isfile(path_trs):
                 print('%%%%%%%% ERROR %%%%%%%%')
                 print('The sav file does not exist\n')
                 return
             
         # Check the presence of the calibration folder
         self.path_calib = path_calib
-        if os.path.isdir(path_calib) == False:
+        if not os.path.isdir(path_calib):
             print('%%%%%%%% ERROR %%%%%%%%')
             print('The calibration folder does not exist\n')
             return
             
         # Check the image file
         self.path_img = path_img
-        if os.path.isfile(path_img) == False:
+        if not os.path.isfile(path_img):
             print('%%%%%%%% ERROR %%%%%%%%')
             print('The image file does not exist\n')
             return
@@ -60,7 +60,7 @@ class telemetryKeck:
         #2\ restoring instrument data
         self.restoringInstrumentData()
     
-        if self.path_trs != None:
+        if self.path_trs is not None:
             #3\ restoring calibration data
             self.restoringCalibrationData(nLayer=nLayer)
             
@@ -190,10 +190,10 @@ class telemetryKeck:
         self.tel.pupilMaskName= keckUtils.getPupilMask(hdr)
         _,self.aoMode         = keckUtils.getStagePositionWFS(hdr)   
         if self.tel.pupilMaskName.upper() == 'LARGEHEX':
-            self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_largeHex_272px.fits'
+            self.tel.path_pupil   = os.path.join(self.path_calib, 'NIRC2_MASK', 'keck_pupil_largeHex_272px.fits')
         else:
-            self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_open2_240px.fits'
-        self.tel.path_telstat = self.path_calib + '/KECK_STAT/keck_piston_modes_200px.fits'
+            self.tel.path_pupil   = os.path.join(self.path_calib, 'NIRC2_MASK', 'keck_pupil_open2_240px.fits')
+        self.tel.path_telstat = os.path.join(self.path_calib, 'KECK_STAT', 'keck_piston_modes_200px.fits')
         
         # 3\ Restore the instrument configuration
         self.cam.name = keckUtils.getInstName(hdr)
@@ -208,7 +208,7 @@ class telemetryKeck:
             self.cam.azimuth = [0.0]
             
             # wavelengths and transmission
-            self.path_filter = self.path_calib + '/NIRC2_FILTERS/'
+            self.path_filter = os.path.join(self.path_calib, 'NIRC2_FILTERS')
             self.cam.wvl, self.cam.bw, self.cam.transmission, self.cam.dispersion = keckUtils.samplingFilterProfile(self.path_filter,hdr)
             
             # exposure configuration
@@ -219,7 +219,7 @@ class telemetryKeck:
             # ron in e- and gain in e-/DN
             self.cam.ronDN = np.sqrt(self.cam.coadds)*self.cam.ron/self.cam.gain
             # NCPA
-            self.cam.path_ncpa = self.path_calib + '/NIRC2_STAT/' +  keckUtils.getNCPAstr(hdr)
+            self.cam.path_ncpa = os.path.join(self.path_calib, 'NIRC2_STAT', keckUtils.getNCPAstr(hdr))
             
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
@@ -231,17 +231,17 @@ class telemetryKeck:
             Collecting calibration data for the Keck AO system
         """
         #1\ Valid apertures/actuators
-        file = open(self.path_calib + '/KECKAO/keckValidActuatorMap.txt','r')
+        file = open(os.path.join(self.path_calib, 'KECKAO', 'keckValidActuatorMap.txt'),'r')
         self.dm.validActuators = np.array(np.genfromtxt(file)).astype('bool')
         file.close()
         
-        file = open(self.path_calib + '/KECKAO/keckValidSubapMap.txt','r')
+        file = open(os.path.join(self.path_calib, 'KECKAO', 'keckValidSubapMap.txt'),'r')
         self.wfs.validSubaperture = np.array(np.genfromtxt(file)).astype('bool')
         file.close()
         
         #2\ DM influence functions and filters
-        if self.path_trs != None:
-            dm = deformableMirror(self.dm.nActuators,self.dm.pitch,heights=self.dm.heights\
+        if self.path_trs is not None:
+            dm = deformableMirror(self.dm.nActuators,self.dm.pitch,heights=self.dm.heights
                                   ,mechCoupling=self.dm.mechCoupling,modes=self.dm.modes)
             self.mat.dmIF     = dm.setInfluenceFunction(self.tel.resolution)
             self.mat.dmIF_inv = np.linalg.pinv(self.mat.dmIF,rcond=1/self.dm.opt_cond)
@@ -249,9 +249,10 @@ class telemetryKeck:
         
         #3\ MASS/DIMM
         # managing the saving folder
-        if not os.path.isdir(self.path_calib+'/MASSDIMM/'):
-            os.mkdir(self.path_calib+'/MASSDIMM/')
-        self.path_massdimm = self.path_calib+'/MASSDIMM/'+self.obsdate+'/'
+        self.path_massdimm = os.path.join(self.path_calib, 'MASSDIMM')
+        if not os.path.isdir(self.path_massdimm):
+            os.mkdir(self.path_massdimm)
+        self.path_massdimm = os.path.join(self.path_massdimm, self.obsdate)
         if not os.path.isfile(self.path_massdimm):
             status = fetch_data(self.obsdate,self.path_massdimm)
         
@@ -273,13 +274,13 @@ class telemetryKeck:
                
             hhmmss = AcqTime2hhmmss(self.acqtime)
             # read the DIMM data to get the seeing
-            dimm = DIMM(self.path_massdimm + '/' + self.obsdate + '.dimm.dat')
+            dimm = DIMM(os.path.join(self.path_massdimm, self.obsdate + '.dimm.dat'))
             self.atm.seeing,_   = dimm.indexTime([hhmmss])
             
             # read the MASS data to get the Cn2 profile
-            mass        = MASS(self.path_massdimm + '/' + self.obsdate + '.mass.dat')
+            mass        = MASS(os.path.join(self.path_massdimm, self.obsdate + '.mass.dat'))
             SeeingAlt,_ = mass.indexTime([hhmmss])
-            massprof    = MASSPROF(self.path_massdimm + '/' + self.obsdate + '.masspro.dat')
+            massprof    = MASSPROF(os.path.join(self.path_massdimm, self.obsdate + '.masspro.dat'))
             Cn2Alt,_    = massprof.indexTime([hhmmss])
             
             # combine MASS and DIMM data

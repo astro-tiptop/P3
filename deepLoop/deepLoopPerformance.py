@@ -6,16 +6,16 @@ Created on Sun Mar  7 10:02:21 2021
 @author: omartin
 """
 
-#%% IMPORTING LIBRAIRIES
-import numpy as np
 import os
+from distutils.spawn import find_executable
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from distutils.spawn import find_executable
 import matplotlib.ticker as mtick
+# %% IMPORTING LIBRAIRIES
+import numpy as np
 from astropy.table import QTable
 
-from psfao21.psfao21 import psfao21
 
 #%% CLASS
 class deepLoopPerformance:
@@ -47,7 +47,7 @@ class deepLoopPerformance:
             
         # .ini file : needed for PSF computation
         self.path_ini = path_ini
-        if self.path_ini == None:
+        if self.path_ini is None:
             print('WARNING : the field path_ini is None : no analyses on PSFs possible')
         
         # IDENTIFYING DATA

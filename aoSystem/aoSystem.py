@@ -7,28 +7,29 @@ Created on Mon Apr  5 14:42:49 2021
 """
 
 # IMPORTING PYTHON LIBRAIRIES
-import os.path as ospath
+import os.path
 from configparser import ConfigParser
-import numpy as np
-import sys
 
-# IMPORTING P3 MODULES
-from aoSystem.telescope import telescope
+import numpy as np
+
 from aoSystem.atmosphere import atmosphere
-from aoSystem.source import source
 from aoSystem.deformableMirror import deformableMirror
 from aoSystem.detector import detector
-from aoSystem.sensor import sensor
 from aoSystem.rtc import rtc
+from aoSystem.sensor import sensor
+from aoSystem.source import source
+# IMPORTING P3 MODULES
+from aoSystem.telescope import telescope
+
 
 #%%
 class aoSystem():
     
-    def __init__(self,path_ini,path_root='',nLayer=None):
+    def __init__(self,path_ini,nLayer=None):
                             
         self.error = False
         # verify if the file exists
-        if ospath.isfile(path_ini) == False:
+        if not os.path.isfile(path_ini):
             print('%%%%%%%% ERROR %%%%%%%%')
             print('The .ini file does not exist\n')
             self.error = True
@@ -71,7 +72,7 @@ class aoSystem():
             
         #----- PUPIL
         if config.has_option('telescope','PathPupil'):
-            path_pupil = path_root + eval(config['telescope']['PathPupil'])
+            path_pupil = config['telescope']['PathPupil']
         else:
             path_pupil = ''
                   
@@ -81,45 +82,36 @@ class aoSystem():
             pupilAngle = 0.0
         
         if config.has_option('telescope','PathStaticOn'):
-            path_static_on = path_root + eval(config['telescope']['PathStaticOn'])
+            path_static_on = config['telescope']['PathStaticOn']
         else:
             path_static_on = None       
         
         if config.has_option('telescope','PathStaticOff'):
-            path_static_off = path_root + eval(config['telescope']['PathStaticOff'])
+            path_static_off = config['telescope']['PathStaticOff']
         else:
             path_static_off = None
         
         if config.has_option('telescope','PathStaticPos'):
-            path_static_pos = path_root + eval(config['telescope']['PathStaticPos'])
+            path_static_pos = config['telescope']['PathStaticPos']
         else:
             path_static_pos = None
             
         #----- APODIZER
         if config.has_option('telescope','PathApodizer'):
-            path_apodizer = path_root + eval(config['telescope']['PathApodizer'])
+            path_apodizer = config['telescope']['PathApodizer']
         else:
             path_apodizer = ''
                 
         #----- TELESCOPE ABERRATIONS
         if config.has_option('telescope', 'PathStatModes'):
-            path_statModes = path_root + eval(config['telescope']['PathStatModes'])
+            path_statModes = config['telescope']['PathStatModes']
         else:
             path_statModes = ''
-            
-            
-        # ----- managing paths for Windows OS
-        if sys.platform[0:3] == 'win':
-            path_pupil     = path_pupil.replace('/','\\')
-            path_static_on = path_static_on.replace('/','\\')
-            path_static_off= path_static_off.replace('/','\\')
-            path_static_pos= path_static_pos.replace('/','\\')
-            path_apodizer  = path_apodizer.replace('/','\\')
-            path_statModes = path_statModes.replace('/','\\')
+
         # ----- class definition     
-        self.tel = telescope(D,nPup,zenith_angle=zenithAngle,obsRatio=obsRatio,pupilAngle=pupilAngle,\
-                             path_pupil=path_pupil,path_static_on=path_static_on,\
-                             path_static_off=path_static_off,path_static_pos=path_static_pos,\
+        self.tel = telescope(D,nPup,zenith_angle=zenithAngle,obsRatio=obsRatio,pupilAngle=pupilAngle,
+                             path_pupil=path_pupil,path_static_on=path_static_on,
+                             path_static_off=path_static_off,path_static_pos=path_static_pos,
                              path_apodizer=path_apodizer,path_statModes=path_statModes)                     
 
         #%% ATMOSPHERE
@@ -330,7 +322,7 @@ class aoSystem():
             disp = [[0.0], [0.0]]
                 
         if config.has_option('sensor_HO','WfsType'):
-            wfstype = eval(config['sensor_HO']['WfsType'])
+            wfstype = config['sensor_HO']['WfsType']
         else:
             wfstype = 'Shack-Hartmann'
             
@@ -355,7 +347,7 @@ class aoSystem():
             NoiseVar = [None]
             
         if config.has_option('sensor_HO','Algorithm'):
-            algorithm = eval(config['sensor_HO']['Algorithm'])
+            algorithm = config['sensor_HO']['Algorithm']
         else:
             algorithm = 'wcog'
             
@@ -379,10 +371,10 @@ class aoSystem():
         else:
             excess = 1.0
             
-        self.wfs = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
-                   nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
-                   gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,\
-                   nL=nL,dsub=dsub,wfstype=wfstype,modulation=modu,\
+        self.wfs = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,
+                   nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,
+                   gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,
+                   nL=nL,dsub=dsub,wfstype=wfstype,modulation=modu,
                    noiseVar=NoiseVar,algorithm=algorithm,algo_param=[wr,thr,nv],tag="HO WFS")
 #%% TIP-TILT SENSORS
         if config.has_section('sensor_LO'):
@@ -462,7 +454,7 @@ class aoSystem():
                 NoiseVar = [None]
                 
             if config.has_option('sensor_LO','Algorithm'):
-                algorithm = eval(config['sensor_LO']['Algorithm'])
+                algorithm = config['sensor_LO']['Algorithm']
             else:
                 algorithm = 'wcog'
                 
@@ -482,11 +474,11 @@ class aoSystem():
                 nv = 0.0
                 
                 
-            self.tts = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
-                   nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
-                   gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,\
-                   nL=nL,dsub=list(D/np.array(nL)),wfstype='Shack-Hartmann',noiseVar=NoiseVar,\
-                   algorithm=algorithm,algo_param=[wr,thr,nv],tag="TT WFS")
+            self.tts = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,
+                              nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,
+                              gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,
+                              nL=nL,dsub=list(D/np.array(nL)),wfstype='Shack-Hartmann',noiseVar=NoiseVar,
+                              algorithm=algorithm,algo_param=[wr,thr,nv],tag="TT WFS")
         else:
             self.tts = None
 
@@ -522,8 +514,8 @@ class aoSystem():
         else:
             delay_LO = None
             
-        self.rtc = rtc(LoopGain_HO, frameRate_HO, delay_HO,\
-                 loopGainLO=LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
+        self.rtc = rtc(LoopGain_HO, frameRate_HO, delay_HO,
+                       loopGainLO=LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
                
 #%% DEFORMABLE MIRRORS
         if config.has_option('DM','NumberActuators'):
@@ -543,7 +535,7 @@ class aoSystem():
             return
         
         if config.has_option('DM','InfModel'):
-            InfModel = eval(config['DM']['InfModel']) 
+            InfModel = config['DM']['InfModel']
         else:
             InfModel = 'gaussian'
             
@@ -590,19 +582,19 @@ class aoSystem():
             nrec = 10
             
         if config.has_option('DM','AoArea'):
-            AoArea = eval(config['DM']['AoArea']) 
+            AoArea = config['DM']['AoArea']
         else:
             AoArea = 'circle'
         
         # ----- creating the dm class
-        self.dms = deformableMirror(nActu,DmPitchs,heights=DmHeights,mechCoupling=InfCoupling,modes=InfModel,\
-                   opt_dir=[opt_zen,opt_az],opt_weights=opt_w,\
-                   opt_cond=cond,n_rec = nrec,AoArea=AoArea)
+        self.dms = deformableMirror(nActu,DmPitchs,heights=DmHeights,mechCoupling=InfCoupling,modes=InfModel,
+                                    opt_dir=[opt_zen,opt_az],opt_weights=opt_w,
+                                    opt_cond=cond,n_rec = nrec,AoArea=AoArea)
       
 #%% SCIENCE DETECTOR
         
         if config.has_option('sensor_science','Name'):
-            camName = eval(config['sensor_science']['Name'])
+            camName = config['sensor_science']['Name']
         else:
             camName = 'SCIENCE CAM'
             
@@ -675,9 +667,9 @@ class aoSystem():
         else:
             excess = 1.0
         
-        self.cam = detector(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
-                            nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
-                       gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,tag=camName)
+        self.cam = detector(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,
+                            nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,
+                            gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,tag=camName)
         
     #%% AO mode
         self.aoMode = 'SCAO'
@@ -737,7 +729,7 @@ class aoSystem():
         # Servo-lag errors
         ff = np.pi*0.5**2 # to account for the loss of valid actuator outside the pupil
         nMax = int(np.sqrt(ff)*(self.dms.nControlledRadialOrder[0]+1))
-        if hasattr(self.rtc,'ttloop') and self.tts !=None :
+        if hasattr(self.rtc,'ttloop') and self.tts is not None:
             nMin = 3
         else:
             nMin = 1
@@ -753,7 +745,7 @@ class aoSystem():
             
         self.wfe['HO Noise'] = rad2nm(np.mean(varNoise))
         
-        if hasattr(self.rtc,'ttloop') and self.tts !=None:
+        if hasattr(self.rtc,'ttloop') and self.tts is not None:
             self.wfe['TT Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.ttloop['bandwidth'])* Dr053 * 2**(-2/3))
             
             if self.wfs.processing.noiseVar == [None]:

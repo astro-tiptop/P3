@@ -14,7 +14,7 @@ from psfFitting.confidenceInterval import confidence_interval
 import matplotlib.pyplot as plt
 
 #%%
-def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normType=1,\
+def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normType=1,
                bounds=None,ftol=1e-8,xtol=1e-8,gtol=1e-8,max_nfev=1000,verbose=0):
     """Fit a PSF with a parametric model solving the least-square problem
        epsilon(x) = SUM_pixel { weights * (amp * Model(x) + bck - psf)² }
@@ -94,7 +94,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
         INDFREE = np.where(FREE)[0]
         
     def get_bounds(inst):
-        if bounds == None:
+        if bounds is None:
             b_low = inst.bounds[0]
             if fixed is not None: b_low = np.take(b_low,INDFREE)
             b_up = inst.bounds[1]
@@ -124,10 +124,10 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
             
     # PERFORMING MINIMIZATION WITH CONSTRAINS AND BOUNDS
     if method == 'trf':
-        result = least_squares(cost,input2mini(x0),method='trf',bounds=get_bounds(psfModelInst),\
+        result = least_squares(cost,input2mini(x0),method='trf',bounds=get_bounds(psfModelInst),
                                ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0))
     else:
-        result = least_squares(cost,input2mini(x0),method='lm',\
+        result = least_squares(cost,input2mini(x0),method='lm',
                                ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0))
 
     # update parameters
@@ -190,7 +190,7 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
     
     # MANAGING THE IMAGE SIZE TO BE DIPSLAYED
     nPix  = res.im_sky.shape[0]
-    if nBox != None and nBox < nPix:
+    if nBox is not None and nBox < nPix:
         nCrop = nPix/nBox
         im_sky = FourierUtils.cropSupport(res.im_sky,nCrop)
         im_fit = FourierUtils.cropSupport(res.im_fit,nCrop)
@@ -213,12 +213,12 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
         fun = lambda x: x
             
     # MANAGING THE IMAGE RANGE
-    if vmin == None:
+    if vmin is None:
         if scale =='log10abs':
             vmin = 0
         else:
             vmin = np.min( [np.min(fun(im_sky)), np.min(fun(im_fit))])
-    if vmax == None:
+    if vmax is None:
         vmax = np.max([np.max(fun(im_sky)), np.max(fun(im_fit))])
     
     # IMAGES

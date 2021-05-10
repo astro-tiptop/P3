@@ -26,22 +26,22 @@ class psfR:
     """
     """
     # INIT
-    def __init__(self,trs,path_root='',nLayer=None,theta_ext=0):
+    def __init__(self,trs,nLayer=None,theta_ext=0):
         """
         """
         # READ PARFILE        
         tstart = time.time()
         
         # PARSING INPUTS
-        if hasattr(trs,'path_ini') == False:
+        if not hasattr(trs, 'path_ini'):
             print('ERROR : no .ini file attached with the telemetry object')
             return
         self.path_ini  = trs.path_ini
         self.trs       = trs
         self.theta_ext = theta_ext
-        self.ao        = aoSystem(self.path_ini,path_root=path_root)
+        self.ao        = aoSystem(self.path_ini)
         self.tag       = 'PSF-R'
-        if self.ao.error == False:
+        if not self.ao.error:
             
             # DEFINING THE FREQUENCY DOMAIN
             self.freq = frequencyDomain(self.ao)
@@ -69,9 +69,9 @@ class psfR:
                 self.dphi_tt = 0
 
             # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
-            self.dphi_ani = anisoplanatismStructureFunction(\
-            self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,\
-            self.freq.nOtf,self.freq.sampRef,Hfilter=self.trs.mat.Hdm)
+            self.dphi_ani = anisoplanatismStructureFunction(
+                self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,
+                self.freq.nOtf,self.freq.sampRef,Hfilter=self.trs.mat.Hdm)
             
             # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION
             if self.trs.tel.name != 'simulation':
@@ -219,6 +219,6 @@ class psfR:
         self.SF = self.TotalPhaseStructureFunction(r0,gho,gtt,Cn2=Cn2)
         
         # ----------------- COMPUTING THE PSF
-        PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
-                        F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel)
+        PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,
+                                           F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel)
         return PSF

@@ -22,17 +22,17 @@ rad2arc = rad2mas / 1000
 
 class psfao21:
     # INIT
-    def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False):
+    def __init__(self,path_ini,antiAlias=False,fitCn2=False):
         
         tstart = time.time()
         
         # PARSING INPUTS
         self.file      = path_ini
         self.antiAlias = antiAlias
-        self.ao        = aoSys(path_ini,path_root=path_root)    
+        self.ao        = aoSys(path_ini)
         self.isStatic  = self.ao.tel.nModes > 0
         self.tag       = 'PSFAO21'
-        if self.ao.error==False:
+        if not self.ao.error:
             
             # DEFINING THE FREQUENCY DOMAIN
             self.freq = frequencyDomain(self.ao)
@@ -164,15 +164,15 @@ class psfao21:
         # ----------------- GETTING THE PHASE STRUCTURE FUNCTION
         self.psd = self.getPSD([r0]+ x0_psd)
         if self.antiAlias:
-            	self.psd = np.pad(self.psd,(self.freq.nOtf//2,self.freq.nOtf//2)) 
+            self.psd = np.pad(self.psd,(self.freq.nOtf//2,self.freq.nOtf//2))
         self.SF = self.getSF(Cn2=Cn2)
         if self.antiAlias:
-            	self.SF   = FourierUtils.interpolateSupport(self.Dphi,self.freq.nOtf)    
+            self.SF   = FourierUtils.interpolateSupport(self.Dphi,self.freq.nOtf)
 
 
         # ----------------- COMPUTING THE PSF
-        PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
-                        jitterX=x0_jitter[0],jitterY=x0_jitter[1],jitterXY=x0_jitter[2],\
+        PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,
+                        jitterX=x0_jitter[0],jitterY=x0_jitter[1],jitterXY=x0_jitter[2],
                         F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat)
         return PSF
 

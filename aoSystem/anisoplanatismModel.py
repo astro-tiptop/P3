@@ -10,7 +10,7 @@ import aoSystem.FourierUtils as FourierUtils
 
 def anisoplanatismStructureFunction(tel,atm,src,lgs,ngs,nOtf,samp,Hfilter=1):
         
-    if (lgs==None) or (lgs.height == 0):
+    if (lgs is None) or (lgs.height == 0):
         # NGS mode, angular anisoplanatism 
         dani_ang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,ngs,nOtf,samp,Hfilter=Hfilter)
         return dani_ang

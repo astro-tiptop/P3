@@ -18,7 +18,7 @@ import aoSystem.FourierUtils as FourierUtils
 np.random.seed(69)
 
 
-def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=0,\
+def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=0,
                 normType=1,savePath='',nRound=7,bounds=[[0.05,1e-3,100,1e-3,0.5,1.1,-0.5],[0.4,5e-2,390,1e-1,2,3.0,0.5]]):
     
     tstart = time.time()
@@ -153,7 +153,7 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
             # SAVING
             if savePath != '':
                 # psf name
-                if addStatic == True:
+                if addStatic:
                     idStat = '_mode1_' + str(round(stat[0,j,k],2)) + '_mode2_' + str(round(stat[1,j,k],2)) \
                     + '_mode3_' + str(round(stat[2,j,k],2)) + '_mode4_' + str(round(stat[3,j,k],2))\
                     + '_mode5_' + str(round(stat[4,j,k],2)) + '_mode6_'+ str(round(stat[5,j,k],2))

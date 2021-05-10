@@ -177,9 +177,9 @@ class MASSPROF(object):
 
         # redid this to not use asciidata module but pandas instead
         table = read_csv(proffile, delim_whitespace=True, names= \
-            ['year', 'month', 'day', 'hour', 'minute', 'second', \
-            'cn2dh_05', 'cn2dh_1', 'cn2dh_2', 'cn2dh_4', 'cn2dh_8', \
-            'cn2dh_16', 'seeing'])
+            ['year', 'month', 'day', 'hour', 'minute', 'second',
+             'cn2dh_05', 'cn2dh_1', 'cn2dh_2', 'cn2dh_4', 'cn2dh_8',
+             'cn2dh_16', 'seeing'])
         
         # Date and time are in HST
         self.year  = np.array(table['year'])
@@ -190,8 +190,8 @@ class MASSPROF(object):
         self.minute = np.array(table['minute'])
         self.second = np.array(table['second'])
 
-        self.profs = np.array([table['cn2dh_05'], table['cn2dh_1'], table['cn2dh_2'], \
-            table['cn2dh_4'], table['cn2dh_8'], table['cn2dh_16']]).T
+        self.profs = np.array([table['cn2dh_05'], table['cn2dh_1'], table['cn2dh_2'],
+                               table['cn2dh_4'], table['cn2dh_8'], table['cn2dh_16']]).T
 
         # Convert from HST to UT
         self.hour += 10
@@ -255,7 +255,7 @@ def fetch_data(utDate, saveTo):
     dimmFile = utDate + '.dimm.dat'
     url = urlRoot + 'dimm/' + dimmFile
     try:
-        urllib.request.urlretrieve(url, saveTo + dimmFile)
+        urllib.request.urlretrieve(url, os.path.join(saveTo, dimmFile))
     except:
         print('MASSDIMM not available during the acquisition')
         return 0
@@ -263,12 +263,12 @@ def fetch_data(utDate, saveTo):
     # Save the MASS file
     massFile = utDate + '.mass.dat'
     url = urlRoot + 'mass/' + massFile
-    urllib.request.urlretrieve(url, saveTo + massFile)
+    urllib.request.urlretrieve(url, os.path.join(saveTo, massFile))
 
     # Save the MASS profile
     massproFile = utDate + '.masspro.dat'
     url = urlRoot + 'masspro/' + massproFile
-    urllib.request.urlretrieve(url, saveTo + massproFile)
+    urllib.request.urlretrieve(url, os.path.join(saveTo, massproFile))
     
     return 1
 
@@ -381,7 +381,7 @@ def get_mass_dimm_for_image(fits_file, massdimm_dir):
     date_tmp = hdr['DATEOBS']
     hst_tz = pytz.timezone('US/Hawaii')
     
-    if hdr['SHUTTER'] == True:
+    if hdr['SHUTTER']:
         dt_hst = datetime.datetime.strptime(date_tmp + ' ' + time_tmp, '%m/%d/%Y %H:%M:%S')
         dt_hst = hst_tz.localize(dt_hst)
     else:

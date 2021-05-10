@@ -112,9 +112,9 @@ def verifyDataBase(savePath,path_ini=None,nTest=10):
             return -1
     
     # Verification #3 : perform PSF-fitting i no noise
-    if nonoise == True:
+    if nonoise:
         fixed = (False,)*5 + (True,) + (False,) + (True,)*7 + (False,)*nStatic
-        if path_ini !=None:
+        if path_ini is not None:
             psfao = psfao21(path_ini)
             print('Run PSF-fitting on %d psfs'%nTest)
             for n in range(nTest):

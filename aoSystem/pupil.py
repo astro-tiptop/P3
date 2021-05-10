@@ -42,7 +42,7 @@ class pupil:
     Create a segmented telescope pupil 
     """
     
-    def __init__(self,segClass=segment(6,1.4,100),segCoord=[(0,0)],\
+    def __init__(self,segClass=segment(6,1.4,100),segCoord=[(0,0)],
                  D=[],cobs =0,spiderClass=[],getPetal=False):
         
         # PARSING INPUTS

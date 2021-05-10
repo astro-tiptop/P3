@@ -247,7 +247,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         """
         
         # INSTANTIATING THE OUTPUTS
-        if nPix == None:
+        if nPix is None:
             nPix = freq.nOtf
         PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
         SR  = np.zeros((ao.src.nSrc,freq.nWvl))
@@ -277,8 +277,8 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             
             # UPDATE THE INSTRUMENTAL OTF
             if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(xStat)>0:
-                freq.otfNCPA, freq.otfDL, _ = getStaticOTF(ao.tel,int(freq.nOtf),\
-                                                        freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
+                freq.otfNCPA, freq.otfDL, _ = getStaticOTF(ao.tel,int(freq.nOtf),
+                                                           freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
                 
             # UPDATE THE RESIDUAL JITTER
             if freq.nyquistSampling == True and freq.nWvl > 1 and (np.any(ao.cam.spotFWHM)):
@@ -456,7 +456,7 @@ def normalizeImage(im,normType=1,param=None):
         If param is provided, the functions does unormalize
     '''
 
-    if param == None:
+    if param is None:
         "NORMALIZATION"
         if normType == 0:
             param = 1

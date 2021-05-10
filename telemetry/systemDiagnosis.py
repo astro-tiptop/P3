@@ -210,7 +210,7 @@ class systemDiagnosis:
         self.trs.wfs.jIndex = list(range(j0,nZer+j0))
             
         # defining the pupil mask and the Zernike modes
-        if wfsMask==None:
+        if wfsMask is None:
             wfsMask = fits.getdata(self.trs.tel.path_pupil)
             ang     = self.trs.wfs.theta[0] + self.trs.tel.pupilAngle
             wfsMask = FourierUtils.interpolateSupport(rotate(wfsMask,ang,reshape=False),self.trs.tel.resolution).astype(bool)

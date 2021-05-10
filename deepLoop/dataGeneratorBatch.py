@@ -7,18 +7,10 @@ Created on Wed Mar  3 17:43:20 2021
 """
 import argparse
 from dataGenerator import generatePSF
-import sys
+import os.path
 
-# grab the path
-import aoSystem as aoSystemMain
-
-if sys.platform[0:3] == 'win':
-    path_mod = '\\'.join(aoSystemMain.__file__.split('\\')[0:-1])
-    path_file = path_mod + '\parFiles\\'
-else:
-    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
-    path_file = path_mod + '/parFiles/'
-        
+path_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'aoSystem', 'parFiles',
+                         'nirc2_monochromatic.ini')
         
 def commandLine():
      # CREATE ArgumentParser OBJECT :
@@ -26,7 +18,7 @@ def commandLine():
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # INI FILE
     parser.add_argument('--ini', help='Path to the .ini file for instantiating the model',
-                        default=path_file+'nirc2_monochromatic.ini', type=str)     
+                        default=path_file, type=str)
     # FOLDERS ARCHITECTURE
     parser.add_argument('--nIntervals', help='Number of intervals per primary parameters',
                         default=10, type=int)     
@@ -61,6 +53,6 @@ def commandLine():
 if __name__=='__main__':
     
     args = commandLine()
-    generatePSF(args.ini,nIntervals=args.nIntervals,nPSFperFolder=args.nPSFperFolder,addStatic=args.addStatic,\
-                mag=args.mag,zP=args.zP,DIT=args.DIT,nDIT=args.nDIT,skyMag=args.skyMag,ron=args.ron,\
+    generatePSF(args.ini,nIntervals=args.nIntervals,nPSFperFolder=args.nPSFperFolder,addStatic=args.addStatic,
+                mag=args.mag,zP=args.zP,DIT=args.DIT,nDIT=args.nDIT,skyMag=args.skyMag,ron=args.ron,
                 normType=args.normType,savePath=args.savePath,bounds=args.bounds)

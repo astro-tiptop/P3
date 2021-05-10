@@ -52,8 +52,8 @@ class fourierModel:
     """
     
     # CONTRUCTOR
-    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,path_root='',displayContour=False,\
-                 getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,\
+    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,displayContour=False,
+                 getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,
                  getEncircledEnergy=False,fftphasor=False,MV=0,nyquistSampling=False):
         
         tstart = time.time()
@@ -67,10 +67,10 @@ class fourierModel:
         self.calcPSF           = calcPSF
         self.tag               = 'TIPTOP'
         # GRAB PARAMETERS
-        self.ao = aoSystem(path_ini,path_root=path_root)
+        self.ao = aoSystem(path_ini)
         self.t_initAO = 1000*(time.time() - tstart)
         
-        if self.ao.error==False:
+        if not self.ao.error:
             
             # DEFINING THE FREQUENCY DOMAIN
             self.freq = frequencyDomain(self.ao,nyquistSampling=nyquistSampling)
@@ -86,7 +86,7 @@ class fourierModel:
                 self.strechFactor = 1.0
                            
             # DEFINING THE MODELED ATMOSPHERE 
-            if (self.ao.dms.nRecLayers!=None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
+            if (self.ao.dms.nRecLayers is not None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
                 weights_mod,heights_mod = FourierUtils.eqLayers(self.ao.atm.weights,self.ao.atm.heights,self.ao.dms.nRecLayers)
                 wSpeed_mod = np.linspace(min(self.ao.atm.wSpeed),max(self.ao.atm.wSpeed),num=self.ao.dms.nRecLayers)
                 wDir_mod   = np.linspace(min(self.ao.atm.wDir),max(self.ao.atm.wDir),num=self.ao.dms.nRecLayers)
@@ -131,7 +131,7 @@ class fourierModel:
                 
                 # GETTING METRICS
                 if getFWHM == True or getEnsquaredEnergy==True or getEncircledEnergy==True:
-                    self.getPsfMetrics(getEnsquaredEnergy=getEnsquaredEnergy,\
+                    self.getPsfMetrics(getEnsquaredEnergy=getEnsquaredEnergy,
                         getEncircledEnergy=getEncircledEnergy,getFWHM=getFWHM)
     
                 # DISPLAYING THE PSFS
@@ -515,7 +515,7 @@ class fourierModel:
         weights = self.ao.atm.weights  
         w = 2*i*np.pi*d
 
-        if hasattr(self, 'Rx') == False:
+        if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
         Rx = self.Rx*w
         Ry = self.Ry*w
@@ -573,7 +573,7 @@ class fourierModel:
         """
         tstart  = time.time()    
         psd = np.zeros((self.freq.resAO,self.freq.resAO))    
-        if hasattr(self, 'Rx') == False:
+        if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
 
         F = self.Rx*self.SxAv + self.Ry*self.SyAv     
@@ -588,7 +588,7 @@ class fourierModel:
         """
         tstart  = time.time()    
         psd = np.zeros((self.freq.resAO,self.freq.resAO))    
-        if hasattr(self, 'Rx') == False:
+        if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
 
         F = self.Rx*self.SxAv + self.Ry*self.SyAv     
@@ -638,9 +638,9 @@ class fourierModel:
                 fx = Beta[0]*self.freq.kxAO_
                 fy = Beta[1]*self.freq.kyAO_
                 for j in range(nH):
-                    PbetaL[:,:,0,j] = np.exp(i*2*np.pi*( Hs[j]*\
-                          (fx+fy) -  deltaT*self.ao.atm.wSpeed[j]\
-                          *(wDir_x[j]*self.freq.kxAO_+ wDir_y[j]*self.freq.kyAO_)))
+                    PbetaL[:,:,0,j] = np.exp(i*2*np.pi*( Hs[j]*
+                                                         (fx+fy) -  deltaT*self.ao.atm.wSpeed[j]
+                                                         *(wDir_x[j]*self.freq.kxAO_+ wDir_y[j]*self.freq.kyAO_)))
    
 
                 proj    = PbetaL - np.matmul(self.PbetaDM[s],self.Walpha)            
@@ -782,7 +782,7 @@ class fourierModel:
                 self.wfeTomo = np.sqrt(self.wfeST**2 - self.wfeS**2)
                     
             # Print
-            if verbose == True:
+            if verbose:
                 print('\n_____ ERROR BREAKDOWN  ON-AXIS_____')
                 print('------------------------------------------')
                 idCenter = self.ao.src.zenith.argmin()
@@ -845,8 +845,8 @@ class fourierModel:
             
         
         # ---------- GETTING THE PSF
-        PSF, SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
-                                      jitterX=jitterX,jitterY=jitterY,jitterXY=jitterXY,\
+        PSF, SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,
+                                      jitterX=jitterX,jitterY=jitterY,jitterXY=jitterXY,
                                       F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix)
 
         self.t_getPSF = 1000*(time.time() - tstart)
@@ -864,18 +864,18 @@ class fourierModel:
         tstart  = time.time()
         self.FWHM = np.zeros((2,self.ao.src.nSrc,self.freq.nWvl))
                     
-        if getEnsquaredEnergy==True:
+        if getEnsquaredEnergy:
             self.EnsqE   = np.zeros((int(self.freq.nOtf/2)+1,self.ao.src.nSrc,self.freq.nWvl))
-        if getEncircledEnergy==True:
+        if getEncircledEnergy:
             rr,radialprofile = FourierUtils.radial_profile(self.PSF[:,:,0,0])
             self.EncE   = np.zeros((len(radialprofile),self.ao.src.nSrc,self.freq.nWvl))
         for n in range(self.ao.src.nSrc):
             for j in range(self.freq.nWvl):
-                if getFWHM == True:
+                if getFWHM:
                     self.FWHM[:,n,j]  = FourierUtils.getFWHM(self.PSF[:,:,n,j],self.freq.psInMas[j],rebin=1,method='contour',nargout=2)
-                if getEnsquaredEnergy == True:
+                if getEnsquaredEnergy:
                     self.EnsqE[:,n,j] = 1e2*FourierUtils.getEnsquaredEnergy(self.PSF[:,:,n,j])
-                if getEncircledEnergy == True:
+                if getEncircledEnergy:
                     self.EncE[:,n,j]  = 1e2*FourierUtils.getEncircledEnergy(self.PSF[:,:,n,j])
                         
         self.t_getPsfMetrics = 1000*(time.time() - tstart)
@@ -1038,7 +1038,7 @@ class fourierModel:
         # total
         print("Required time for total calculation (ms)\t : {:f}".format(self.t_init))
         print("Required time for AO system model init (ms)\t : {:f}".format(self.t_initAO))
-        if self.ao.error == False:
+        if not self.ao.error:
             print("Required time for frequency domain init (ms)\t : {:f}".format(self.t_initFreq))
             print("Required time for final PSD calculation (ms)\t : {:f}".format(self.t_powerSpectrumDensity))
 

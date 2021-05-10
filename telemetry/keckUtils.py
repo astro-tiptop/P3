@@ -9,6 +9,7 @@ Created on Thu Apr  8 09:37:55 2021
 import numpy as np
 from astropy.table import Table
 import matplotlib.pyplot as plt
+import os.path
 
 def estimateLoopDelay(hdr):
             
@@ -139,7 +140,7 @@ def getFilterProfile(path_filter,filter):
         return
     
     filter = filters[filters_upper.index(filter.upper())]
-    table = Table.read(path_filter + filter + '.dat', format='ascii')
+    table = Table.read(os.path.join(path_filter, filter + '.dat'), format='ascii')
 
     wavelength = table[table.colnames[0]]
     transmission = table[table.colnames[1]]

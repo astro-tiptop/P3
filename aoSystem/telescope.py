@@ -51,8 +51,8 @@ class telescope:
         return 1/np.cos(self.zenith_angle*np.pi/180)
     
     # CONSTRUCTOR
-    def __init__(self,D,resolution, zenith_angle=0.0,obsRatio=0.0,pupilAngle = 0.0,\
-                 path_pupil='', path_static_on='', path_static_off='', path_static_pos='',\
+    def __init__(self,D,resolution, zenith_angle=0.0,obsRatio=0.0,pupilAngle = 0.0,
+                 path_pupil='', path_static_on='', path_static_off='', path_static_pos='',
                  path_apodizer='', path_statModes='', verbose=True):
         
         # PARSING INPUTS
@@ -71,7 +71,7 @@ class telescope:
         #----- PUPIL DEFINITION        
         
         pupil = [] 
-        if path_pupil!= '' and ospath.isfile(path_pupil) == True and re.search(".fits",path_pupil)!=None:
+        if path_pupil!= '' and ospath.isfile(path_pupil) == True and re.search(".fits", path_pupil) is not None:
             self.verb = True
             pupil = fits.getdata(path_pupil)
             pupil[pupil!=pupil] = 0
@@ -96,7 +96,7 @@ class telescope:
     
         #----- NCPA
         
-        if path_static_on != None and ospath.isfile(path_static_on) == True and re.search(".fits",path_static_on)!=None:
+        if path_static_on is not None and ospath.isfile(path_static_on) == True and re.search(".fits", path_static_on) is not None:
             self.opdMap_on = fits.getdata(path_static_on)
             self.opdMap_on[self.opdMap_on!=self.opdMap_on] = 0
             self.opdMap_on = FourierUtils.interpolateSupport(self.opdMap_on,resolution,kind='linear')
@@ -105,8 +105,8 @@ class telescope:
             self.path_static_on= ''
             
         #----- FIELD-DEPENDANT STATIC ABERRATIONS
-        if path_static_off != None and ospath.isfile(path_static_off) == True and re.search(".fits",path_static_off)!=None:   
-            if path_static_pos != None and ospath.isfile(path_static_pos) == True and re.search(".fits",path_static_pos)!=None:   
+        if path_static_off is not None and ospath.isfile(path_static_off) == True and re.search(".fits", path_static_off) is not None:
+            if path_static_pos is not None and ospath.isfile(path_static_pos) == True and re.search(".fits", path_static_pos) is not None:
                 opdMap_off = fits.getdata(path_static_off)
                 opdMap_pos = fits.getdata(path_static_pos)
                 if opdMap_pos.shape[0] != opdMap_off[0]:
@@ -124,7 +124,7 @@ class telescope:
             
         #----- APODIZER
         print(path_apodizer)
-        if path_apodizer!= '' and ospath.isfile(path_apodizer) and re.search(".fits",path_apodizer)!=None:
+        if path_apodizer!= '' and ospath.isfile(path_apodizer) and re.search(".fits", path_apodizer) is not None:
             self.apodizer = fits.getdata(path_apodizer)
             self.apodizer[self.apodizer!=self.apodizer] = 0
             self.apodizer = FourierUtils.interpolateSupport(self.apodizer,resolution,kind='linear')
@@ -133,7 +133,7 @@ class telescope:
             self.path_apodizer = ''
             
         #----- MODAL BASIS FOR TELESCOPE ABERRATIONS
-        if path_statModes!='' and ospath.isfile(path_statModes) == True and re.search(".fits",path_statModes)!=None:                
+        if path_statModes!='' and ospath.isfile(path_statModes) == True and re.search(".fits", path_statModes) is not None:
             statModes = fits.getdata(path_statModes)
             s1,s2,s3 = statModes.shape
             if s1 != s2: # mode on first dimension

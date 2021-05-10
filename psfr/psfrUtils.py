@@ -14,11 +14,11 @@ import urllib.request
 import os
 
 #%% DATA TRANSFER
-def get_data_file(path_sav,filename):
-    if not os.path.isfile(path_sav + f"/{filename}"):
-        print('Downloading of the file %s in the folder %s'%(filename,path_sav))
-        urllib.request.urlretrieve(f"https://nuage.osupytheas.fr/s/WjeQ8BB3wp2mEyL/download?files={filename}",
-                                   path_sav + f"{filename}")
+def get_data_file(path_sav):
+    folder, filename = os.path.split(path_sav)
+    if not os.path.isfile(path_sav):
+        print('Downloading file %s to folder %s' % (filename, folder))
+        urllib.request.urlretrieve(f"https://nuage.osupytheas.fr/s/WjeQ8BB3wp2mEyL/download?files={filename}", path_sav)
         
 #%%  PSF-R FACILITIES               
 def getOLslopes(s,u,MI,dt):    

@@ -37,8 +37,8 @@ class segment:
         """"""
         return self.nPixels/(2*self.radius)
     
-    def __init__(self,nSides,radius,nPixels,segAngle=0,posX=0,\
-                 posY=0,angleError=0,posXError=0,posYError=0,phaseError=0,\
+    def __init__(self,nSides,radius,nPixels,segAngle=0,posX=0,
+                 posY=0,angleError=0,posXError=0,posYError=0,phaseError=0,
                  reflexivity=1,shrinkCoeff=1):
         
         # PARSING INPUTS

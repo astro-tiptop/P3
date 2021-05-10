@@ -50,7 +50,7 @@ def vltSpiderMask(display=False):
     widthInMeter = 0.04057
     w            = D*cobs/2 
     
-    sp = spiders(np.array([52, 128, 231, 308]),widthInMeter,400,D=D,cobs=cobs,unit='m',mskPup=True,symetric=False, \
+    sp = spiders(np.array([52, 128, 231, 308]),widthInMeter,400,D=D,cobs=cobs,unit='m',mskPup=True,symetric=False,
                  spidersInitCoor= [(-w,0), (w,0), (w,0), (-w,0)]) 
     if display:
         plt.close('all')
@@ -68,7 +68,7 @@ class spiders:
         """"""
         return self.D/self.nPixels
     
-    def __init__(self,spidersAngle, spidersWidth, spidersInitCoor=[], D=1, cobs=0, \
+    def __init__(self,spidersAngle, spidersWidth, spidersInitCoor=[], D=1, cobs=0,
                  mskPup = False, symetric = False, nPixels= 0 ):
         
         # PARSING INPUTS

@@ -16,12 +16,12 @@ class configFile():
         
         # create the .ini file
         file = sysdiag.trs.tel.name + '_' + sysdiag.trs.cam.name + '_' + sysdiag.trs.obsdate + '_' + sysdiag.trs.acqtime + '.ini'
-        self.path_ini = sysdiag.trs.path_save + '/'+ file
+        self.path_ini = os.path.join(sysdiag.trs.path_save, file)
         if os.path.exists(self.path_ini):
             print('WARNING: the .ini file already exists')
 
         # open the .ini file
-        parser = ConfigParser()
+        parser = ConfigParser(interpolation=None)
         parser.optionxform = str
         parser.read(self.path_ini)
         
@@ -33,9 +33,9 @@ class configFile():
         parser.set('telescope','ZenithAngle', str(sysdiag.trs.tel.zenith_angle))
         parser.set('telescope','Resolution', str(sysdiag.trs.tel.resolution))
         parser.set('telescope','PupilAngle', str(sysdiag.trs.tel.pupilAngle))
-        parser.set('telescope','PathPupil','\'' + sysdiag.trs.tel.path_pupil + '\'')
-        parser.set('telescope','PathStaticOn','\'' + sysdiag.trs.cam.path_ncpa + '\'')
-        parser.set('telescope','PathStatModes','\'' + sysdiag.trs.tel.path_telstat + '\'')
+        parser.set('telescope','PathPupil', sysdiag.trs.tel.path_pupil)
+        parser.set('telescope','PathStaticOn', sysdiag.trs.cam.path_ncpa)
+        parser.set('telescope','PathStatModes', sysdiag.trs.tel.path_telstat)
         
         #%% ATMOSPHERE         
         if not parser.has_section('atmosphere'):
@@ -79,7 +79,7 @@ class configFile():
         # updating the HO WFS config
         if not parser.has_section('sensor_HO'):
             parser.add_section('sensor_HO')
-        parser.set('sensor_HO','WfsType', '\''+sysdiag.trs.wfs.type+'\'')
+        parser.set('sensor_HO','WfsType', sysdiag.trs.wfs.type)
         parser.set('sensor_HO','Modulation', str(sysdiag.trs.wfs.modulation))
         parser.set('sensor_HO','PixelScale', str(sysdiag.trs.wfs.pixel_scale))
         parser.set('sensor_HO','FiedOfView', str(sysdiag.trs.wfs.fov))
@@ -97,7 +97,7 @@ class configFile():
         parser.set('sensor_HO','NumberLenslets', str(sysdiag.trs.wfs.nSubap))
         parser.set('sensor_HO','SizeLenslets', str(sysdiag.trs.wfs.dsub))
         parser.set('sensor_HO','NoiseVariance', str(sysdiag.trs.wfs.noiseVar))
-        parser.set('sensor_HO','Algorithm', '\''+sysdiag.trs.wfs.algo+'\'')
+        parser.set('sensor_HO','Algorithm', sysdiag.trs.wfs.algo)
         parser.set('sensor_HO','WindowRadiusWCoG', str(sysdiag.trs.wfs.win))
         parser.set('sensor_HO','ThresholdWCoG', str(sysdiag.trs.wfs.thres))
         parser.set('sensor_HO','NewValueThrPix', str(sysdiag.trs.wfs.new))
@@ -121,7 +121,7 @@ class configFile():
             parser.set('sensor_LO','NumberLenslets', str(sysdiag.trs.tipTilt.nSubap))
             parser.set('sensor_LO','SizeLenslets', str(sysdiag.trs.tipTilt.dsub))
             parser.set('sensor_LO','NoiseVariance', str(sysdiag.trs.tipTilt.noiseVar))
-            parser.set('sensor_LO','Algorithm', '\''+sysdiag.trs.tipTilt.algo+'\'')
+            parser.set('sensor_LO','Algorithm', sysdiag.trs.tipTilt.algo)
             parser.set('sensor_LO','WindowRadiusWCoG', str(sysdiag.trs.tipTilt.win))
             parser.set('sensor_LO','ThresholdWCoG', str(sysdiag.trs.tipTilt.thres))
             parser.set('sensor_LO','NewValueThrPix', str(sysdiag.trs.tipTilt.new))
@@ -132,7 +132,7 @@ class configFile():
             parser.add_section('DM')
         parser.set('DM','NumberActuators', str(sysdiag.trs.dm.nActuators))
         parser.set('DM','DmPitchs', str(sysdiag.trs.dm.pitch))
-        parser.set('DM','InfModel', '\''+sysdiag.trs.dm.modes+'\'')
+        parser.set('DM','InfModel', sysdiag.trs.dm.modes)
         parser.set('DM','InfCoupling', str(sysdiag.trs.dm.mechCoupling))
         
         parser.set('DM','DmHeights', str(sysdiag.trs.dm.heights))
@@ -141,7 +141,7 @@ class configFile():
         parser.set('DM','OptimizationWeight', str(sysdiag.trs.dm.opt_weight))
         parser.set('DM','OptimizationConditioning', str(sysdiag.trs.dm.opt_cond))
         parser.set('DM','NumberReconstructedLayers', str(sysdiag.trs.dm.nrec))
-        parser.set('DM','AoArea', '\''+sysdiag.trs.dm.area+'\'')
+        parser.set('DM','AoArea', sysdiag.trs.dm.area)
         
         #%% RTC    
         if not parser.has_section('RTC'):
@@ -157,7 +157,7 @@ class configFile():
         #%% SCIENCE SOURCES AND DETECTOR    
         if not parser.has_section('sensor_science'):
             parser.add_section('sensor_science')
-        parser.set('sensor_science','Name', str('\''+sysdiag.trs.cam.name+'\''))
+        parser.set('sensor_science','Name', sysdiag.trs.cam.name)
         parser.set('sensor_science','FiedOfView', str(sysdiag.trs.cam.fov))
         parser.set('sensor_science','PixelScale', str(sysdiag.trs.cam.psInMas))
         parser.set('sensor_science','SigmaRON', str(sysdiag.trs.cam.ron))

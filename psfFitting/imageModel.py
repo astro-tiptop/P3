@@ -34,7 +34,7 @@ def imageModel(psfModelInst, Fluxes, Positions, Background=0.0, spectralStacking
     """
     
     # MANAGE THE IMAGE SIZE
-    if nPix == None:
+    if nPix is None:
         nPix = psfModelInst.freq.nPix
         mode = 'psf-like'
     else:
