@@ -9,4 +9,4 @@
 #SBATCH --mail-type=BEGIN,END  
 #SBATCH --mail-user=olivier.beltramo-martin@lam.fr
 
-python3 ./dataGeneratorBatch.py --mag=0 --addStat=0 --nPSFperFolder=3500 --savePath='/result/omartin/APPLY/' > 'genStatus.txt'
+python3 ./dataGeneratorBatch.py --mag=0 --addStat=0 --nPSFperFolder=1 --savePath='/home/omartin/Projects/APPLY/' > 'genStatus.txt'

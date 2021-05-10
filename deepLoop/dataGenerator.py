@@ -149,7 +149,7 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
             if mag != 0:
                 psf_i = np.random.poisson(Flux*psf_i) + np.random.poisson(skyFlux) - skyFlux + ronStack*np.random.randn(psf_i.shape[0])
             # NORMALIZING PSF
-            psf_i = FourierUtils.normalizeImage(psf_i,normType=normType)    
+            psf_i,_ = FourierUtils.normalizeImage(psf_i,normType=normType)    
             # SAVING
             if savePath != '':
                 # psf name
