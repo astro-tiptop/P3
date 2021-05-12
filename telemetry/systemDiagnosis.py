@@ -31,7 +31,7 @@ arc2rad = 1/rad2arc
 class systemDiagnosis:
 
     def __init__(self,trs,noiseMethod='autocorrelation',nshift=1,nfit=2,\
-                 noise=0,quantile=0.95,nWin=10,nZer=None,j0=4):
+                 noise=1,quantile=0.95,nWin=10,nZer=None,j0=4):
         
         self.trs = trs
         
@@ -218,7 +218,7 @@ class systemDiagnosis:
         """
         # defining Zernike modes
         if nZer == None:
-            nZer = int(0.6*self.trs.dm.validActuators.sum())
+            nZer = int(0.75*self.trs.dm.validActuators.sum())
             
         self.trs.wfs.jIndex = list(range(j0,nZer+j0))
             
@@ -258,38 +258,40 @@ class systemDiagnosis:
         return Cz_ho, Cz_tt
     
     def GetAtmosphereStatistics(self,ftol=1e-5,xtol=1e-5,gtol=1e-5,max_nfev=100,\
-                                noise=1,quantile=0.95,nWin=10,verbose=2):
+                                noise=1,quantile=0.95,nWin=10,verbose=-1):
         
         # ---- DEFINING THE COST FUNCTIONS
         z = self.z
         D = self.trs.tel.D
         class CostClass(object):
-            def __init__(self):
+            def __init__(self,sd):
                 self.iter = 0
+                self.sd   = sd
             def __call__(self,y):
                 if (self.iter%3)==0 and (verbose == 0 or verbose == 1): print("-",end="")
                 self.iter += 1
-                var_mod = z.CoefficientsVariance(D/y)
+                var_mod = self.sd.average_radial_order(z.CoefficientsVariance(D/y))
                 return (var_mod - var_emp)
-        cost = CostClass()
+        cost = CostClass(self)
     
         # ---- GETTING THE INPUT : VARIANCE OF ZERNIKE MODE
         self.trs.wfs.var_meas      = np.diag(self.trs.wfs.Cz_ao)
         self.trs.wfs.var_noise_zer = np.diag(np.dot(np.dot(self.trs.mat.u2z,self.trs.wfs.Cn_ao),self.trs.mat.u2z.T))
-        var_emp                    = (2*np.pi/self.trs.atm.wvl)**2 *(self.trs.wfs.var_meas - noise*self.trs.wfs.var_noise_zer)
+        var_emp = (2*np.pi/self.trs.atm.wvl)**2 *(self.trs.wfs.var_meas - noise*self.trs.wfs.var_noise_zer)
+        var_emp = self.average_radial_order(var_emp) 
         
         # ---- DATA-FITTING WITH A LEVENBERG-MARQUARDT ALGORITHM
         # minimization
-        x0  = np.array([0.2,self.trs.atm.L0])
-        res = least_squares(cost,x0,method='lm',ftol=ftol, xtol=xtol, gtol=gtol,\
-                            max_nfev=max_nfev,verbose=max(verbose,0))
+        x0  = np.array([0.2,25])
+        self.res_r0 = least_squares(cost,x0,method='trf',ftol=ftol, xtol=xtol, gtol=gtol,\
+                            max_nfev=max_nfev,verbose=max(verbose,0),bounds=([0.01,1],[1,100]))
         
         # fit uncertainties
-        res.xerr   = confidence_interval(res.fun,res.jac)
-        
+        self.res_r0.xerr   = confidence_interval(self.res_r0.fun,self.res_r0.jac)
+        self.trs.wfs.coeffs_mod = z.CoefficientsVariance(D/self.res_r0.x)
         # unpacking results
-        r0 = res.x[0] # r0 los at the atm wavelength
-        L0 = res.x[1]
+        r0 = self.res_r0.x[0] # r0 los at the atm wavelength
+        L0 = self.res_r0.x[1]
         
         # ---- MEASURING THE COHERENCE TIME
         # measuring the windspeed
@@ -298,14 +300,13 @@ class systemDiagnosis:
         tau0 = 0.314 * r0/v0
         
         # ---- COMPUTING UNCERTAINTIES
-        dr0   = res.xerr[0]
-        dL0   = res.xerr[1]
+        dr0   = self.res_r0.xerr[0]
+        dL0   = self.res_r0.xerr[1]
         dtau0 = 0.314*np.hypot(dr0/v0,r0*dv0/v0**2)
         
         return r0, L0, tau0, v0 , dr0, dL0, dtau0, dv0
     
     def GetWindSpeed(self,coeff=1.56,noise=1,nWin=10,quantile=0.95):
-        
         
         def GetQuantilesStudent(quantile=0.95,nWin=10):
             # quantiles
@@ -399,3 +400,35 @@ class systemDiagnosis:
         dv0   = self.trs.tel.D * dsum1 / (coeff*np.pi*0.3*sum2)
         
         return v0, dv0
+    
+    def average_radial_order(self,varIn):
+        
+        n = np.copy(self.z.n)
+        nuniq = np.unique(n).astype(int)
+        nZ = len(nuniq)
+        var = np.zeros(nZ)
+        
+        for k in range(nZ):
+            var[k] = np.median(varIn[n == nuniq[k]])
+        return var
+        
+    #%% DISPLAY
+    def display_zernike_fit(self):
+        '''
+            Display the results of the fitting of Zernike variance for seeing estimation
+        '''
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.plot(self.trs.wfs.jIndex,(2*np.pi/self.trs.atm.wvl)**2 * self.trs.wfs.var_meas,'bo',label='Measurements')
+        plt.plot(self.trs.wfs.jIndex,self.trs.wfs.coeffs_mod,'rs',label='Fit')
+        plt.legend()
+        plt.xlabel("Noll's index")
+        plt.ylabel('Variance [rad$^2$]')
+        
+        plt.figure()
+        nuniq = np.unique(self.z.n).astype(int)
+        plt.plot(nuniq,(2*np.pi/self.trs.atm.wvl)**2 * self.average_radial_order(self.trs.wfs.var_meas),'bo',label='Measurements')
+        plt.plot(nuniq,self.average_radial_order(self.trs.wfs.coeffs_mod),'rs',label='Fit')
+        plt.legend()
+        plt.xlabel("Radial order")
+        plt.ylabel('Variance [rad$^2$]')

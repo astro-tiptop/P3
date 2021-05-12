@@ -89,6 +89,8 @@ class fourierModel:
             # DEFINING THE MODELED ATMOSPHERE 
             if (self.ao.dms.nRecLayers!=None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
                 weights_mod,heights_mod = FourierUtils.eqLayers(self.ao.atm.weights,self.ao.atm.heights,self.ao.dms.nRecLayers)
+                if self.ao.dms.nRecLayers == 1:
+                    heights_mod = [0.0]
                 wSpeed_mod = np.linspace(min(self.ao.atm.wSpeed),max(self.ao.atm.wSpeed),num=self.ao.dms.nRecLayers)
                 wDir_mod   = np.linspace(min(self.ao.atm.wDir),max(self.ao.atm.wDir),num=self.ao.dms.nRecLayers)
                 if self.ao.lgs:

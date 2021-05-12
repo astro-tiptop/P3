@@ -40,6 +40,7 @@ class configFile():
         #%% ATMOSPHERE         
         if not parser.has_section('atmosphere'):
             parser.add_section('atmosphere')
+            
         parser.set('atmosphere','Wavelength', str(sysdiag.trs.atm.wvl))
         parser.set('atmosphere','Seeing', str(sysdiag.trs.atm.seeing))
         parser.set('atmosphere','L0', str(sysdiag.trs.atm.L0))
