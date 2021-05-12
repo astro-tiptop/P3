@@ -12,7 +12,7 @@ class rtc:
         processing class to define the processing strategy to convert the detector image into an input for the RTC.
     """
     
-    def __init__(self,loopGainHO, frameRateHO, delayHO,\
+    def __init__(self,loopGainHO, frameRateHO, delayHO,wfe=None,\
                  loopGainLO=None, frameRateLO=None, delayLO=None):
         
         
@@ -22,9 +22,9 @@ class rtc:
         self.holoop['rate']  = frameRateHO
         self.holoop['delay'] = delayHO       
         self.holoop['bandwidth'] = frameRateHO/2/np.pi * np.sqrt(loopGainHO/(1 + 2*delayHO))
+        self.holoop['wfe']   = wfe
         
         # LOW-ORDER LOOP
-        
         if loopGainLO!=None and frameRateLO!=None and delayLO!=None:
             self.ttloop = dict()
             self.ttloop['gain']  = loopGainLO

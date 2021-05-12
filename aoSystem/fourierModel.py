@@ -52,7 +52,8 @@ class fourierModel:
     """
     
     # CONTRUCTOR
-    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,path_root='',displayContour=False,\
+    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,path_root='',\
+                 normalizePSD=False,displayContour=False,\
                  getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,\
                  getEncircledEnergy=False,fftphasor=False,MV=0,nyquistSampling=False):
         
@@ -120,7 +121,11 @@ class fourierModel:
             self.controller(display=self.display)
                 
             # COMPUTE THE PSD
-            self.PSD = self.powerSpectrumDensity()
+            if normalizePSD == True:
+                wfe = self.ao.rtc.holoop['wfe']
+            else:
+                wfe = None
+            self.PSD = self.powerSpectrumDensity(wfe=wfe)
             
             # COMPUTE THE PHASE STRUCTURE FUNCTION
             self.SF  = self.phaseStructureFunction()
@@ -436,7 +441,7 @@ class fourierModel:
         self.t_controller = 1000*(time.time() - tstart)
       
 #%% PSD DEFINTIONS  
-    def powerSpectrumDensity(self):
+    def powerSpectrumDensity(self,wfe=None):
         """ Total power spectrum density in nm^2.m^2
         """
         tstart  = time.time()
@@ -481,13 +486,18 @@ class fourierModel:
             self.psdSpatioTemporal = np.real(self.spatioTemporalPSD())
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdSpatioTemporal
            
+            # NORMALIZATION
+            if wfe !=None:
+                psd *= (dk * rad2nm)**2
+                psd *= wfe**2/psd.sum()
+                
             # Fitting
             self.psdFit = np.real(self.fittingPSD())
             psd += np.repeat(self.psdFit[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
             
         self.t_powerSpectrumDensity = 1000*(time.time() - tstart)
             
-        # Return the 3D PSD array in nm^2.m^2
+        # Return the 3D PSD array in nm^2
         return psd * (dk * rad2nm)**2
     
     def fittingPSD(self):
@@ -837,7 +847,7 @@ class fourierModel:
         else:
             jitterX = x0[0]
             jitterY = x0[1]
-            jitterXY= x0[2]
+            jitterXY= x0[2] * np.sqrt(x0[0]*x0[1])
             F       = x0[3:3+self.ao.src.nSrc] * np.array(self.ao.cam.transmittance)[np.newaxis,:]
             dx      = x0[3+self.ao.src.nSrc:3+2*self.ao.src.nSrc] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
             dy      = x0[3+2*self.ao.src.nSrc:3+3*self.ao.src.nSrc] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]

@@ -268,3 +268,15 @@ class atmosphere:
             tmp     = atmSlab.covariance(atmSlab.heights*np.tan(theta))
             sf      = sf + 2*( atmSlab.variance() - tmp)  
         return sf
+    
+    def temporalCovariance(atm,tau):
+        '''
+        TEMPORALCOVARIANCE Phase temporal covariance computes the
+        phase temporal covariance from the delay tau and an
+        '''
+           
+        corr = np.zeros(len(tau))
+        for kLayer in range(atm.nL):
+            corr   += atm.covariance(atm.wSpeed[kLayer]*tau)
+        return corr
+            

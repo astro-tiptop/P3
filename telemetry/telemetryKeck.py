@@ -261,7 +261,9 @@ class telemetryKeck:
         self.atm.wDir       = list(np.zeros(len(self.atm.wSpeed)))
         self.atm.L0         = 25
         self.atm.Cn2Heights = [0.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0]
-
+        self.atm.Cn2_mass    = [-1]
+        self.atm.seeing_dimm = -1
+        self.atm.seeing_mass = -1
         if status == 0:
             # default atmosphere : median conditions
             self.atm.seeing     = 3600*180/np.pi * 0.98*500e-9/0.16
@@ -274,22 +276,34 @@ class telemetryKeck:
             hhmmss = AcqTime2hhmmss(self.acqtime)
             # read the DIMM data to get the seeing
             dimm = DIMM(self.path_massdimm + '/' + self.obsdate + '.dimm.dat')
-            self.atm.seeing,_   = dimm.indexTime([hhmmss])
+            self.atm.seeing  = dimm.indexTime([hhmmss])[0][0]
             
             # read the MASS data to get the Cn2 profile
             mass        = MASS(self.path_massdimm + '/' + self.obsdate + '.mass.dat')
-            SeeingAlt,_ = mass.indexTime([hhmmss])
+            SeeingAlt   = mass.indexTime([hhmmss])[0][0]
             massprof    = MASSPROF(self.path_massdimm + '/' + self.obsdate + '.masspro.dat')
-            Cn2Alt,_    = massprof.indexTime([hhmmss])
-            
-            # combine MASS and DIMM data
-            self.atm.Cn2 = CombineMASSandDIMM(self.atm.seeing,SeeingAlt,Cn2Alt,wvl=self.atm.wvl)
-            self.atm.Cn2Weights = self.atm.Cn2/self.atm.Cn2.sum()
-            
+            Cn2Alt      = massprof.indexTime([hhmmss])[0].reshape(-1)
+            if np.all(Cn2Alt == -1):
+                self.atm.seeing     = 3600*180/np.pi * 0.98*500e-9/0.16
+                self.atm.Cn2Weights = [0.517, 0.119, 0.063, 0.061, 0.105, 0.081, 0.054]
+            else:
+                if SeeingAlt == -1:
+                    rad2arc = 3600*180/np.pi
+                    mu = (0.976*rad2arc)**(5/3)*0.423*4*np.pi*np.pi/self.atm.wvl**(1/3)
+                    SeeingAlt = (mu * np.sum(Cn2Alt)) ** (3/5)
+                # combine MASS and DIMM data
+                self.atm.Cn2 = CombineMASSandDIMM(self.atm.seeing,SeeingAlt,Cn2Alt,wvl=self.atm.wvl)
+                self.atm.Cn2Weights = list(self.atm.Cn2/self.atm.Cn2.sum())
+                
+                # copying MASS/DIM data
+                self.atm.Cn2_mass    = np.copy(self.atm.Cn2Weights)
+                self.atm.seeing_dimm = np.copy(self.atm.seeing)
+                self.atm.seeing_mass = np.copy(SeeingAlt)
+                
         # compressing
         if nLayer < len(self.atm.Cn2Heights):
-            _,self.atm.wSpeed = FourierUtils.eqLayers(self.atm.Cn2Weights,np.array(self.atm.wSpeed),nLayer)
-            _,self.atm.wDir   = FourierUtils.eqLayers(self.atm.Cn2Weights,np.array(self.atm.wDir),nLayer,power=1)
+            self.atm.wSpeed = list(FourierUtils.eqLayers(np.array(self.atm.Cn2Weights),np.array(self.atm.wSpeed),nLayer)[1])
+            self.atm.wDir   = list(FourierUtils.eqLayers(np.array(self.atm.Cn2Weights),np.array(self.atm.wDir),nLayer,power=1)[1])
             self.atm.Cn2Weights,self.atm.Cn2Heights = FourierUtils.eqLayers(self.atm.Cn2Weights,np.array(self.atm.Cn2Heights),nLayer)
             
     def restoringTelemetry(self,verbose=False):
@@ -350,8 +364,13 @@ class telemetryKeck:
         #3.2\ Get the reconstructed wavefront in OPD and in the actuators space
         self.rec.res   = self.dm.volt2meter*trsData.A['RESIDUALWAVEFRONT'][0][:,0:self.dm.nCom]
         self.rec.res  -= np.mean(self.rec.res,axis=0) 
-        self.rec.focus = np.copy(trsData.A['RESIDUALWAVEFRONT'][0][-1,:]) # note : if not multiplyied by a factor, the array is read-only
+        self.rec.focus = np.copy(trsData.A['RESIDUALWAVEFRONT'][0][:,-1])
         self.rec.focus-= np.mean(self.rec.focus,axis=0) 
+        
+        # compute the residual error
+        u = np.std(self.rec.res,axis=0)
+        u = u[u.nonzero()]
+        self.rec.wfe = np.sqrt(np.sum(u**2/len(u)))*1e9
         
         # fill vector to get 21x21 actuators
         if np.any(self.dm.validActuators):   

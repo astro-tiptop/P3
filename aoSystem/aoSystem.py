@@ -116,6 +116,7 @@ class aoSystem():
             path_static_pos= path_static_pos.replace('/','\\')
             path_apodizer  = path_apodizer.replace('/','\\')
             path_statModes = path_statModes.replace('/','\\')
+
         # ----- class definition     
         self.tel = telescope(D,nPup,zenith_angle=zenithAngle,obsRatio=obsRatio,pupilAngle=pupilAngle,\
                              path_pupil=path_pupil,path_static_on=path_static_on,\
@@ -522,7 +523,12 @@ class aoSystem():
         else:
             delay_LO = None
             
-        self.rtc = rtc(LoopGain_HO, frameRate_HO, delay_HO,\
+        if config.has_option('RTC','ResidualError'):
+            wfe = eval(config['RTC']['ResidualError'])
+        else:
+            wfe = None
+            
+        self.rtc = rtc(LoopGain_HO, frameRate_HO, delay_HO, wfe=wfe,\
                  loopGainLO=LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
                
 #%% DEFORMABLE MIRRORS

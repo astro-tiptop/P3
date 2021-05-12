@@ -11,22 +11,36 @@ import numpy as np
 from numpy.random import uniform
 import numpy.fft as fft
 import os
-from astropy.io import fits
 import time
+import sys
+
+from astropy.io import fits
+import psfao21 as psfao21Main
 from psfao21.psfao21 import psfao21
 import aoSystem.FourierUtils as FourierUtils
 np.random.seed(69)
 
 
 def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=0,\
-                normType=1,savePath='',nRound=7,bounds=[[0.05,1e-3,100,1e-3,0.5,1.1,-0.5],[0.4,5e-2,390,1e-1,2,3.0,0.5]]):
+                normType=1,savePath='',nModes=6,nRound=7,fullName=False,\
+                bounds=[[0.05,1e-3,100,1e-3,0.5,1.1,-0.5],[0.4,5e-2,390,1e-1,2,3.0,0.5]]):
     
     tstart = time.time()
     #%% MODEL INSTANTIATION
-    psfao    = psfao21(path_ini) 
+    if sys.platform[0:3] == 'win':
+        path_p3 = '\\'.join(psfao21Main.__file__.split('\\')[0:-2])
+    else:
+        path_p3 = '/'.join(psfao21Main.__file__.split('/')[0:-2])
+    
+    psfao    = psfao21(path_ini,path_root=path_p3) 
     wvl      = psfao.freq.wvlRef
     wvlFact  = 2*np.pi*1e-9/wvl
 
+    #%% CHECKING THE NUMBER OF MODES
+    if addStatic == True  and nModes > psfao.ao.tel.nModes:
+        print('WARNING : the inputs number of modes is too high and then cropped')
+        nModes = psfao.ao.tel.nModes
+        
     #%% DEFINITION OF PARAMETERS DOMAIN
 
     # ------------------ DEFINING FOLDERS
@@ -47,7 +61,11 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
             idNOISE = ''      
         # defining prefix   
         instru    = path_ini.split('/')[-1].split('.')[0]
-        psfPrefix = 'psfao21_' + instru + '_wvl_' + str(round(wvl*1e6,3)) + 'µm'
+        if fullName == True:
+            psfPrefix = 'psfao21_' + instru + '_wvl_' + str(round(wvl*1e6,3)) + 'µm'
+        else:
+            psfPrefix = 'psf'
+            
         # creating tha main data folder
         savePath = savePath + '/PSFAO21_' + idNOISE + 'NOISE_' + idSTATIC + 'STATIC/'
         if not os.path.isdir(savePath):
@@ -100,8 +118,6 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
             # CREATING SUBFOLDERS
             if savePath != '':
                 # define subfolders name
-                #import pdb
-                #pdb.set_trace()
                 idsub = 'r0_' + str(r0_int[k]) + '_sig2_' + str(A_int[j])
                 # create subdirectories
                 path_folder = savePath + idsub
@@ -116,7 +132,7 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
     p    = np.repeat(np.linspace(p_lb,p_ub,nPSFperFolder)[:,np.newaxis],nSubFolder,axis=1)
     be   = np.repeat(uniform(low=beta_lb,high=beta_ub,size=nPSFperFolder)[:,np.newaxis],nSubFolder,axis=1)
     if addStatic:
-        stat = np.repeat(uniform(low=stat_lb,high=stat_ub,size=(6,nPSFperFolder))[:,:,np.newaxis],nSubFolder,axis=2)
+        stat = np.repeat(uniform(low=stat_lb,high=stat_ub,size=(nModes,nPSFperFolder))[:,:,np.newaxis],nSubFolder,axis=2)
 
     #%% LOOPS
     pix2freq = 1/(psfao.ao.tel.D * psfao.freq.sampRef)**2
@@ -154,16 +170,19 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
             if savePath != '':
                 # psf name
                 if addStatic == True:
-                    idStat = '_mode1_' + str(round(stat[0,j,k],2)) + '_mode2_' + str(round(stat[1,j,k],2)) \
-                    + '_mode3_' + str(round(stat[2,j,k],2)) + '_mode4_' + str(round(stat[3,j,k],2))\
-                    + '_mode5_' + str(round(stat[4,j,k],2)) + '_mode6_'+ str(round(stat[5,j,k],2))
+                    s = ['_m'+str(nn+1)+'_' + str(round(stat[nn,j,k],2)) for nn in range(nModes)]
+                    idStat = ''.join(s)
                 if mag != 0:
-                    idNoise = '_Mag_' + str(mag)# + '_ron_' + str(ron) + '_skyMag_' + str(skyMag) + '_DIT_' + str(DIT) + '_NDIT_' + str(nDIT) 
+                    idNoise = '_mag_' + str(mag)# + '_ron_' + str(ron) + '_skyMag_' + str(skyMag) + '_DIT_' + str(DIT) + '_NDIT_' + str(nDIT) 
                     
-                idpsf = psfPrefix + '_r0_' + str(round(r0[j,k],nRound)) + '_bg_' + str(round(C[j,k],nRound))\
-                + '_sig2_' + str(round(A[j,k],nRound)) + '_ax_' + str(round(ax[j,k],nRound)) + \
-                '_asym_' + str(round(p[j,k],nRound)) + '_beta_' + str(round(be[j,k],nRound)) \
-                + idStat + idNoise +  '_normalization_' + str(normType)
+                idpsf = psfPrefix + '_r0_' \
+                            + str(round(r0[j,k],min(5,nRound)))\
+                            + '_bg_' + str(round(C[j,k],min(6,nRound)))\
+                            + '_s2_' + str(round(A[j,k],min(4,nRound)))\
+                            + '_ax_' + str(round(ax[j,k],min(6,nRound)))\
+                            + '_pe_' + str(round(p[j,k],min(3,nRound)))\
+                            + '_be_' + str(round(be[j,k],min(3,nRound)))\
+                            + idStat + idNoise  +  '_norm_'  + str(normType)
                 
                 # corresponding subfolders
                 idsub = 'r0_' + str(r0_int[idr0[j,k]]) + '_sig2_' + str(A_int[idA[j,k]])

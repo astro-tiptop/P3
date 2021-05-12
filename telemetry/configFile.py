@@ -149,6 +149,7 @@ class configFile():
         parser.set('RTC','LoopGain_HO', str(sysdiag.trs.holoop.gain))
         parser.set('RTC','SensorFrameRate_HO', str(sysdiag.trs.holoop.freq))
         parser.set('RTC','LoopDelaySteps_HO', str(sysdiag.trs.holoop.lat * sysdiag.trs.holoop.freq))
+        parser.set('RTC','ResidualError', str(sysdiag.trs.rec.wfe))
         if hasattr(sysdiag.trs,'ttloop'):
             parser.set('RTC','LoopGain_LO', str(sysdiag.trs.ttloop.gain))
             parser.set('RTC','SensorFrameRate_LO', str(sysdiag.trs.ttloop.freq))
@@ -167,12 +168,23 @@ class configFile():
         parser.set('sensor_science','Dispersion', str(sysdiag.trs.cam.dispersion))
        
         # jitter
-        Cj = np.sqrt(np.dot(sysdiag.trs.tipTilt.slopes.T,sysdiag.trs.tipTilt.slopes)/sysdiag.trs.tipTilt.slopes.shape[0])
-        Cj*= 1000/sysdiag.trs.tipTilt.tilt2meter
+        Cj = np.dot(sysdiag.trs.tipTilt.slopes.T,sysdiag.trs.tipTilt.slopes)/sysdiag.trs.tipTilt.slopes.shape[0]
+        Cj*= (1000/sysdiag.trs.tipTilt.tilt2meter)**2
         psInMas = sysdiag.trs.cam.psInMas 
         #1 mas = rad2mas * 4/D * 1e-9 * 1nm
-        parser.set('sensor_science','SpotFWHM', str([[np.hypot(Cj[1,1],psInMas/2), np.hypot(Cj[0,0],psInMas/2), np.hypot(Cj[0,1],psInMas/2)]]))
+        parser.set('sensor_science','SpotFWHM', \
+        str([[np.hypot(np.sqrt(Cj[0,0]),psInMas/2)\
+             ,np.hypot(np.sqrt(Cj[1,1]),psInMas/2)\
+             ,np.sign(Cj[0,1]) * np.hypot(np.sqrt(abs(Cj[0,1])),psInMas/2)]]))
+    
+        #%% EXTERNAL PROFILER
+        if not parser.has_section('external'):
+            parser.add_section('external')
+        parser.set('external','Seeing', str(sysdiag.trs.atm.seeing_dimm))
+        parser.set('external','SeeingAlt', str(sysdiag.trs.atm.seeing_mass))
+        parser.set('external','Cn2Weights', str(sysdiag.trs.atm.Cn2_mass))
         
+        #%% WRITING
         with open(self.path_ini, 'w') as configfile:
             parser.write(configfile)
             

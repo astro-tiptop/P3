@@ -72,10 +72,7 @@ def TestFourierFitting():
     '''
       
     #instantiating the model
-    fao = fourierModel(path_ini,path_root=path_p3,calcPSF=False,display=False)
-    
-    # loading the data
-    
+    fao = fourierModel(path_ini,path_root=path_p3,calcPSF=False,display=False)    
     
     # fitting the residual jitter + astrometry/photometry
     x0  = [fao.ao.cam.spotFWHM[0][0],fao.ao.cam.spotFWHM[0][1],fao.ao.cam.spotFWHM[0][2],1,0,0,0]
