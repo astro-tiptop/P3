@@ -12,10 +12,8 @@ from numpy.random import uniform
 import numpy.fft as fft
 import os
 import time
-import sys
 
 from astropy.io import fits
-import psfao21 as psfao21Main
 from psfao21.psfao21 import psfao21
 import aoSystem.FourierUtils as FourierUtils
 np.random.seed(69)
@@ -143,7 +141,7 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
         
         # DERIVING THE TELESCOPE OTF
         if addStatic:
-            otfStat,_,_ = FourierUtils.getStaticOTF(psfao.ao.tel,psfao.freq.nOtf,psfao.freq.sampRef,psfao.freq.wvlRef,xStat=stat[:,j,0])
+            otfStat,_,_ = FourierUtils.getStaticOTF(psfao.ao.tel,psfao.freq.nOtf,psfao.freq.sampRef,psfao.freq.wvlRef,xStat=stat[:,j])
             otfStat = fft.fftshift(otfStat)
         else:
             otfStat = otfDL
@@ -187,9 +185,3 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
                 hdu.writeto(savePath + idsub + '/' + idpsf + '.fits',overwrite=True)
                 
     print('Simulation of %d PSF done in %.2fs'%(nPSFperFolder*nSubFolder,time.time()-tstart))
-    
-    # Computation time profiling
-    # nonoise_nostatic : 100s for 35,000 PSFs - > expected: 1000s for 350,000 PSFs
-    # nonoise_static   : 127s for 35,000 PSFs - > expected: 1270s for 350,000 PSFs
-    # noise_nostatic   : 130s for 35,000 PSFs - > expected: 1300s for 350,000 PSFs
-    # noise_static     : 152s for 35,000 PSFs - > expected: 1520s for 350,000 PSFs

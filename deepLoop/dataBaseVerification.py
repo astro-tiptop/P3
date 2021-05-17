@@ -58,9 +58,9 @@ def verifyDataBase(savePath,path_ini=None,nTest=10,nPSD=6):
     
     # counting the number of parameters
     s = listPSF[0].split('_')
-    if 'mode1' in s:
+    if 'm1' in s:
         k=1
-        while 'mode'+str(k) in s:
+        while 'm'+str(k) in s:
            k+=1 
         nStatic = k-1
         print('The data include %d modes of static aberrations'%nStatic)
@@ -131,7 +131,7 @@ def verifyDataBase(savePath,path_ini=None,nTest=10,nPSD=6):
                 nstart    = int(np.where([s[jj] == 'r0' for jj in range(len(s)) ])[0][0] + 1)
                 r0        = float(s[nstart])
                 x0_psd    = list(np.array(s[nstart+2:nstart+2+2*(nPSD-2):2]).astype(float)) + [0] + [float(s[nstart+2+2*(nPSD-2)])]
-                xstat     = list(np.array(s[nstart+2+2*nPSD+8:nPSD+2*nParam:2]).astype(float))
+                xstat     = list(np.array(s[nstart+2+2*(nPSD-1):nPSD+2*(nParam-2):2]).astype(float))
                 x0        = np.array([r0] + x0_psd + [0,0,0,1,0,0,0] + xstat)
                 
                 # comparing psf
