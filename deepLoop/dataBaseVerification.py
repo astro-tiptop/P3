@@ -14,12 +14,11 @@ from psfao21.psfao21 import psfao21
 from psfFitting.psfFitting import psfFitting
 
 #%%
-def verifyDataBase(savePath,path_ini=None,nTest=10):
+def verifyDataBase(savePath,path_ini=None,nTest=10,nPSD=6):
     
     # verify the presence of the saving folder
     if not os.path.isdir(savePath):
-        print('ERROR : The data folder does not exist')
-        return -1
+        raise ValueError('ERROR : The data folder does not exist')
     
     # counting the number of subfolders
     listSub = os.listdir(savePath)
@@ -51,8 +50,7 @@ def verifyDataBase(savePath,path_ini=None,nTest=10):
         
     nSubPSF = np.unique(nSubPSF)
     if len(nSubPSF) != 1:
-        print('ERROR : There are %d sub-folders in this directory'%nSubFold)
-        return -1
+        raise ValueError('ERROR : There are %d sub-folders in this directory'%nSubFold)
     else:
         print('There are %d PSFs per sub-folders'%nSubPSF)
      
@@ -78,7 +76,7 @@ def verifyDataBase(savePath,path_ini=None,nTest=10):
         nonoise = True
 
     # grabbing parameters values
-    nParam   = int(6 + nStatic)
+    nParam   = int(nPSD + nStatic)
     nSubPSF  = int(nSubPSF)
     nSubFold = int(nSubFold)
     param  = np.zeros((nParam,nSubPSF,nSubFold))
@@ -87,43 +85,62 @@ def verifyDataBase(savePath,path_ini=None,nTest=10):
         listPSF   = os.listdir(path_data)
         for j in range(nSubPSF):
             s         = listPSF[j].split('_')
-            # note: it's name-file dependent
-            param[:,j,t] = np.array(s[6:6+2*nParam:2]).astype(float)
-    
+            nstart    = int(np.where([s[jj] == 'r0' for jj in range(len(s)) ])[0][0] + 1)
+            param[:,j,t] = np.array(s[nstart:nstart+2*nParam:2]).astype(float)
+          
     # verifying r0/A varies within predefined intervals
     r0 = np.sort(param[0],axis=1)
     A  = np.sort(param[2],axis=1)
 
+    # find the number of decimal
+    nR = len(str(r0.min()).split('.')[1])
+    nA = len(str(A.min()).split('.')[1])
+    
     for k in range(nInter):    
         idk_m = 0+k*nInter
         idk_M = (k+1)*nInter-1
-        if r0[:,idk_m:idk_M].max() > r0_int[k+1] or r0[:,idk_m:idk_M].min() < r0_int[k]:
-           print('ERROR : the r0 value in label exceeds the intervals defined from the sub-folder name')
-           return -1 
-        if A[:,idk_m:idk_M].max() > A_int[k+1] or A[:,idk_m:idk_M].min() < A_int[k]:
-           print('ERROR : the r0 value in label exceeds the intervals defined from the sub-folder name')
-           return -1 
+        if r0[:,idk_m:idk_M].max() > r0_int[k+1] or r0[:,idk_m:idk_M].min() < np.round(r0_int[k],nR):
+           raise ValueError('ERROR : the r0 value in label exceeds the intervals defined from the sub-folder name')
+
+        if A[:,idk_m:idk_M].max() > A_int[k+1] or A[:,idk_m:idk_M].min() < np.round(A_int[k],nA):
+           raise ValueError('ERROR : the A value in label exceeds the intervals defined from the sub-folder name')
+
     #verifying that other parameters are identically distributed from one subfolder to another
-    secondaryList = [1,3,4,5] + list(np.linspace(6,nParam-1,nStatic,dtype='int'))
+    secondaryList = [1,3,4,5] + list(np.linspace(nPSD,nParam-1,nStatic,dtype='int'))
     for p in secondaryList:
         pp = np.sort(param[p],axis=0)
         if len(np.unique(pp)) != nSubPSF:
-            print('ERROR : The secondary parameters are not identically distributed over the sub-folders')
-            return -1
+            import pdb
+            pdb.set_trace()
+            raise ValueError('ERROR : The secondary parameters are not identically distributed over the sub-folders')
     
     # Verification #3 : perform PSF-fitting i no noise
     if nonoise == True:
-        fixed = (False,)*5 + (True,) + (False,) + (True,)*7 + (False,)*nStatic
+        fixed = (False,)*5 + (True,) + (False,) + (True,)*3 + (True,)*4 + (False,)*nStatic
         if path_ini !=None:
             psfao = psfao21(path_ini)
             print('Run PSF-fitting on %d psfs'%nTest)
-            for n in range(nTest):
-                path_data = savePath + listSub[n] + '/'
+            for nn in range(nTest):
+                # get the PSF
+                path_data = savePath + listSub[nn] + '/'
                 listPSF   = os.listdir(path_data)[0]
+                psf_i     = fits.getdata(path_data+listPSF)
+                
+                # get the corresponding parameters from the label
                 s         = listPSF.split('_')
-                x0 = np.array([float(s[6])**(-5/3)] + list(np.array(s[8:16:2]).astype(float)) + [0] + [float(s[16])]+ [0,0,0,1,0,0,0] + list(np.array(s[18:6+2*nParam:2]).astype(float)))
-                psf_i = fits.getdata(path_data+listPSF)
-                res   = psfFitting(psf_i,psfao,x0,fixed=fixed,verbose=-1)
+                nstart    = int(np.where([s[jj] == 'r0' for jj in range(len(s)) ])[0][0] + 1)
+                r0        = float(s[nstart])
+                x0_psd    = list(np.array(s[nstart+2:nstart+2+2*(nPSD-2):2]).astype(float)) + [0] + [float(s[nstart+2+2*(nPSD-2)])]
+                xstat     = list(np.array(s[nstart+2+2*nPSD+8:nPSD+2*nParam:2]).astype(float))
+                x0        = np.array([r0] + x0_psd + [0,0,0,1,0,0,0] + xstat)
+                
+                # comparing psf
+                psf_ref   = np.squeeze(psfao(x0))
+                if 1e2*np.sqrt(np.sum(abs(psf_ref - psf_i)**2))/psf_ref.sum() > 0.2:
+                    raise ValueError('The generated PSF foes not match the PSFAO21 model with the same parameters')
+                    
+                # fitting
+                res       = psfFitting(psf_i,psfao,x0,fixed=fixed,verbose=-1)
                 if any(1e2*(res.x[res.x!=0] - x0[res.x!=0])/x0[res.x!=0] > 1):
                     raise ValueError('The labels does not correspond to the PSF or the fit did not sucessfully converge')
                     

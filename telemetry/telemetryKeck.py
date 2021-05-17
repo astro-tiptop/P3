@@ -251,9 +251,14 @@ class telemetryKeck:
         # managing the saving folder
         if not os.path.isdir(self.path_calib+'/MASSDIMM/'):
             os.mkdir(self.path_calib+'/MASSDIMM/')
-        self.path_massdimm = self.path_calib+'/MASSDIMM/'+self.obsdate+'/'
-        if not os.path.isfile(self.path_massdimm):
+        self.path_massdimm = self.path_calib+'/MASSDIMM/'+self.obsdate
+        if not os.path.isdir(self.path_massdimm):
             status = fetch_data(self.obsdate,self.path_massdimm)
+        else:
+            if not os.path.isfile(self.path_massdimm + '/' + self.obsdate+'.dimm.dat'):
+                status = 0
+            else:
+                status = 1
         
         # median conditions at MaunaKea
         self.atm.wvl        = 500e-9

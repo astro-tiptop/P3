@@ -174,9 +174,8 @@ class configFile():
         psInMas = sysdiag.trs.cam.psInMas 
         #1 mas = rad2mas * 4/D * 1e-9 * 1nm
         parser.set('sensor_science','SpotFWHM', \
-        str([[np.hypot(np.sqrt(Cj[0,0]),psInMas/2)\
-             ,np.hypot(np.sqrt(Cj[1,1]),psInMas/2)\
-             ,np.sign(Cj[0,1]) * np.hypot(np.sqrt(abs(Cj[0,1])),psInMas/2)]]))
+        str([[np.sqrt(Cj[0,0]), np.sqrt(Cj[1,1]), 
+              np.sign(Cj[0,1]) * np.sqrt(abs(Cj[0,1])) ]]))
     
         #%% EXTERNAL PROFILER
         if not parser.has_section('external'):

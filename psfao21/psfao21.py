@@ -22,7 +22,7 @@ rad2arc = rad2mas / 1000
 
 class psfao21:
     # INIT
-    def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False):
+    def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False,otfPixel=1):
         
         tstart = time.time()
         
@@ -32,6 +32,8 @@ class psfao21:
         self.ao        = aoSys(path_ini,path_root=path_root)    
         self.isStatic  = self.ao.tel.nModes > 0
         self.tag       = 'PSFAO21'
+        self.otfPixel  = otfPixel
+        
         if self.ao.error==False:
             
             # DEFINING THE FREQUENCY DOMAIN
@@ -173,7 +175,7 @@ class psfao21:
         # ----------------- COMPUTING THE PSF
         PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
                         jitterX=x0_jitter[0],jitterY=x0_jitter[1],jitterXY=x0_jitter[2],\
-                        F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat)
+                        F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel)
         return PSF
 
     def moffat(self,kx,ky,x0):

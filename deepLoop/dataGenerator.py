@@ -22,17 +22,12 @@ np.random.seed(69)
 
 
 def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=0,\
-                normType=1,savePath='',nModes=6,nRound=7,fullName=False,\
+                normType=1,savePath='',nModes=9,nRound=6,fullName=False,\
                 bounds=[[0.05,1e-3,100,1e-3,0.5,1.1,-0.5],[0.4,5e-2,390,1e-1,2,3.0,0.5]]):
     
     tstart = time.time()
     #%% MODEL INSTANTIATION
-    if sys.platform[0:3] == 'win':
-        path_p3 = '\\'.join(psfao21Main.__file__.split('\\')[0:-2])
-    else:
-        path_p3 = '/'.join(psfao21Main.__file__.split('/')[0:-2])
-    
-    psfao    = psfao21(path_ini,path_root=path_p3) 
+    psfao    = psfao21(path_ini) 
     wvl      = psfao.freq.wvlRef
     wvlFact  = 2*np.pi*1e-9/wvl
 
@@ -127,12 +122,12 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
     r053 = r0 ** (-5.0/3.0)
 
     # -------------------------- DEFINING SECONDARY PARAMETERS OVER A SINGLE SUBFOLDER AND REPEAT    
-    C    = np.repeat(uniform(low=C_lb,high=C_ub,size=nPSFperFolder)[:,np.newaxis],nSubFolder,axis=1)
-    ax   = np.repeat(uniform(low=ax_lb,high=ax_ub,size=nPSFperFolder)[:,np.newaxis],nSubFolder,axis=1)
-    p    = np.repeat(np.linspace(p_lb,p_ub,nPSFperFolder)[:,np.newaxis],nSubFolder,axis=1)
-    be   = np.repeat(uniform(low=beta_lb,high=beta_ub,size=nPSFperFolder)[:,np.newaxis],nSubFolder,axis=1)
+    C    = uniform(low=C_lb,high=C_ub,size=nPSFperFolder)
+    ax   = uniform(low=ax_lb,high=ax_ub,size=nPSFperFolder)
+    pe   = np.linspace(p_lb,p_ub,nPSFperFolder)
+    be   = uniform(low=beta_lb,high=beta_ub,size=nPSFperFolder)
     if addStatic:
-        stat = np.repeat(uniform(low=stat_lb,high=stat_ub,size=(nModes,nPSFperFolder))[:,:,np.newaxis],nSubFolder,axis=2)
+        stat = uniform(low=stat_lb,high=stat_ub,size=(nModes,nPSFperFolder))
 
     #%% LOOPS
     pix2freq = 1/(psfao.ao.tel.D * psfao.freq.sampRef)**2
@@ -142,10 +137,10 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
     # PRE-CALCULATE PSD
     for j in range(nPSFperFolder):
         # DERIVING THE AO-CORRECTED PSD
-        psdIn = psfao.freq.pistonFilter_ * psfao.moffat(psfao.freq.kx_,psfao.freq.ky_,[ax[j,0],p[j,0],0,be[j,0],0,0])
-        psdIn = psdIn/np.trapz(np.trapz(psdIn,psfao.freq.ky_[0]),psfao.freq.ky_[0])
+        psdIn = psfao.freq.pistonFilter_ * psfao.moffat(psfao.freq.kx_,psfao.freq.ky_,[ax[j],pe[j],0,be[j],0,0])
+        Aemp  = np.trapz(np.trapz(psdIn,psfao.freq.ky_[0]),psfao.freq.ky_[0])
+        psdIn = psdIn/Aemp
         
-        #psdIn = psdIn/psdIn.sum() / pix2freq
         # DERIVING THE TELESCOPE OTF
         if addStatic:
             otfStat,_,_ = FourierUtils.getStaticOTF(psfao.ao.tel,psfao.freq.nOtf,psfao.freq.sampRef,psfao.freq.wvlRef,xStat=stat[:,j,0])
@@ -155,33 +150,34 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
                 
         for k in range(nSubFolder):                        
             # Total PSD
-            psd = r053[j,k] * (psfao.freq.psdKolmo_) + psfao.freq.mskIn_ * (C[j,0] + psdIn * A[j,k] )        
-            # COMPUTING THE PSF
+            psd = r053[j,k] * (psfao.freq.psdKolmo_) + psfao.freq.mskIn_ * (C[j] + psdIn * A[j,k] )        
+            # COMPUTING THE PSF        
             Bphi  = fft.fft2(fft.fftshift(psd)) * pix2freq
             Dphi  = np.real(2*(Bphi.max() - Bphi))
             psf_i = np.real(fft.fftshift(fft.ifft2(otfStat * np.exp(-0.5*Dphi))))
-                
+                        
             # ADDING THE NOISE
             if mag != 0:
                 psf_i = np.random.poisson(Flux*psf_i) + np.random.poisson(skyFlux) - skyFlux + ronStack*np.random.randn(psf_i.shape[0])
             # NORMALIZING PSF
             psf_i,_ = FourierUtils.normalizeImage(psf_i,normType=normType)    
+            
             # SAVING
             if savePath != '':
                 # psf name
                 if addStatic == True:
-                    s = ['_m'+str(nn+1)+'_' + str(round(stat[nn,j,k],2)) for nn in range(nModes)]
+                    s = ['_m'+str(nn+1)+'_' + str(round(stat[nn,j],nRound)) for nn in range(nModes)]
                     idStat = ''.join(s)
                 if mag != 0:
                     idNoise = '_mag_' + str(mag)# + '_ron_' + str(ron) + '_skyMag_' + str(skyMag) + '_DIT_' + str(DIT) + '_NDIT_' + str(nDIT) 
                     
                 idpsf = psfPrefix + '_r0_' \
-                            + str(round(r0[j,k],min(5,nRound)))\
-                            + '_bg_' + str(round(C[j,k],min(6,nRound)))\
-                            + '_s2_' + str(round(A[j,k],min(4,nRound)))\
-                            + '_ax_' + str(round(ax[j,k],min(6,nRound)))\
-                            + '_pe_' + str(round(p[j,k],min(3,nRound)))\
-                            + '_be_' + str(round(be[j,k],min(3,nRound)))\
+                            + str(round(r0[j,k],nRound))\
+                            + '_bg_' + str(round(C[j],nRound))\
+                            + '_s2_' + str(round(A[j,k],nRound))\
+                            + '_ax_' + str(round(ax[j],nRound))\
+                            + '_pe_' + str(round(pe[j],nRound))\
+                            + '_be_' + str(round(be[j],nRound))\
                             + idStat + idNoise  +  '_norm_'  + str(normType)
                 
                 # corresponding subfolders

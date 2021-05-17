@@ -59,6 +59,7 @@ class systemDiagnosis:
         self.trs.atm.tau0_tel = tau0
         self.trs.atm.v0_tel   = v0
         self.trs.atm.dr0_tel  = dr0
+        self.trs.atm.dseeing_tel= rad2arc * dr0 * self.trs.atm.wvl/r0**2
         self.trs.atm.dL0_tel  = dL0
         self.trs.atm.dtau0_tel= dtau0
         self.trs.atm.dv0_tel  = dv0

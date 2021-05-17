@@ -125,7 +125,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
     # PERFORMING MINIMIZATION WITH CONSTRAINS AND BOUNDS
     if method == 'trf':
         result = least_squares(cost,input2mini(x0),method='trf',bounds=get_bounds(psfModelInst),\
-                               ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0),jac=jac)
+                               ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0))
     else:
         result = least_squares(cost,input2mini(x0),method='lm',\
                                ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0))
