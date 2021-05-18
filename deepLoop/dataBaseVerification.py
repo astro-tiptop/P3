@@ -110,8 +110,6 @@ def verifyDataBase(savePath,path_ini=None,nTest=10,nPSD=6):
     for p in secondaryList:
         pp = np.sort(param[p],axis=0)
         if len(np.unique(pp)) != nSubPSF:
-            import pdb
-            pdb.set_trace()
             raise ValueError('ERROR : The secondary parameters are not identically distributed over the sub-folders')
     
     # Verification #3 : perform PSF-fitting i no noise

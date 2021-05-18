@@ -16,11 +16,11 @@ import time
 from astropy.io import fits
 from psfao21.psfao21 import psfao21
 import aoSystem.FourierUtils as FourierUtils
-np.random.seed(69)
+np.random.seed(1)
 
 
 def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=0,\
-                normType=1,savePath='',nModes=9,nRound=6,fullName=False,\
+                normType=1,savePath='',nModes=9,nRound=7,fullName=False,\
                 bounds=[[0.05,1e-3,100,1e-3,0.5,1.1,-0.5],[0.4,5e-2,390,1e-1,2,3.0,0.5]]):
     
     tstart = time.time()
