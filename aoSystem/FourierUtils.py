@@ -296,7 +296,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             # managing the undersampling
             if freq.samp[j] <1: 
                 psf = interpolateSupport(psf,round(ao.tel.resolution*2*freq.samp[j]).astype('int'))
-            if nPix != freq.nOtf:
+            if nPix < freq.nOtf:
                 psf = cropSupport(psf,freq.nOtf/nPix)   
 
             PSF[:,:,:,j] = psf * F[:,j]

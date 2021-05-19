@@ -25,7 +25,10 @@ class frequencyDomain():
     @wvl.setter
     def wvl(self,val):
         self.__wvl = val
-        self.samp  = val* rad2mas/(self.psInMas*self.ao.tel.D)
+        if self.nyquistSampling == True:
+            self.samp  = 2.0 * np.ones_like(self.psInMas)
+        else:
+            self.samp  = val* rad2mas/(self.psInMas*self.ao.tel.D)
         self.PSDstep= np.min(self.psInMas/self.ao.src.wvl/rad2mas)      
     @property
     def wvlCen(self):
@@ -33,14 +36,20 @@ class frequencyDomain():
     @wvlCen.setter
     def wvlCen(self,val):
         self.__wvlCen = val
-        self.sampCen  = val* rad2mas/(self.psInMas[0]*self.ao.tel.D)
+        if self.nyquistSampling == True:
+            self.sampCen  = 2.0
+        else:
+            self.sampCen  = val* rad2mas/(self.psInMas[0]*self.ao.tel.D)
     @property
     def wvlRef(self):
         return self.__wvlRef
     @wvlRef.setter
     def wvlRef(self,val):
         self.__wvlRef = val
-        self.sampRef  = val* rad2mas/(self.psInMas[0]*self.ao.tel.D)    
+        if self.nyquistSampling == True:
+            self.sampRef  = 2.0
+        else:
+            self.sampRef  = val* rad2mas/(self.psInMas[0]*self.ao.tel.D)    
     # SAMPLING
     @property
     def samp(self):

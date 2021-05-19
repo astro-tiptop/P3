@@ -229,13 +229,15 @@ class systemDiagnosis:
             ang     = self.trs.wfs.theta[0] + self.trs.tel.pupilAngle
             wfsMask = FourierUtils.interpolateSupport(rotate(wfsMask,ang,reshape=False),self.trs.tel.resolution).astype(bool)
         
-        self.z = zernike(self.trs.wfs.jIndex,self.trs.tel.resolution,pupil=wfsMask)
+        self.z = zernike(self.trs.wfs.jIndex,self.trs.tel.resolution)
         
         # computing the Zernike reconstructor
-        u2ph = self.trs.mat.dmIF
         zM   = self.z.modes.T.reshape((self.trs.tel.resolution**2,nZer))
-        ph2z = np.dot(np.linalg.pinv(np.dot(zM.T,zM)),zM.T)
-        self.trs.mat.u2z = np.dot(ph2z,u2ph)
+        mZZ  = np.linalg.pinv(np.dot(zM.T,zM))
+        mZI  = np.dot(zM.T, self.trs.mat.dmIF)
+        #ph2z = np.dot(np.linalg.pinv(np.dot(zM.T,zM)),zM.T)
+        #self.trs.mat.u2z = np.dot(ph2z,self.trs.mat.dmIF)
+        self.trs.mat.u2z = np.dot(mZZ,mZI)
         
         # open-loop reconstruction
         dt    = self.trs.holoop.lat * self.trs.holoop.freq
