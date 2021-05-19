@@ -11,8 +11,6 @@ import numpy as np
 import numpy.fft as fft
 import aoSystem.FourierUtils as FourierUtils
 from aoSystem.zernike import zernike
-from astropy.io import fits
-from scipy.ndimage import rotate
 from scipy.optimize import least_squares
 from psfFitting.confidenceInterval import confidence_interval
 
@@ -31,18 +29,18 @@ arc2rad = 1/rad2arc
 class systemDiagnosis:
 
     def __init__(self,trs,noiseMethod='autocorrelation',nshift=1,nfit=2,\
-                 noise=1,quantile=0.95,nWin=10,nZer=None,j0=4):
+                 noise=1,quantile=0.95,nWin=10,nZer=None,j0=4,Dout=9,Din=2.65):
         
         self.trs = trs
         
         # Transfer function
-        self.TemporalTransferFunction()
+        self.temporal_transfer_function()
         
         # noise
         self.noiseMethod = noiseMethod
         if hasattr(self.trs.wfs,'intensity'):
-            self.trs.wfs.nph,self.trs.wfs.ron,self.trs.tipTilt.nph,self.trs.tipTilt.ron = self.GetNumberPhotons()
-        self.trs.wfs.Cn_ao,self.trs.tipTilt.Cn_tt = self.GetNoiseVariance(noiseMethod=self.noiseMethod,nshift=nshift,nfit=nfit)
+            self.trs.wfs.nph,self.trs.wfs.ron,self.trs.tipTilt.nph,self.trs.tipTilt.ron = self.get_number_photons()
+        self.trs.wfs.Cn_ao,self.trs.tipTilt.Cn_tt = self.get_noise_variance(noiseMethod=self.noiseMethod,nshift=nshift,nfit=nfit)
         
         # GET THE VARIANCE
         Cnn = np.diag(self.trs.wfs.Cn_ao)
@@ -50,10 +48,10 @@ class systemDiagnosis:
         self.trs.wfs.noiseVar = [(2*np.pi/self.trs.wfs.wvl)**2 *np.mean(Cnn),]*len(self.trs.wfs.nSubap)
         
         # Zernike
-        self.trs.wfs.Cz_ao, self.trs.tipTilt.Cz_tt = self.ReconstructZernike(nZer=nZer,j0=j0)
+        self.trs.wfs.Cz_ao, self.trs.tipTilt.Cz_tt = self.reconstruct_zernike(nZer=nZer,j0=j0,Dout=Dout,Din=Din)
         
         # Atmosphere statistics
-        r0, L0, tau0, v0, dr0, dL0, dtau0, dv0 = self.GetAtmosphereStatistics(noise=noise,quantile=quantile,nWin=nWin)
+        r0, L0, tau0, v0, dr0, dL0, dtau0, dv0 = self.get_atmosphere_statistics(noise=noise,quantile=quantile,nWin=nWin)
         self.trs.atm.r0_tel   = r0
         self.trs.atm.L0_tel   = L0
         self.trs.atm.tau0_tel = tau0
@@ -75,12 +73,12 @@ class systemDiagnosis:
             self.trs.atm.wSpeed = [v0]
         
 #%%    
-    def TemporalTransferFunction(self):
-        def delayTransferFunction(freq,fSamp,delay):
+    def temporal_transfer_function(self):
+        def delay_transfer_function(freq,fSamp,delay):
             return np.exp(-2*complex(0,1)*freq*delay/fSamp)
-        def wfsTransferFunction(freq,fSamp):
+        def wfs_transfer_function(freq,fSamp):
             return np.sinc(freq/fSamp/np.pi)*np.exp(-1*complex(0,1)*freq/fSamp)
-        def servoTransferFunction(freq,fSamp,num,den):
+        def servo_transfer_function(freq,fSamp,num,den):
             z = np.exp(-2*complex(0,1)*np.pi*freq/fSamp)
             ho_num = num[0] + num[1]*z + num[2]*z**2 + num[3]*z**3
             ho_den = 1 + den[0]*z + den[1]*z**2 + den[2]*z**3
@@ -89,11 +87,11 @@ class systemDiagnosis:
         #1\ HIGH-ORDER LOOP
         self.trs.holoop.tf.freq = np.linspace(self.trs.holoop.freq/self.trs.wfs.nExp,self.trs.wfs.nExp/2,num=self.trs.wfs.nExp//2)*self.trs.holoop.freq/self.trs.wfs.nExp
         #1.2 wfs TF
-        self.trs.holoop.tf.wfs  = wfsTransferFunction(self.trs.holoop.tf.freq,self.trs.holoop.freq)
+        self.trs.holoop.tf.wfs  = wfs_transfer_function(self.trs.holoop.tf.freq,self.trs.holoop.freq)
         #1.3. Lag tf
-        self.trs.holoop.tf.lag = delayTransferFunction(self.trs.holoop.tf.freq,self.trs.holoop.freq,self.trs.holoop.lat*self.trs.holoop.freq)
+        self.trs.holoop.tf.lag = delay_transfer_function(self.trs.holoop.tf.freq,self.trs.holoop.freq,self.trs.holoop.lat*self.trs.holoop.freq)
         #1.4 servo tf
-        self.trs.holoop.tf.servo = servoTransferFunction(self.trs.holoop.tf.freq,self.trs.holoop.freq,self.trs.holoop.tf.num,self.trs.holoop.tf.den)
+        self.trs.holoop.tf.servo = servo_transfer_function(self.trs.holoop.tf.freq,self.trs.holoop.freq,self.trs.holoop.tf.num,self.trs.holoop.tf.den)
         #1.5. open loop tf
         self.trs.holoop.tf.ol = self.trs.holoop.tf.wfs*self.trs.holoop.tf.servo*self.trs.holoop.tf.lag
         #1.6. closed loop tf
@@ -108,11 +106,11 @@ class systemDiagnosis:
         #2.1. Define the frequency vectors
         self.trs.ttloop.tf.freq = np.linspace(self.trs.ttloop.freq/self.trs.tipTilt.nExp,self.trs.tipTilt.nExp/2,self.trs.tipTilt.nExp//2)*self.trs.ttloop.freq/self.trs.tipTilt.nExp
         #2.2 wfs TF
-        self.trs.ttloop.tf.wfs  = wfsTransferFunction(self.trs.ttloop.tf.freq,self.trs.ttloop.freq)
+        self.trs.ttloop.tf.wfs  = wfs_transfer_function(self.trs.ttloop.tf.freq,self.trs.ttloop.freq)
         #2.3 TT Lag tf
-        self.trs.ttloop.tf.lag = delayTransferFunction(self.trs.ttloop.tf.freq,self.trs.ttloop.freq,self.trs.ttloop.lat*self.trs.ttloop.freq)
+        self.trs.ttloop.tf.lag = delay_transfer_function(self.trs.ttloop.tf.freq,self.trs.ttloop.freq,self.trs.ttloop.lat*self.trs.ttloop.freq)
         #2.4 TT servo tf
-        self.trs.ttloop.tf.servo = servoTransferFunction(self.trs.ttloop.tf.freq,self.trs.ttloop.freq,self.trs.ttloop.tf.num,self.trs.ttloop.tf.den)
+        self.trs.ttloop.tf.servo = servo_transfer_function(self.trs.ttloop.tf.freq,self.trs.ttloop.freq,self.trs.ttloop.tf.num,self.trs.ttloop.tf.den)
         #2.5 open loop tf
         self.trs.ttloop.tf.ol  = self.trs.ttloop.tf.wfs*self.trs.ttloop.tf.servo*self.trs.ttloop.tf.lag
         #2.6 closed loop tf
@@ -123,7 +121,7 @@ class systemDiagnosis:
         self.trs.ttloop.tf.ntf = np.squeeze(self.trs.ttloop.tf.servo/(1+self.trs.ttloop.tf.ol))
         self.trs.ttloop.tf.pn  = (np.trapz(self.trs.ttloop.tf.freq,abs(self.trs.ttloop.tf.ntf)**2)*2/self.trs.ttloop.freq)
 
-    def GetNumberPhotons(self):
+    def get_number_photons(self):
         """
         ESTIMATE THE NUMBER OF PHOTONS FROM WFS MAPS
         """
@@ -149,13 +147,13 @@ class systemDiagnosis:
         
         return nph, ron, nph_tt, ron_tt
           
-    def GetNoiseVariance(self,noiseMethod='autocorrelation',nshift=1,nfit=2):
+    def get_noise_variance(self,noiseMethod='autocorrelation',nshift=1,nfit=2):
         """
             ESTIMATE THE WFS NOISE VARIANCE
         """                    
         
         
-        def SlopesToNoise(u,noiseMethod='autocorrelation',nshift=1,nfit=2,rtf=None):
+        def slopes_to_noise(u,noiseMethod='autocorrelation',nshift=1,nfit=2,rtf=None):
         
             nF,nU      = u.shape
             u         -= np.mean(u,axis=0)
@@ -203,42 +201,62 @@ class systemDiagnosis:
             
         else:
             rtf  = self.trs.holoop.tf.ctf/self.trs.holoop.tf.wfs
-            Cn_ao = SlopesToNoise(self.trs.dm.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit,rtf=rtf)
+            Cn_ao = slopes_to_noise(self.trs.dm.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit,rtf=rtf)
             if self.trs.aoMode == 'LGS':
                 rtf  = self.trs.ttloop.tf.ctf/self.trs.ttloop.tf.wfs
-                Cn_tt = SlopesToNoise(self.trs.tipTilt.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit)
+                Cn_tt = slopes_to_noise(self.trs.tipTilt.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit)
             else:
                 Cn_tt = 0
                 
         return Cn_ao, Cn_tt
      
 #%%    
-    def ReconstructZernike(self,nZer=None,wfsMask=None,j0=4):
+    def select_actuators(self,Din=None,Dout=None):
+        iF = self.trs.dm.modes
+        
+        if (not Din) and (not Dout):
+            return iF, range(0,iF.shape[0])
+        else:
+            # find actuators positions
+            nPix = int(np.sqrt(iF.shape[0]))
+            nAct = iF.shape[-1]
+            iF   = iF.reshape((nPix,nPix,nAct))
+            [iF[:,:,k].argmax() for k in range(nAct)]
+            
+    def reconstruct_zernike(self,nZer=None,wfsMask=None,j0=4,Dout=None,Din=None):
         """
         Reconstrut the covariance matrix of the Zernike coefficients from the reconstructed open-loop wavefront
         """
-        # defining Zernike modes
+
+        # defining the pupil mask and the Zernike modes
+#        if wfsMask==None:
+#            wfsMask = fits.getdata(self.trs.tel.path_pupil)
+#            ang     = self.trs.wfs.theta[0] + self.trs.tel.pupilAngle
+#            wfsMask = FourierUtils.interpolateSupport(rotate(wfsMask,ang,reshape=False),self.trs.tel.resolution).astype(bool)
+#   
+        
+        # ----  DEFINING ZERNIKE MODES
         if nZer == None:
             nZer = int(0.75*self.trs.dm.validActuators.sum())
-            
+        # Noll's indexes
         self.trs.wfs.jIndex = list(range(j0,nZer+j0))
-            
-        # defining the pupil mask and the Zernike modes
-        if wfsMask==None:
-            wfsMask = fits.getdata(self.trs.tel.path_pupil)
-            ang     = self.trs.wfs.theta[0] + self.trs.tel.pupilAngle
-            wfsMask = FourierUtils.interpolateSupport(rotate(wfsMask,ang,reshape=False),self.trs.tel.resolution).astype(bool)
-        
-        self.z = zernike(self.trs.wfs.jIndex,self.trs.tel.resolution)
-        
-        # computing the Zernike reconstructor
+        # Central obstruction
+        cobs=0
+        if Din and Dout:
+            cobs = Din/Dout            
+        self.z = zernike(self.trs.wfs.jIndex,self.trs.tel.resolution,D=Dout,cobs=cobs)
+        # Modes
         zM   = self.z.modes.T.reshape((self.trs.tel.resolution**2,nZer))
+
+        # ----  COMPUTING THE ZERNIKE RECONSTrUCTOR
+        # select actuators
+        iF , actuInPupil = self.select_actuators(Dout=Dout,Din=Din)
+        # computing the Zernike reconstructor
         mZZ  = np.linalg.pinv(np.dot(zM.T,zM))
-        mZI  = np.dot(zM.T, self.trs.mat.dmIF)
-        #ph2z = np.dot(np.linalg.pinv(np.dot(zM.T,zM)),zM.T)
-        #self.trs.mat.u2z = np.dot(ph2z,self.trs.mat.dmIF)
+        mZI  = np.dot(zM.T,iF)
         self.trs.mat.u2z = np.dot(mZZ,mZI)
         
+        # ----  RECONSTRUCTING THE COEFFICIENTS
         # open-loop reconstruction
         dt    = self.trs.holoop.lat * self.trs.holoop.freq
         dt_up = int(np.ceil(dt))
@@ -248,7 +266,7 @@ class systemDiagnosis:
         self.trs.dm.u_ol     -= np.mean(self.trs.dm.u_ol,axis=1)[:,np.newaxis]
         
         # reconstructing the amplitude of Zernike coefficients
-        self.trs.wfs.coeffs = np.dot(self.trs.mat.u2z,self.trs.dm.u_ol.T)
+        self.trs.wfs.coeffs = np.dot(self.trs.mat.u2z,self.trs.dm.u_ol[:,actuInPupil].T)
         self.trs.wfs.coeffs -= np.mean(self.trs.wfs.coeffs,axis=1)[:,np.newaxis]
         Cz_ho  = np.dot(self.trs.wfs.coeffs,self.trs.wfs.coeffs.T)/self.trs.wfs.nExp
         
@@ -260,7 +278,7 @@ class systemDiagnosis:
             
         return Cz_ho, Cz_tt
     
-    def GetAtmosphereStatistics(self,ftol=1e-5,xtol=1e-5,gtol=1e-5,max_nfev=100,\
+    def get_atmosphere_statistics(self,ftol=1e-5,xtol=1e-5,gtol=1e-5,max_nfev=100,\
                                 noise=1,quantile=0.95,nWin=10,verbose=-1):
         
         # ---- DEFINING THE COST FUNCTIONS
@@ -298,7 +316,7 @@ class systemDiagnosis:
         
         # ---- MEASURING THE COHERENCE TIME
         # measuring the windspeed
-        v0, dv0  = self.GetWindSpeed(noise=noise,quantile=quantile,nWin=nWin)
+        v0, dv0  = self.get_wind_speed(noise=noise,quantile=quantile,nWin=nWin)
         # computing the coherence time (Roddier+81)
         tau0 = 0.314 * r0/v0
         
@@ -309,9 +327,9 @@ class systemDiagnosis:
         
         return r0, L0, tau0, v0 , dr0, dL0, dtau0, dv0
     
-    def GetWindSpeed(self,coeff=1.56,noise=1,nWin=10,quantile=0.95):
+    def get_wind_speed(self,coeff=1.56,noise=1,nWin=10,quantile=0.95):
         
-        def GetQuantilesStudent(quantile=0.95,nWin=10):
+        def get_quantiles_student(quantile=0.95,nWin=10):
             # quantiles
             q   = np.array([0.75,0.8,0.85,0.9,0.95,0.975,0.99,0.995,0.997,0.998] )
             idq = q.searchsorted(quantile)
@@ -359,7 +377,7 @@ class systemDiagnosis:
         nZ   = cov.shape[0]
         tau  = np.zeros(nZ)
         dtau = np.zeros(nZ)
-        t5  = GetQuantilesStudent(quantile=quantile,nWin=nWin)
+        t5  = get_quantiles_student(quantile=quantile,nWin=nWin)
         for i in range(nZ):
             # get the upper bound
             indlim = np.argwhere(cov[i] < thres)[0][0]

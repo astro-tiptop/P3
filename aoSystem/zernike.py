@@ -27,7 +27,7 @@ class zernike:
     '''
 
 
-    def __init__(self,jIndex,resolution,D=[],pupil=[], unitNorm=False,radius=[],angle=[],cobs=0):
+    def __init__(self,jIndex,resolution,D=None,pupil=[], unitNorm=False,radius=[],angle=[],cobs=0):
         
         # PARSING INPUTS
         if type(jIndex) != list:

@@ -91,8 +91,8 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
     A_lb  = (wvlFact*A_lb_nm)**2
     A_ub  = (wvlFact*A_ub_nm)**2
     # intervals
-    r0_int = np.linspace(r0_lb,r0_ub,nIntervals+1)
-    A_int  = np.linspace(A_lb,A_ub,nIntervals+1)
+    r0_int = np.round(np.linspace(r0_lb,r0_ub,nIntervals+1),nRound)
+    A_int  = np.round(np.linspace(A_lb,A_ub,nIntervals+1),nRound)
     # uniform distributions
     t    =-1
     r0   = np.zeros((nPSFperFolder,nSubFolder))
