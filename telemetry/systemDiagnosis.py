@@ -29,7 +29,7 @@ arc2rad = 1/rad2arc
 class systemDiagnosis:
 
     def __init__(self,trs,noiseMethod='autocorrelation',nshift=1,nfit=2,\
-                 noise=1,quantile=0.95,nWin=10,nZer=None,j0=4,Dout=9,Din=2.65):
+                 noise=1,quantile=0.95,nWin=10,nZer=None,j0=4,Dout=None,Din=None):
         
         self.trs = trs
         
@@ -51,7 +51,7 @@ class systemDiagnosis:
         self.trs.wfs.Cz_ao, self.trs.tipTilt.Cz_tt = self.reconstruct_zernike(nZer=nZer,j0=j0,Dout=Dout,Din=Din)
         
         # Atmosphere statistics
-        r0, L0, tau0, v0, dr0, dL0, dtau0, dv0 = self.get_atmosphere_statistics(noise=noise,quantile=quantile,nWin=nWin)
+        r0, L0, tau0, v0, dr0, dL0, dtau0, dv0 = self.get_atmosphere_statistics(noise=noise,quantile=quantile,nWin=nWin,Dout=Dout)
         self.trs.atm.r0_tel   = r0
         self.trs.atm.L0_tel   = L0
         self.trs.atm.tau0_tel = tau0
@@ -212,16 +212,33 @@ class systemDiagnosis:
      
 #%%    
     def select_actuators(self,Din=None,Dout=None):
-        iF = self.trs.dm.modes
+        iF   = np.copy(self.trs.mat.dmIF)
+        nAct = iF.shape[-1]
         
         if (not Din) and (not Dout):
-            return iF, range(0,iF.shape[0])
+            actuInPupil = self.trs.dm.validActuators.reshape(-1).nonzero()[0]
+            return iF[:,actuInPupil], actuInPupil
         else:
+            # resolution
+            nPix      = int(np.sqrt(iF.shape[0]))
+            D_tel     = self.trs.dm.pitch[0] * (self.trs.dm.nActuators[0]-1)
+            pix_scale = D_tel/nPix
+            
             # find actuators positions
-            nPix = int(np.sqrt(iF.shape[0]))
-            nAct = iF.shape[-1]
-            iF   = iF.reshape((nPix,nPix,nAct))
-            [iF[:,:,k].argmax() for k in range(nAct)]
+            iF      = iF.reshape((nPix,nPix,nAct))
+            act_pos = [np.unravel_index(iF[:,:,k].argmax(),(nPix,nPix)) for k in range(nAct)] # positions in pixels
+            rad_pos = np.array([pix_scale*np.hypot(act_pos[k][0]-nPix/2,act_pos[k][1]-nPix/2) for k in range(nAct)])
+            
+            # define the actuators within the mask
+            actuInPupil = np.logical_and(rad_pos <= Dout/2,rad_pos>=Din/2).nonzero()[0]
+            nG = len(actuInPupil)
+            
+            # define the pupil mask
+            #x     = np.linspace(-D_tel/2,D_tel/2,nPix)
+            #X,Y   = np.meshgrid(x,x)
+            #R     = np.hypot(X,Y)
+            #pup   = np.logical_and(R <= Dout/2,R>=Din/2) * 1
+            return iF[:,:,actuInPupil].reshape((nPix**2,nG)) , actuInPupil
             
     def reconstruct_zernike(self,nZer=None,wfsMask=None,j0=4,Dout=None,Din=None):
         """
@@ -236,25 +253,30 @@ class systemDiagnosis:
 #   
         
         # ----  DEFINING ZERNIKE MODES
+        # select actuators
+        nPix = self.trs.tel.resolution
+        iF , self.actuInPupil = self.select_actuators(Dout=Dout,Din=Din)
+        # Noll's indexes
         if nZer == None:
             nZer = int(0.75*self.trs.dm.validActuators.sum())
-        # Noll's indexes
         self.trs.wfs.jIndex = list(range(j0,nZer+j0))
-        # Central obstruction
-        cobs=0
-        if Din and Dout:
-            cobs = Din/Dout            
-        self.z = zernike(self.trs.wfs.jIndex,self.trs.tel.resolution,D=Dout,cobs=cobs)
-        # Modes
-        zM   = self.z.modes.T.reshape((self.trs.tel.resolution**2,nZer))
-
-        # ----  COMPUTING THE ZERNIKE RECONSTrUCTOR
-        # select actuators
-        iF , actuInPupil = self.select_actuators(Dout=Dout,Din=Din)
-        # computing the Zernike reconstructor
-        mZZ  = np.linalg.pinv(np.dot(zM.T,zM))
-        mZI  = np.dot(zM.T,iF)
-        self.trs.mat.u2z = np.dot(mZZ,mZI)
+        # Central obstruction          
+        cobs = 0
+        if Dout and Din:
+            cobs = Din/Dout
+        self.z = zernike(self.trs.wfs.jIndex,self.trs.tel.resolution,cobs=cobs)
+        self.zM   = self.z.modes.T.reshape((nPix**2,nZer))
+        
+        # ---- DERIVING THE APPROXIMATED ZERNIKE
+#        matII  = np.dot(iF.T,iF)                
+#        vec_b  = np.dot(self.zM.T,iF)
+#        vec_a  = np.dot(vec_b,np.linalg.pinv(matII))
+#        self.zM_app = np.dot(iF,vec_a.T)
+        self.zM_app = self.zM 
+        # ----  COMPUTING THE ZERNIKE RECONSTrUCTOR        
+        self.mZZ  = np.dot(self.zM_app.T,self.zM_app)
+        self.mZI  = np.dot(self.zM_app.T,iF)
+        self.trs.mat.u2z = np.dot(np.linalg.pinv(self.mZZ,rcond=1/1e2),self.mZI)
         
         # ----  RECONSTRUCTING THE COEFFICIENTS
         # open-loop reconstruction
@@ -266,7 +288,7 @@ class systemDiagnosis:
         self.trs.dm.u_ol     -= np.mean(self.trs.dm.u_ol,axis=1)[:,np.newaxis]
         
         # reconstructing the amplitude of Zernike coefficients
-        self.trs.wfs.coeffs = np.dot(self.trs.mat.u2z,self.trs.dm.u_ol[:,actuInPupil].T)
+        self.trs.wfs.coeffs = np.dot(self.trs.mat.u2z,self.trs.dm.u_ol[:,self.actuInPupil].T)
         self.trs.wfs.coeffs -= np.mean(self.trs.wfs.coeffs,axis=1)[:,np.newaxis]
         Cz_ho  = np.dot(self.trs.wfs.coeffs,self.trs.wfs.coeffs.T)/self.trs.wfs.nExp
         
@@ -279,11 +301,14 @@ class systemDiagnosis:
         return Cz_ho, Cz_tt
     
     def get_atmosphere_statistics(self,ftol=1e-5,xtol=1e-5,gtol=1e-5,max_nfev=100,\
-                                noise=1,quantile=0.95,nWin=10,verbose=-1):
+                                noise=1,quantile=0.95,nWin=10,verbose=-1,Dout=None):
         
         # ---- DEFINING THE COST FUNCTIONS
         z = self.z
-        D = self.trs.tel.D
+        if not Dout:
+            D = self.trs.tel.D
+        else:
+            D = Dout
         class CostClass(object):
             def __init__(self,sd):
                 self.iter = 0
@@ -296,8 +321,11 @@ class systemDiagnosis:
         cost = CostClass(self)
     
         # ---- GETTING THE INPUT : VARIANCE OF ZERNIKE MODE
-        self.trs.wfs.var_meas      = np.diag(self.trs.wfs.Cz_ao)
-        self.trs.wfs.var_noise_zer = np.diag(np.dot(np.dot(self.trs.mat.u2z,self.trs.wfs.Cn_ao),self.trs.mat.u2z.T))
+        self.trs.wfs.var_meas  = np.diag(self.trs.wfs.Cz_ao)
+        
+        Cnn = self.trs.wfs.Cn_ao[np.ix_(self.actuInPupil,self.actuInPupil)]
+        self.trs.wfs.var_noise_zer = np.diag(np.dot(np.dot(self.trs.mat.u2z,Cnn),self.trs.mat.u2z.T))
+        
         var_emp = (2*np.pi/self.trs.atm.wvl)**2 *(self.trs.wfs.var_meas - noise*self.trs.wfs.var_noise_zer)
         var_emp = self.average_radial_order(var_emp) 
         
