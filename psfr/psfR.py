@@ -169,7 +169,7 @@ class psfR:
         """
         """
         #note : self.U_/V_ ranges ar -1 to 1
-        otfPixel = np.sinc(self.freq.U_/2)* np.sinc(self.freq.V_/2)
+        otfPixel = np.sinc(self.freq.U_)* np.sinc(self.freq.V_)
         return otfPixel
 
     def TotalPhaseStructureFunction(self,r0,gho,gtt,Cn2=[]):

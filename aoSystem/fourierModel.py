@@ -55,7 +55,7 @@ class fourierModel:
     def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,path_root='',\
                  normalizePSD=False,displayContour=False,\
                  getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,\
-                 getEncircledEnergy=False,fftphasor=False,MV=0,nyquistSampling=False):
+                 getEncircledEnergy=False,fftphasor=False,MV=0,nyquistSampling=False,addOtfPixel=False):
         
         tstart = time.time()
         
@@ -67,6 +67,7 @@ class fourierModel:
         self.getPSFmetrics     = getFWHM or getEnsquaredEnergy or getEncircledEnergy
         self.calcPSF           = calcPSF
         self.tag               = 'TIPTOP'
+        self.addOtfPixel       = addOtfPixel
         # GRAB PARAMETERS
         self.ao = aoSystem(path_ini,path_root=path_root)
         self.t_initAO = 1000*(time.time() - tstart)
@@ -134,7 +135,7 @@ class fourierModel:
             
             # COMPUTE THE PSF
             if calcPSF:
-                self.PSF, self.SR = self.pointSpreadFunction(verbose=verbose,fftphasor=fftphasor)
+                self.PSF, self.SR = self.pointSpreadFunction(verbose=verbose,fftphasor=fftphasor,addOtfPixel=self.addOtfPixel)
                 
                 # GETTING METRICS
                 if getFWHM == True or getEnsquaredEnergy==True or getEncircledEnergy==True:
@@ -826,7 +827,7 @@ class fourierModel:
         self.t_errorBreakDown = 1000*(time.time() - tstart)
     
   #%% PSF COMPUTATION  
-    def pointSpreadFunction(self,x0=None,nPix=None,verbose=False,fftphasor=False):
+    def pointSpreadFunction(self,x0=None,nPix=None,verbose=False,fftphasor=False,addOtfPixel=False):
         """
           Computation of the PSF
         """
@@ -857,9 +858,13 @@ class fourierModel:
             
         
         # ---------- GETTING THE PSF
+        otfPixel=1
+        if addOtfPixel:
+            otfPixel = np.sinc(self.freq.U_)* np.sinc(self.freq.V_)
+            
         PSF, SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
                                       jitterX=jitterX,jitterY=jitterY,jitterXY=jitterXY,\
-                                      F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix)
+                                      F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,otfPixel=otfPixel)
 
         self.t_getPSF = 1000*(time.time() - tstart)
         
@@ -867,7 +872,7 @@ class fourierModel:
 
     def __call__(self,x0,nPix=None):
         
-        psf,_ = self.pointSpreadFunction(x0=x0,nPix=nPix,verbose=False,fftphasor=True)
+        psf,_ = self.pointSpreadFunction(x0=x0,nPix=nPix,verbose=False,fftphasor=True,addOtfPixel = self.addOtfPixel)
         return psf#[:,:,0,0]    
     
     

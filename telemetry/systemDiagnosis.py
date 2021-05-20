@@ -355,7 +355,7 @@ class systemDiagnosis:
         
         return r0, L0, tau0, v0 , dr0, dL0, dtau0, dv0
     
-    def get_wind_speed(self,coeff=1.56,noise=1,nWin=10,quantile=0.95):
+    def get_wind_speed(self,thres = 0.5,coeff=1.,noise=1,nWin=10,quantile=0.95):
         
         def get_quantiles_student(quantile=0.95,nWin=10):
             # quantiles
@@ -399,7 +399,6 @@ class systemDiagnosis:
         # normalizing max the max
         cov0 = cov[:,0]
         cov /= cov0[:,np.newaxis]
-        thres = 1/np.exp(1)
         
         # loop on each mode
         nZ   = cov.shape[0]
