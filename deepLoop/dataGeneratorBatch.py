@@ -52,7 +52,7 @@ def commandLine():
     parser.add_argument('--normType', help='Normalization strategy, 1:sum, 2:min-max, 3:sum inner circle, 4: sum positive, otherwise:normType',
                         default=1, type=int)  
     parser.add_argument('--bounds', help='Lower and upper bounds for r0 (500mn), C, A (nm), ax, p, beta and static aberrations (in wave ratio)',
-                        default=[[0.05,1e-3,80,1e-3,0.5,1.1,-0.5],[0.3,5e-2,390,5e-2,2,3.0,0.5]], type=list) 
+                        default=[[0.05,1e-3,80,1e-3,0.5,1.1,-0.1],[0.3,5e-2,390,5e-2,2,3.0,0.1]], type=list) 
     args = parser.parse_args()
     return (args)
     
