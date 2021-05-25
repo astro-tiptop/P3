@@ -23,7 +23,7 @@ class structtype():
 class telemetryKeck:
     
     
-    def __init__(self,path_trs,path_img,path_calib,path_save='./',nLayer=1,verbose=False):
+    def __init__(self,path_trs,path_img,path_calib,path_save='./',nLayer=1,verbose=False,addNCPA=True):
         
         # Check the telemetry path
         self.path_trs = path_trs
@@ -53,7 +53,7 @@ class telemetryKeck:
             return
         
         self.path_save = path_save
-        
+        self.addNCPA   = addNCPA
         #1\ instantiating the field
         self.instantiatingFields()
         
@@ -219,8 +219,10 @@ class telemetryKeck:
             # ron in e- and gain in e-/DN
             self.cam.ronDN = np.sqrt(self.cam.coadds)*self.cam.ron/self.cam.gain
             # NCPA
-            self.cam.path_ncpa = self.path_calib + '/NIRC2_STAT/' +  keckUtils.getNCPAstr(hdr)
-            
+            if self.addNCPA:
+                self.cam.path_ncpa = self.path_calib + '/NIRC2_STAT/' +  keckUtils.getNCPAstr(hdr)
+            else:
+                self.cam.path_ncpa = ''
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
             print('THE OSIRIS CASE IS NOT YET IMPLEMENTED\n')

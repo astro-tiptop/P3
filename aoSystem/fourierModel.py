@@ -53,7 +53,7 @@ class fourierModel:
     
     # CONTRUCTOR
     def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,path_root='',\
-                 normalizePSD=False,displayContour=False,\
+                 normalizePSD=False,displayContour=False,getPSDatNGSpositions=False,\
                  getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,\
                  getEncircledEnergy=False,fftphasor=False,MV=0,nyquistSampling=False,addOtfPixel=False):
         
@@ -68,8 +68,9 @@ class fourierModel:
         self.calcPSF           = calcPSF
         self.tag               = 'TIPTOP'
         self.addOtfPixel       = addOtfPixel
+
         # GRAB PARAMETERS
-        self.ao = aoSystem(path_ini,path_root=path_root)
+        self.ao = aoSystem(path_ini,path_root=path_root,getPSDatNGSpositions=getPSDatNGSpositions)
         self.t_initAO = 1000*(time.time() - tstart)
         
         if self.ao.error==False:
@@ -943,7 +944,7 @@ class fourierModel:
                         plt.figure()
                         plt.plot(self.ao.src.zenith,self.SR[:,0],'bo',markersize=10)
                         plt.xlabel("Off-axis distance")
-                        plt.ylabel("Strehl-ratio at {:.1f} nm (percents)".format(self.wvlSrc[0]*1e9))
+                        plt.ylabel("Strehl-ratio at {:.1f} nm (percents)".format(self.freq.wvlRef*1e9))
                         plt.show()
           
                     # FWHM

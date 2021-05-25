@@ -171,7 +171,7 @@ class configFile():
         # jitter
         Cj = np.dot(sysdiag.trs.tipTilt.slopes.T,sysdiag.trs.tipTilt.slopes)/sysdiag.trs.tipTilt.slopes.shape[0]
         Cj*= (1000/sysdiag.trs.tipTilt.tilt2meter)**2
-        psInMas = sysdiag.trs.cam.psInMas 
+        #psInMas = sysdiag.trs.cam.psInMas 
         #1 mas = rad2mas * 4/D * 1e-9 * 1nm
         parser.set('sensor_science','SpotFWHM', \
         str([[np.sqrt(Cj[0,0]), np.sqrt(Cj[1,1]), 

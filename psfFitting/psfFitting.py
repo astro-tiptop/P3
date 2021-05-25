@@ -75,6 +75,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
     
     # NORMALIZING THE IMAGE
     im_norm,param = FourierUtils.normalizeImage(image,normType=normType)
+    nPix = im_norm.shape[1]
     
     # DEFINING THE COST FUNCTIONS
     class CostClass(object):
@@ -83,7 +84,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
         def __call__(self,y):
             if (self.iter%3)==0 and (method=='lm' or verbose == 0 or verbose == 1): print("-",end="")
             self.iter += 1
-            im_est = np.squeeze(psfModelInst(mini2input(y)))
+            im_est = np.squeeze(psfModelInst(mini2input(y),nPix=im_norm.shape[0]))
             return (sqW * (im_est - im_norm)).reshape(-1)
     cost = CostClass()   
     
@@ -135,7 +136,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
     result.xinit  = x0
     result.im_sky = image
     # scale fitted image
-    result.im_fit = FourierUtils.normalizeImage(np.squeeze(psfModelInst(result.x)),param=param,normType=normType)
+    result.im_fit = FourierUtils.normalizeImage(np.squeeze(psfModelInst(result.x,nPix=nPix)),param=param,normType=normType)
     # psf
     xpsf          = np.copy(result.x)
     nparam        = len(result.x) - 3*psfModelInst.ao.src.nSrc - 1
@@ -144,7 +145,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
         
     xpsf[nparam]  = 1.0 # flux=1
     xpsf[nparam+1:nparam+3*psfModelInst.ao.src.nSrc+1]   = 0.0 # dx,dy,bkcg=0
-    result.psf    = np.squeeze(psfModelInst(xpsf))
+    result.psf    = np.squeeze(psfModelInst(xpsf,nPix=nPix))
     result        = evaluateFittingQuality(result,psfModelInst)
     
     # static map
@@ -179,7 +180,7 @@ def evaluateFittingQuality(result,psfModelInst):
     
     return result
 
-def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10abs'):
+def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10abs',figsize=(10,10)):
     """
         Displaying PSF and key metrics
     """
@@ -222,7 +223,7 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
         vmax = np.max([np.max(fun(im_sky)), np.max(fun(im_fit))])
     
     # IMAGES
-    plt.figure()
+    plt.figure(figsize=figsize)
     plt.subplot(231)
     plt.imshow(fun(im_sky),vmin=vmin,vmax=vmax)
     plt.title(instLabel)

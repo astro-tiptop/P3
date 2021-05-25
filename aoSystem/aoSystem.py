@@ -24,7 +24,7 @@ from aoSystem.rtc import rtc
 #%%
 class aoSystem():
     
-    def __init__(self,path_ini,path_root='',nLayer=None):
+    def __init__(self,path_ini,path_root='',nLayer=None,getPSDatNGSpositions=False):
                             
         self.error = False
         # verify if the file exists
@@ -38,7 +38,8 @@ class aoSystem():
         config = ConfigParser()
         config.optionxform = str
         config.read(path_ini)
-            
+        self.getPSDatNGSpositions = getPSDatNGSpositions
+        
         #%% TELESCOPE
         #----- grabbing main parameters
         if config.has_option('telescope','TelescopeDiameter'):
@@ -172,36 +173,7 @@ class aoSystem():
         #----- class definition
         self.atm = atmosphere(wvlAtm,r0*airmass**(-3.0/5.0),weights,np.array(heights)*airmass,wSpeed,wDir,L0)            
         
-        #%%  SCIENCE SOURCES
-        
-        if config.has_option('sources_science','Wavelength'):
-            wvlSrc     = np.array(eval(config['sources_science']['Wavelength']))
-        else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the wavelength of the science source\n')
-            self.error = True
-            return
-        
-        if config.has_option('sources_science','Zenith'):
-            zenithSrc = eval(config['sources_science']['Zenith']) 
-        else:
-            zenithSrc = [0.0]
-            
-        if config.has_option('sources_science','Azimuth'):
-            azimuthSrc = eval(config['sources_science']['Azimuth']) 
-        else:
-            azimuthSrc = [0.0]
-            
-        #----- verification
-        if len(zenithSrc) != len(azimuthSrc):
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The number of scientific sources is not consistent in the parameters file\n')
-            self.error = True
-            return
-        #----- class definition
-        self.src  = source(wvlSrc,zenithSrc,azimuthSrc,tag="SCIENCE",verbose=True)   
- 
-        #%%  GUIDE STARS 
+         #%%  GUIDE STARS 
         if config.has_option('sources_HO','Wavelength'):
             wvlGs     = np.unique(np.array(eval(config['sources_HO']['Wavelength'])))
         else:
@@ -259,6 +231,43 @@ class aoSystem():
                     return
                 self.ngs = source(wvlGs,zenithGs,azimuthGs,tag="NGS",verbose=True)   
                               
+                
+        #%%  SCIENCE SOURCES
+        
+        if config.has_option('sources_science','Wavelength'):
+            wvlSrc     = np.array(eval(config['sources_science']['Wavelength']))
+        else:
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the wavelength of the science source\n')
+            self.error = True
+            return
+        
+        if config.has_option('sources_science','Zenith'):
+            zenithSrc = eval(config['sources_science']['Zenith']) 
+        else:
+            zenithSrc = [0.0]
+            
+        if config.has_option('sources_science','Azimuth'):
+            azimuthSrc = eval(config['sources_science']['Azimuth']) 
+        else:
+            azimuthSrc = [0.0]
+            
+        #----- verification
+        if len(zenithSrc) != len(azimuthSrc):
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('The number of scientific sources is not consistent in the parameters file\n')
+            self.error = True
+            return
+        
+        if self.getPSDatNGSpositions and config.has_option('sources_LO','Wavelength'):
+            zenithSrc   = zenithSrc +  (eval(config['sources_LO']['Zenith']))
+            azimuthSrc  = azimuthSrc + (eval(config['sources_LO']['Azimuth']))
+            
+            
+        #----- class definition
+        self.src  = source(wvlSrc,zenithSrc,azimuthSrc,tag="SCIENCE",verbose=True)   
+ 
+       
 #%% HIGH-ORDER WAVEFRONT SENSOR
         
         if config.has_option('sensor_HO','PixelScale'):

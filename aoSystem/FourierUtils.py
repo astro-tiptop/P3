@@ -292,13 +292,19 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             otfTot  = fft.fftshift(otfTurb * otfStat,axes=(0,1))
             
             # GET THE FINAL PSF
-            psf = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
+            psf_ = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
             # managing the undersampling
-            if freq.samp[j] <1: 
-                psf = interpolateSupport(psf,round(ao.tel.resolution*2*freq.samp[j]).astype('int'))
-            if nPix < freq.nOtf:
-                psf = cropSupport(psf,freq.nOtf/nPix)   
-
+            if freq.samp[j] <1 or nPix < freq.nOtf: 
+                if freq.samp[j] <1:
+                    psf = np.zeros((nPix,nPix,ao.src.nSrc))
+                    for kk in range(ao.src.nSrc):
+                        psf[:,:,kk] = interpolateSupport(psf_[:,:,kk],round(ao.tel.resolution*2*freq.samp[j]).astype('int'))
+                if nPix < freq.nOtf:
+                    psf = np.zeros((nPix,nPix,ao.src.nSrc))
+                    for kk in range(ao.src.nSrc):
+                        psf[:,:,kk] = cropSupport(np.squeeze(psf_[:,:,kk]),int(freq.nOtf/nPix))   
+            else:
+                psf = psf_
             PSF[:,:,:,j] = psf * F[:,j]
                 
             # STREHL-RATIO COMPUTATION
