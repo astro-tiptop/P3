@@ -158,6 +158,7 @@ class deepLoopPerformance:
                     a=0
                 b = m%k2
                 err = 1e2*(self.nnest[n][m] - self.gtruth[n][m])/self.gtruth[n][m]
+                err = err[abs(err)<5*err.std()]
                 axs[a,b].hist(err, weights=np.ones_like(err) / len(err), bins=nBins)
                 axs[a,b].set_xlabel(self.labels[n][m] + ' error (\%)')
                 axs[a,b].set_ylabel('Probability')
@@ -170,25 +171,25 @@ class deepLoopPerformance:
             # MSE
             err = self.mse[n]
             nPSF = len(err)
-            axs[0,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(nPSF/10))
+            axs[0,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
             axs[0,0].set_xlabel('Mean square error (\%)')
             axs[0,0].set_ylabel('Probability')
             axs[0,0].set_xlim([0,5*err.std()])
             # SR
             err = self.SR[n][1] - self.SR[n][0]
-            axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(nPSF/10))
+            axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
             axs[0,1].set_xlabel('Strehl-ratio error (\%)')
             axs[0,1].set_ylabel('Probability')
             axs[0,1].set_xlim([-5*err.std(),5*err.std()])
             # FWHM
             err = self.FWHM[n][1] - self.FWHM[n][0]
-            axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(nPSF/10))
+            axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
             axs[1,0].set_xlabel('FWHM error (\%)')
             axs[1,0].set_ylabel('Probability')
             axs[1,0].set_xlim([-5*err.std(),5*err.std()])
             # Photometry
             err = self.mag_err[n]
-            axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(nPSF/10))
+            axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
             axs[1,1].set_xlabel('Photometric error (mag)')
             axs[1,1].set_ylabel('Probability')
             axs[1,1].set_xlim([-5*err.std(),5*err.std()])

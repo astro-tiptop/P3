@@ -19,7 +19,7 @@ import aoSystem.FourierUtils as FourierUtils
 np.random.seed(1)
 
 
-def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=0,\
+def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=60,\
                 normType=1,savePath='',nModes=9,nRound=7,fullName=False,\
                 bounds=[[0.05,1e-3,100,1e-3,0.5,1.1,-0.1],[0.4,5e-2,390,1e-1,2,3.0,0.1]]):
     
@@ -156,7 +156,11 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
                         
             # ADDING THE NOISE
             if mag != 0:
-                psf_i = np.random.poisson(Flux*psf_i) + np.random.poisson(skyFlux) - skyFlux + ronStack*np.random.randn(psf_i.shape[0])
+                noise_sky = np.random.poisson(skyFlux*np.ones_like(psf_i)) - skyFlux
+                noise_dec = ronStack*np.random.randn(psf_i.shape[0],psf_i.shape[1])
+                psf_i = np.random.poisson(Flux*psf_i) + noise_sky  + noise_dec
+                psf_i[psf_i<0] = 0
+                
             # NORMALIZING PSF
             psf_i,_ = FourierUtils.normalizeImage(psf_i,normType=normType)    
             
