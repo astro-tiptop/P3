@@ -268,7 +268,10 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
         if np.any(dx!=0) or np.any(dy!=0):
             # shift by half a pixel
-            fftPhasor = np.exp(np.pi*complex(0,1)*(dx*freq.U_ + dy*freq.V_))
+            fftPhasor = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl),dtype=complex)
+            for iSrc in range(ao.src.nSrc):
+                for jWvl in range(freq.nWvl):
+                    fftPhasor[:,:,iSrc,jWvl] = np.exp(np.pi*complex(0,1)*(dx[iSrc,jWvl]*freq.U_ + dy[iSrc,jWvl]*freq.V_))
         else:
             fftPhasor = 1
 
@@ -277,8 +280,8 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             
             # UPDATE THE INSTRUMENTAL OTF
             if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(xStat)>0:
-                freq.otfNCPA, freq.otfDL, _ = getStaticOTF(ao.tel,int(freq.nOtf),\
-                                                        freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
+                freq.otfNCPA, freq.otfDL, _ = \
+                getStaticOTF(ao.tel,int(freq.nOtf),freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
                 
             # UPDATE THE RESIDUAL JITTER
             if freq.nyquistSampling == True and freq.nWvl > 1 and (np.any(ao.cam.spotFWHM)):
@@ -286,13 +289,14 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
                 Kjitter = np.exp(-0.5 * Djitter * normFact2/normFact)    
                           
             # OTF MULTIPLICATION
-            otfStat = freq.otfNCPA * fftPhasor * Kjitter * otfPixel    
+            otfStat = freq.otfNCPA * Kjitter * otfPixel    
             otfStat = np.repeat(otfStat[:,:,np.newaxis],ao.src.nSrc,axis=2)      
             otfTurb = np.exp(-0.5*sf*(2*np.pi*1e-9/freq.wvl[j])**2)
-            otfTot  = fft.fftshift(otfTurb * otfStat,axes=(0,1))
-            
+            otfTot  = fft.fftshift(otfTurb * otfStat * fftPhasor[:,:,:,j],axes=(0,1))
+
             # GET THE FINAL PSF
             psf_ = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
+            
             # managing the undersampling
             if freq.samp[j] <1 or nPix < freq.nOtf: 
                 if freq.samp[j] <1:

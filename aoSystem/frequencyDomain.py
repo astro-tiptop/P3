@@ -29,7 +29,7 @@ class frequencyDomain():
             self.samp  = 2.0 * np.ones_like(self.psInMas)
         else:
             self.samp  = val* rad2mas/(self.psInMas*self.ao.tel.D)
-        self.PSDstep= np.min(self.psInMas/self.ao.src.wvl/rad2mas)      
+        self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)      
     @property
     def wvlCen(self):
         return self.__wvlCen
@@ -39,7 +39,7 @@ class frequencyDomain():
         if self.nyquistSampling == True:
             self.sampCen  = 2.0
         else:
-            self.sampCen  = val* rad2mas/(self.psInMas[0]*self.ao.tel.D)
+            self.sampCen  = val* rad2mas/(self.psInMasCen*self.ao.tel.D)
     @property
     def wvlRef(self):
         return self.__wvlRef
@@ -136,21 +136,30 @@ class frequencyDomain():
         # PARSING INPUTS TO GET THE SAMPLING VALUES
         self.ao     = aoSys
         
+        # MANAGING THE WAVELENGTH
+        self.nBin    = self.ao.cam.nWvl # number of spectral bins for polychromatic PSFs
+        self.nWvlCen = len(np.unique(self.ao.src.wvl))
+        self.nWvl    = self.nBin * self.nWvlCen #central wavelengths
+        wvlCen_      = np.unique(self.ao.src.wvl)
+        bw           = self.ao.cam.bandwidth
+        self.wvl_    = np.linspace(wvlCen_ - bw/2,wvlCen_ + bw/2,num=self.nBin).T[0]
+        
         # MANAGING THE PIXEL SCALE
         t0 = time.time()
-        self.nWvl   = len(np.unique(self.ao.src.wvl))
         if nyquistSampling:
             self.nyquistSampling = True
-            self.psInMas         = rad2mas*self.ao.src.wvl/self.ao.tel.D/2
+            self.psInMas    = rad2mas*self.wvl_/self.ao.tel.D/2
+            self.psInMasCen = rad2mas*wvlCen_/self.ao.tel.D/2
         else:
-            self.psInMas         = self.ao.cam.psInMas * np.ones(self.nWvl)
+            self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl)
+            self.psInMasCen = self.ao.cam.psInMas * np.ones(self.nWvlCen)
             self.nyquistSampling = False
                            
         self.kcExt  = kcExt
         self.nPix   = self.ao.cam.fovInPix
-        self.wvl    = np.unique(self.ao.src.wvl)
-        self.wvlCen = np.mean(self.ao.src.wvl)
-        self.wvlRef = np.min(self.ao.src.wvl)
+        self.wvl    = self.wvl_
+        self.wvlCen = wvlCen_
+        self.wvlRef = np.min(self.wvl_)
         self.pitch  = self.ao.dms.pitch
         
         self.tfreq = 1000*(time.time()-t0)
