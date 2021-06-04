@@ -159,7 +159,7 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
                 #noise_sky = np.random.poisson(skyFlux*np.ones_like(psf_i)) - skyFlux
                 noise_sky = np.random.poisson(skyFlux*np.ones_like(psf_i))
                 noise_dec = ronStack*np.random.randn(psf_i.shape[0],psf_i.shape[1])
-                noise_dec+= noise_dec.min()
+                noise_dec-= noise_dec.min()
                 psf_i = np.random.poisson(Flux*psf_i) + noise_sky  + noise_dec
                 
             # NORMALIZING PSF

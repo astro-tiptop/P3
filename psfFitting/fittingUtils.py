@@ -94,13 +94,13 @@ def adjust_init_file(path_file, path_ini):
 
 
 def split_fitting(im, psfao, x0, fixed, weights) : 
+    
     # fitting - 7 PSD parameters + no static aberrations
-
     res_psfao21  = psfFitting(im,psfao,x0+list(np.zeros((psfao.ao.tel.nModes))),verbose=2,fixed=fixed,ftol=1e-5,gtol=1e-5,xtol=1e-5)
     
-    # fitting - no PSD parameters + static aberrations
+    # fitting - PSD parameters + static aberrations
     x0    = list(res_psfao21.x[0:7]) + [0,0,0,1.0,0,0,0] + list(np.zeros((psfao.ao.tel.nModes))) 
-    fixed = (False, False, False, False, False, False, False) +(True,)*3 + (False,False,False,False) + (False,)*36
+    fixed = (False, False, False, False, False, False, False) +(True,)*3 + (False,False,False,False) + (False,)*psfao.ao.tel.nModes
     # redefining bounds
     bounds= psfao.updateBounds(res_psfao21.x,res_psfao21.xerr,sig=5)
     res_psfao21_split  = psfFitting(im,psfao,x0,verbose=2,\
@@ -110,7 +110,7 @@ def split_fitting(im, psfao, x0, fixed, weights) :
 
 def joint_fit(im, psfao, x0, fixed, weights):
     x0    = [0.7,4e-2,0.5,1e-2,1,0,1.8,0,0,0,1.0,0,0,0] + list(np.zeros((psfao.ao.tel.nModes)))
-    fixed = (False, False, False, False, False, False, False) +(True,)*3 + (False,False,False,False) + (False,)*36
+    fixed = (False, False, False, False, False, False, False) +(True,)*3 + (False,False,False,False) + (False,)*psfao.ao.tel.nModes
     res_psfao21_joint  = psfFitting(im,psfao,x0,verbose=2,fixed=fixed,ftol=1e-5,gtol=1e-5,xtol=1e-5)
     return res_psfao21_joint
 
