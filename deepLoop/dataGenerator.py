@@ -156,10 +156,11 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
                         
             # ADDING THE NOISE
             if mag != 0:
-                noise_sky = np.random.poisson(skyFlux*np.ones_like(psf_i)) - skyFlux
+                #noise_sky = np.random.poisson(skyFlux*np.ones_like(psf_i)) - skyFlux
+                noise_sky = np.random.poisson(skyFlux*np.ones_like(psf_i))
                 noise_dec = ronStack*np.random.randn(psf_i.shape[0],psf_i.shape[1])
+                noise_dec+= noise_dec.min()
                 psf_i = np.random.poisson(Flux*psf_i) + noise_sky  + noise_dec
-                psf_i[psf_i<0] = 0
                 
             # NORMALIZING PSF
             psf_i,_ = FourierUtils.normalizeImage(psf_i,normType=normType)    
