@@ -273,7 +273,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
                 for jWvl in range(freq.nWvl):
                     fftPhasor[:,:,iSrc,jWvl] = np.exp(np.pi*complex(0,1)*(dx[iSrc,jWvl]*freq.U_ + dy[iSrc,jWvl]*freq.V_))
         else:
-            fftPhasor = 1
+            fftPhasor = np.ones((nPix,nPix,ao.src.nSrc,freq.nWvl),dtype=complex)
 
         # LOOP ON WAVELENGTHS   
         for j in range(freq.nWvl):
