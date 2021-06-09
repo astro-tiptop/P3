@@ -56,7 +56,7 @@ def getScale(hdr):
         scales = {"NARROW": 9.942,
               "MEDIUM": 19.829,
               "WIDE": 39.686}
-        return scales[hdr['CAMNAME']]  
+        return scales[hdr['CAMNAME'].upper()]  
     
     elif instName == 'OSIRIS':
         return 9.95

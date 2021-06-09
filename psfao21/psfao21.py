@@ -76,8 +76,8 @@ class psfao21:
         bounds_down += [-np.inf]
         bounds_up   += [np.inf]
         # Static aberrations
-        bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
-        bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
+        bounds_down += list(-self.freq.wvlRef/10*1e9 * np.ones(self.ao.tel.nModes))
+        bounds_up   += list(self.freq.wvlRef/10 *1e9 * np.ones(self.ao.tel.nModes))
         
         return (bounds_down,bounds_up)
         

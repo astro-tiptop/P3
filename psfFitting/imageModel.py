@@ -6,9 +6,8 @@ Created on Wed Apr 21 09:56:54 2021
 @author: omartin
 """
 import numpy as np
-import numpy.fft as fft
 
-def imageModel(psfModelInst, Fluxes, Positions, Background=0.0, spectralStacking = True, spatialStacking = True, nPix = None, antiAliasing=False):
+def imageModel(psf4D, spectralStacking = True, spatialStacking = True):
     """
     Function to model an image of a stellar population fields from the psfModelInst class
     The model is: 
@@ -22,7 +21,7 @@ def imageModel(psfModelInst, Fluxes, Positions, Background=0.0, spectralStacking
         - F[x] is the 2D Fourier transform of x.
         
     INPUTS:
-        - psfModelInst: -  REQUIRED -  instance of one of the following PSF model: 
+        - psf4D: -  REQUIRED -  4D numpy array delivered by the P3 models: 
             - fourierModel
             - psfao21
             - psfR
@@ -34,39 +33,29 @@ def imageModel(psfModelInst, Fluxes, Positions, Background=0.0, spectralStacking
     """
     
     # MANAGE THE IMAGE SIZE
-    if nPix == None:
-        nPix = psfModelInst.freq.nPix
-        mode = 'psf-like'
-    else:
-        if nPix > psfModelInst.freq.nPix:
-            mode = 'wide-field'
-        else:
-            mode = 'cropping'
+    #if nPix == None:
+    #    nPix = psfModelInst.freq.nPix
+    #    mode = 'psf-like'
+    #else:
+    #    if nPix > psfModelInst.freq.nPix:
+    #        mode = 'wide-field'
+    #    else:
+    #        mode = 'cropping'
     
     # MANAGE THE DATA MODEL : 4D ARRAYS, CUBE OR IMAGE
     if (spectralStacking == False) and (spatialStacking == False):
-        im = np.zeros((psfModelInst.ao.src.nSrc,psfModelInst.freq.nWvl,nPix,nPix))
+        im = np.squeeze(psf4D)
     elif (spectralStacking == True) and (spatialStacking == False):
-        im = np.zeros((psfModelInst.ao.src.nSrc,nPix,nPix))
+        im = np.squeeze(psf4D.sum(axis=3))
     elif (spectralStacking == False) and (spatialStacking == True):
-        im = np.zeros((psfModelInst.freq.nWvl,nPix,nPix))
+        im = np.squeeze(psf4D.sum(axis=2))
     else:
-        im = np.zeros((nPix,nPix))
-            
+        im = np.squeeze(psf4D.sum(axis=(2,3)))
+        
+    return im
 
-    # POPULATE THE IMAGE        
-    for iSrc in range(psfModelInst.ao.src.nSrc):
-        # COMPUTE THE FFT PHASOR
-        dx = Positions[0][iSrc]
-        dy = Positions[1][iSrc]
-        if dx !=0 or dy!=0:
-            fftPhasor = np.exp(np.pi*complex(0,1)*(psfModelInst.freq.U_*dx + psfModelInst.freq.V_*dy))
-        else:
-            fftPhasor = 1
                         
                         
-        # COMPUTE THE PSF
-        psf_i = np.real(fft.fftshift(fft.ifft2(fft.fftshift(otf * fftPhasor))))
         
         
         

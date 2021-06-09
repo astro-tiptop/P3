@@ -169,7 +169,7 @@ class frequencyDomain():
         self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf,fact=2)
               
         # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
-        self.otfNCPA, self.otfDL, _ = FourierUtils.getStaticOTF(self.ao.tel,self.nOtf,self.sampRef,self.wvlRef)
+        self.otfNCPA, self.otfDL, self.phaseMap = FourierUtils.getStaticOTF(self.ao.tel,self.nOtf,self.sampRef,self.wvlRef)
         self.totf = 1000*(time.time()-t0)
         
         # ANISOPLANATISM PHASE STRUCTURE FUNCTION

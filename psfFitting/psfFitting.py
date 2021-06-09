@@ -11,11 +11,14 @@ import numpy as np
 from scipy.optimize import least_squares
 import aoSystem.FourierUtils as FourierUtils
 from psfFitting.confidenceInterval import confidence_interval
+from psfFitting.imageModel import imageModel
+
 import matplotlib.pyplot as plt
 
 #%%
-def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normType=1,\
-               bounds=None,jac=None,ftol=1e-8,xtol=1e-8,gtol=1e-8,max_nfev=1000,verbose=0):
+def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectralStacking=True,
+               spatialStacking=True,normType=1, bounds=None,
+               ftol=1e-8,xtol=1e-8,gtol=1e-8,max_nfev=1000,verbose=0):
     """Fit a PSF with a parametric model solving the least-square problem
        epsilon(x) = SUM_pixel { weights * (amp * Model(x) + bck - psf)² }
     
@@ -84,7 +87,8 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
         def __call__(self,y):
             if (self.iter%3)==0 and (method=='lm' or verbose == 0 or verbose == 1): print("-",end="")
             self.iter += 1
-            im_est = np.squeeze(psfModelInst(mini2input(y),nPix=im_norm.shape[0]))
+            im_est = imageModel(psfModelInst(mini2input(y),nPix=im_norm.shape[0]),
+                                spatialStacking=spatialStacking,spectralStacking=spectralStacking)
             return (sqW * (im_est - im_norm)).reshape(-1)
     cost = CostClass()   
     
@@ -136,7 +140,8 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
     result.xinit  = x0
     result.im_sky = image
     # scale fitted image
-    result.im_fit = FourierUtils.normalizeImage(np.squeeze(psfModelInst(result.x,nPix=nPix)),param=param,normType=normType)
+    tmp           = imageModel(psfModelInst(result.x,nPix=nPix),spatialStacking=spatialStacking,spectralStacking=spectralStacking)
+    result.im_fit = FourierUtils.normalizeImage(tmp,param=param,normType=normType)
     # psf
     xpsf          = np.copy(result.x)
     nparam        = len(result.x) - 3*psfModelInst.ao.src.nSrc - 1
@@ -145,7 +150,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',normTy
         
     xpsf[nparam]  = 1.0 # flux=1
     xpsf[nparam+1:nparam+3*psfModelInst.ao.src.nSrc+1]   = 0.0 # dx,dy,bkcg=0
-    result.psf    = np.squeeze(psfModelInst(xpsf,nPix=nPix))
+    result.psf    = np.squeeze(psfModelInst(xpsf,nPix=nPix)[:,:,0].sum(axis=2))
     result        = evaluateFittingQuality(result,psfModelInst)
     
     # static map

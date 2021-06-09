@@ -126,12 +126,12 @@ class deepLoopPerformance:
             k1 = int(np.sqrt(nP))
             k2 = int(nP/k1)
             fig , axs = plt.subplots(k1,k2,figsize=figsize,constrained_layout=constrained_layout)
+            a=-1
             for m in range(nP):
-                if m >= k2:
-                    a=1
-                else:
-                    a=0
                 b = m%k2
+                if b==0:
+                    a+=1                    
+                
                 mn = min(self.gtruth[n][m].min(),self.nnest[n][m].min())
                 mx = max(self.gtruth[n][m].max(),self.nnest[n][m].max())
                 axs[a,b].plot(self.gtruth[n][m],self.nnest[n][m],'bo')
@@ -151,57 +151,65 @@ class deepLoopPerformance:
             k1 = int(np.sqrt(nP))
             k2 = int(nP/k1)
             fig , axs = plt.subplots(k1,k2,figsize=figsize,constrained_layout=constrained_layout)
+            a=-1
             for m in range(nP):
-                if m >= k2:
-                    a=1
-                else:
-                    a=0
                 b = m%k2
-                err = 1e2*(self.nnest[n][m] - self.gtruth[n][m])/self.gtruth[n][m]
+                if b==0:
+                    a+=1 
+                b = m%k2
+                
+                if m < 6:
+                    err = 1e2*(self.nnest[n][m] - self.gtruth[n][m])/self.gtruth[n][m]
+                    lab = '\%'
+                else:
+                    err = self.nnest[n][m] - self.gtruth[n][m]
+                    lab = 'nm'
+                    
                 err = err[abs(err)<5*err.std()]
                 axs[a,b].hist(err, weights=np.ones_like(err) / len(err), bins=nBins)
-                axs[a,b].set_xlabel(self.labels[n][m] + ' error (\%)')
+                axs[a,b].set_xlabel(self.labels[n][m] + ' error ('+lab+')')
                 axs[a,b].set_ylabel('Probability')
                 axs[a,b].set_xlim([-5*err.std(),5*err.std()])
 
         # ------ PSFs
-        for n in range(self.nCases):
-            # creating the figure
-            fig , axs = plt.subplots(2,2,figsize=figsize,constrained_layout=constrained_layout)
-            # MSE
-            err = self.mse[n]
-            nPSF = len(err)
-            axs[0,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
-            axs[0,0].set_xlabel('Mean square error (\%)')
-            axs[0,0].set_ylabel('Probability')
-            axs[0,0].set_xlim([0,5*err.std()])
-            # SR
-            err = self.SR[n][1] - self.SR[n][0]
-            axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
-            axs[0,1].set_xlabel('Strehl-ratio error (\%)')
-            axs[0,1].set_ylabel('Probability')
-            axs[0,1].set_xlim([-5*err.std(),5*err.std()])
-            # FWHM
-            err = self.FWHM[n][1] - self.FWHM[n][0]
-            axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
-            axs[1,0].set_xlabel('FWHM error (\%)')
-            axs[1,0].set_ylabel('Probability')
-            axs[1,0].set_xlim([-5*err.std(),5*err.std()])
-            # Photometry
-            err = self.mag_err[n]
-            axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
-            axs[1,1].set_xlabel('Photometric error (mag)')
-            axs[1,1].set_ylabel('Probability')
-            axs[1,1].set_xlim([-5*err.std(),5*err.std()])
-            
-            plt.figure()
-            nPx = self.psf_mean[n].shape[0]
-            fov = nPx * self.psfao.ao.cam.psInMas
-            x = np.linspace(-fov/2,fov/2,num=nPx)
-            plt.semilogy(x,self.psf_mean[n][nPx//2,:],'k',label='Mean PSF')
-            plt.semilogy(x,self.psf_diff_mean[n][nPx//2,:],'b',label='Mean differential PSF')
-            plt.semilogy(x,self.psf_diff_std[n][nPx//2,:],'r',label='Std differential PSF')
-            plt.legend()
+        if self.path_ini:
+            for n in range(self.nCases):
+                # creating the figure
+                fig , axs = plt.subplots(2,2,figsize=figsize,constrained_layout=constrained_layout)
+                # MSE
+                err = self.mse[n]
+                nPSF = len(err)
+                axs[0,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
+                axs[0,0].set_xlabel('Mean square error (\%)')
+                axs[0,0].set_ylabel('Probability')
+                axs[0,0].set_xlim([0,5*err.std()])
+                # SR
+                err = self.SR[n][1] - self.SR[n][0]
+                axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
+                axs[0,1].set_xlabel('Strehl-ratio error (\%)')
+                axs[0,1].set_ylabel('Probability')
+                axs[0,1].set_xlim([-5*err.std(),5*err.std()])
+                # FWHM
+                err = self.FWHM[n][1] - self.FWHM[n][0]
+                axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
+                axs[1,0].set_xlabel('FWHM error (\%)')
+                axs[1,0].set_ylabel('Probability')
+                axs[1,0].set_xlim([-5*err.std(),5*err.std()])
+                # Photometry
+                err = self.mag_err[n]
+                axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
+                axs[1,1].set_xlabel('Photometric error (mag)')
+                axs[1,1].set_ylabel('Probability')
+                axs[1,1].set_xlim([-5*err.std(),5*err.std()])
+                
+                plt.figure()
+                nPx = self.psf_mean[n].shape[0]
+                fov = nPx * self.psfao.ao.cam.psInMas
+                x = np.linspace(-fov/2,fov/2,num=nPx)
+                plt.semilogy(x,self.psf_mean[n][nPx//2,:],'k',label='Mean PSF')
+                plt.semilogy(x,self.psf_diff_mean[n][nPx//2,:],'b',label='Mean differential PSF')
+                plt.semilogy(x,self.psf_diff_std[n][nPx//2,:],'r',label='Std differential PSF')
+                plt.legend()
             
     def read_txt_files(self,path_txt,getParamNumberOnly=False):
         '''

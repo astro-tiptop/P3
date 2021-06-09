@@ -271,7 +271,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             fftPhasor = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl),dtype=complex)
             for iSrc in range(ao.src.nSrc):
                 for jWvl in range(freq.nWvl):
-                    fftPhasor[:,:,iSrc,jWvl] = np.exp(np.pi*complex(0,1)*(dx[iSrc,jWvl]*freq.U_ + dy[iSrc,jWvl]*freq.V_))
+                    fftPhasor[:,:,iSrc,jWvl] = np.exp(-np.pi*complex(0,1)*(dx[iSrc,jWvl]*freq.U_ + dy[iSrc,jWvl]*freq.V_))
         else:
             fftPhasor = np.ones((nPix,nPix,ao.src.nSrc,freq.nWvl),dtype=complex)
 
@@ -280,7 +280,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             
             # UPDATE THE INSTRUMENTAL OTF
             if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(xStat)>0:
-                freq.otfNCPA, freq.otfDL, _ = \
+                freq.otfNCPA, freq.otfDL, freq.phaseMap = \
                 getStaticOTF(ao.tel,int(freq.nOtf),freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
                 
             # UPDATE THE RESIDUAL JITTER
