@@ -8,6 +8,7 @@ Created on Thu Feb 11 17:50:20 2021
 
 #%% MANAGE PYTHON LIBRAIRIES
 from amiral import parameter
+# TODO - Move some amiral native functions in here! 
 import numpy as np
 import numpy.fft as fft
 import time
@@ -143,7 +144,9 @@ class psfao21:
      
     def get_PsfGrad (self, x0): 
         """
-            Getting an analytical gradient expression for PSFAO21 model. 
+            Getting an analytical gradient expression for PSFAO21 model.
+
+            Work in progress  
             
         Args:
             x0 ([type]): input parameters
