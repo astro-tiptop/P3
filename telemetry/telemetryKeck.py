@@ -253,7 +253,7 @@ class telemetryKeck:
         # managing the saving folder
         if not os.path.isdir(self.path_calib+'/MASSDIMM/'):
             os.mkdir(self.path_calib+'/MASSDIMM/')
-        self.path_massdimm = self.path_calib+'/MASSDIMM/'+self.obsdate
+        self.path_massdimm = self.path_calib+'/MASSDIMM/'+self.obsdate +'/'
         if not os.path.isdir(self.path_massdimm):
             status = fetch_data(self.obsdate,self.path_massdimm)
         else:
@@ -336,8 +336,13 @@ class telemetryKeck:
             self.wfs.intensity = self.wfs.intensity.reshape((self.wfs.nExp,self.wfs.nSubap[0],self.wfs.nSubap[0]))
         else:
             self.wfs.intensity = np.copy(trsData.A['SUBAPINTENSITY'][0])
-        self.wfs.wvl = keckUtils.getWFSwavelength(hdr)
-        
+        if self.aoMode == 'NGS':
+            self.wfs.wvl = keckUtils.getWFSwavelength(hdr)
+        else:
+            self.wfs.wvl = 589e-9
+            self.tipTilt.wvl = keckUtils.getWFSwavelength(hdr)
+            self.tipTilt.intensity = trsData.B['APDCOUNTS'][0]
+            
         #2.3. Get DMs commands in OPD units
         self.dm.com = trsData.A['DMCOMMAND'][0]*self.dm.volt2meter
         self.dm.nCom= self.dm.com.shape[1]
@@ -345,16 +350,19 @@ class telemetryKeck:
         #2.4. Get tip-tilt measurements and conversion into OPD
         if 'b' in trsData:
             self.tipTilt.tilt2meter= 3.2*1.268e-05 # to be verified
+            #self.tipTilt.tilt2meter= 1.268e-05 # to be verified
             self.tipTilt.slopes    = np.copy(trsData.B['DTTCENTROIDS'][0])
             self.tipTilt.com       = np.copy(trsData.B['DTTCOMMANDS'][0])
             self.tipTilt.intensity = np.copy(trsData.B['APDCOUNTS'][0])
+            unit_tt                = 0.18
         else:
+            unit_tt                 = 1
             self.tipTilt.tilt2meter = 12.68e-6 # should be np.pi*tel.D/4/3600/180
             self.tipTilt.slopes     = np.copy(trsData.A['RESIDUALWAVEFRONT'][0][:,self.dm.nCom:self.dm.nCom+2])# %angle in arcsec
             self.tipTilt.com        = np.copy(trsData.A['TTCOMMANDS'][0])
             self.tipTilt.intensity  = None 
             
-        self.tipTilt.slopes  = self.tipTilt.tilt2meter*self.tipTilt.slopes
+        self.tipTilt.slopes  = unit_tt * self.tipTilt.tilt2meter*self.tipTilt.slopes
         self.tipTilt.slopes -= np.mean(self.tipTilt.slopes,axis=0) 
         self.tipTilt.com     = self.tipTilt.tilt2meter*self.tipTilt.com
         self.tipTilt.com    -= np.mean(self.tipTilt.com,axis=0) 

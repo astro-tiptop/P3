@@ -7,7 +7,7 @@ Created on Thu Feb 11 17:50:20 2021
 """
 
 #%% MANAGE PYTHON LIBRAIRIES
-from amiral import parameter
+#from amiral import parameter
 # TODO - Move some amiral native functions in here! 
 import numpy as np
 import numpy.fft as fft

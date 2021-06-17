@@ -42,27 +42,27 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
     nPSFperFolder = nPSFperFolder
     
     # DEFINING THE DATA FOLDER
-    if savePath != '':
-        idNOISE = 'NO'
-        idSTATIC= 'NO'
-        if addStatic:
-            idSTATIC = ''
-        if mag != 0:
-            Flux    = 10 ** (-0.4*(mag - zP))*DIT*nDIT
-            skyFlux = 10 ** (-0.4*(skyMag - zP)) * nDIT * DIT * (psfao.ao.cam.psInMas/1e3) ** 2
-            ronStack= ron * np.sqrt(nDIT)
-            idNOISE = ''      
-        # defining prefix   
-        instru    = path_ini.split('/')[-1].split('.')[0]
-        if fullName == True:
-            psfPrefix = 'psfao21_' + instru + '_wvl_' + str(round(wvl*1e6,3)) + 'µm'
-        else:
-            psfPrefix = 'psf'
-            
+    idNOISE = 'NO'
+    idSTATIC= 'NO'
+    if addStatic:
+        idSTATIC = ''
+    if mag != 0:
+        Flux    = 10 ** (-0.4*(mag - zP))*DIT*nDIT
+        skyFlux = 10 ** (-0.4*(skyMag - zP)) * nDIT * DIT * (psfao.ao.cam.psInMas/1e3) ** 2
+        ronStack= ron * np.sqrt(nDIT)
+        idNOISE = ''      
+      
         # creating tha main data folder
-        savePath = savePath + '/PSFAO21_' + idNOISE + 'NOISE_' + idSTATIC + 'STATIC/'
-        if not os.path.isdir(savePath):
-            os.mkdir(savePath)
+        if savePath != '':
+            # defining prefix   
+            instru    = path_ini.split('/')[-1].split('.')[0]
+            if fullName == True:
+                psfPrefix = 'psfao21_' + instru + '_wvl_' + str(round(wvl*1e6,3)) + 'µm'
+            else:
+                psfPrefix = 'psf'
+            savePath = savePath + '/PSFAO21_' + idNOISE + 'NOISE_' + idSTATIC + 'STATIC/'
+            if not os.path.isdir(savePath):
+                os.mkdir(savePath)
         
         
     # ------------------- DEFINING BOUNDS
@@ -190,3 +190,4 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
                 hdu.writeto(savePath + idsub + '/' + idpsf + '.fits',overwrite=True)
                 
     print('Simulation of %d PSF done in %.2fs'%(nPSFperFolder*nSubFolder,time.time()-tstart))
+    return psf_i

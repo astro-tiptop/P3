@@ -107,8 +107,8 @@ class fourierModel:
             self.atm_mod = atmosphere(self.ao.atm.wvl,self.ao.atm.r0,weights_mod,heights_mod,wSpeed_mod,wDir_mod,self.ao.atm.L0)
             
             #updating the atmosphere wavelength !
-            self.ao.atm.wvl  = self.freq.wvlRef
-            self.atm_mod.wvl = self.freq.wvlRef
+            self.ao.atm.wvl  = self.freq.wvlCen
+            self.atm_mod.wvl = self.freq.wvlCen
             self.t_initFreq = 1000*(time.time() - tstart)
 
             # DEFINING THE NOISE AND ATMOSPHERE PSD
@@ -848,6 +848,7 @@ class fourierModel:
             dx = np.repeat(np.array(self.ao.cam.dispersion[0])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
             dy = np.repeat(np.array(self.ao.cam.dispersion[1])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
             bkg= 0.0
+            xStat = []
         else:
             jitterX = x0[0]
             jitterY = x0[1]
@@ -856,7 +857,7 @@ class fourierModel:
             dx      = x0[3+self.ao.src.nSrc:3+2*self.ao.src.nSrc] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
             dy      = x0[3+2*self.ao.src.nSrc:3+3*self.ao.src.nSrc] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
             bkg     = x0[3+3*self.ao.src.nSrc]
-            
+            xStat   = x0[4+3*self.ao.src.nSrc:]
         
         # ---------- GETTING THE PSF
         otfPixel=1
@@ -865,7 +866,7 @@ class fourierModel:
             
         PSF, SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
                                       jitterX=jitterX,jitterY=jitterY,jitterXY=jitterXY,\
-                                      F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,otfPixel=otfPixel)
+                                      F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,otfPixel=otfPixel,xStat=xStat)
 
         self.t_getPSF = 1000*(time.time() - tstart)
         
@@ -874,7 +875,7 @@ class fourierModel:
     def __call__(self,x0,nPix=None):
         
         psf,_ = self.pointSpreadFunction(x0=x0,nPix=nPix,verbose=False,fftphasor=True,addOtfPixel = self.addOtfPixel)
-        return psf#[:,:,0,0]    
+        return psf 
     
     
   #%% METRICS COMPUTATION

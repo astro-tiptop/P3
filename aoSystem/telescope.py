@@ -99,6 +99,8 @@ class telescope:
         if path_static_on != None and ospath.isfile(path_static_on) == True and re.search(".fits",path_static_on)!=None:
             self.opdMap_on = fits.getdata(path_static_on)
             self.opdMap_on[self.opdMap_on!=self.opdMap_on] = 0
+            if self.pupilAngle !=0.0:
+                self.opdMap_on = rotate(self.opdMap_on,self.pupilAngle,reshape=False)
             self.opdMap_on = FourierUtils.interpolateSupport(self.opdMap_on,resolution,kind='linear')
         else:
             self.opdMap_on = None
@@ -127,6 +129,8 @@ class telescope:
         if path_apodizer!= '' and ospath.isfile(path_apodizer) and re.search(".fits",path_apodizer)!=None:
             self.apodizer = fits.getdata(path_apodizer)
             self.apodizer[self.apodizer!=self.apodizer] = 0
+            if self.pupilAngle !=0.0:
+                self.apodizer = rotate(self.apodizer,self.pupilAngle,reshape=False)
             self.apodizer = FourierUtils.interpolateSupport(self.apodizer,resolution,kind='linear')
         else:
             self.apodizer = 1.0

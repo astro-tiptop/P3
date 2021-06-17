@@ -38,8 +38,9 @@ class systemDiagnosis:
         
         # noise
         self.noiseMethod = noiseMethod
-        if hasattr(self.trs.wfs,'intensity'):
+        if hasattr(self.trs.wfs,'intensity') or hasattr(self.trs.tipTilt,'intensity'):
             self.trs.wfs.nph,self.trs.wfs.ron,self.trs.tipTilt.nph,self.trs.tipTilt.ron = self.get_number_photons()
+            
         self.trs.wfs.Cn_ao,self.trs.tipTilt.Cn_tt = self.get_noise_variance(noiseMethod=self.noiseMethod,nshift=nshift,nfit=nfit)
         
         # GET THE VARIANCE
@@ -67,8 +68,8 @@ class systemDiagnosis:
         self.trs.atm.L0 = L0
         self.trs.atm.seeing = rad2arc * self.trs.atm.wvl/r0
         if len(self.trs.atm.Cn2Weights) > 1:
-            vm = FourierUtils.eqLayers(self.trs.atm.Cn2Weights,self.trs.atm.wSpeed,nEqLayers=1)[1] 
-            self.trs.atm.wSpeed = v0 * self.trs.atm.wSpeed/vm
+            vm = FourierUtils.eqLayers(np.array(self.trs.atm.Cn2Weights),np.array(self.trs.atm.wSpeed),nEqLayers=1)[1] 
+            self.trs.atm.wSpeed = list(v0 * np.array(self.trs.atm.wSpeed)/vm)
         else:
             self.trs.atm.wSpeed = [v0]
         
@@ -139,8 +140,8 @@ class systemDiagnosis:
  
         
         if self.trs.aoMode == 'LGS':
-              nph = np.mean(self.trs.tipTilt.intensity/self.trs.tipTilt.gain)
-              ron = np.std(self.trs.tipTilt.intensity/self.trs.tipTilt.gain)
+              nph_tt = [np.mean(self.trs.tipTilt.intensity/self.trs.tipTilt.gain)]
+              ron_tt = np.std(self.trs.tipTilt.intensity/self.trs.tipTilt.gain)
         else:
             nph_tt = nph
             ron_tt =ron

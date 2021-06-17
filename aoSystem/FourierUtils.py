@@ -987,6 +987,8 @@ def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
              reconstructed layers in atmospheric tomography, App Op, Vol. 56, No. 10 / April 1 2017
     '''
     nCn2        = len(Cn2)
+    if nEqLayers > nCn2:
+        raise ValueError('nEqLayers is smaller than the number of input layers')
     nAltitudes  = len(altitudes)
     nSlab       = np.floor(np.round(nCn2)/np.fix(nEqLayers))
              

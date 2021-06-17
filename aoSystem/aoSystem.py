@@ -771,7 +771,7 @@ class aoSystem():
         if hasattr(self.rtc,'ttloop') and self.tts !=None:
             self.wfe['TT Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.ttloop['bandwidth'])* Dr053 * 2**(-2/3))
             
-            if self.wfs.processing.noiseVar == [None]:
+            if self.tts.processing.noiseVar == [None]:
                 varNoise = self.tts.NoiseVariance(self.atm.r0 ,self.atm.wvl)
             else:
                 varNoise = self.tts.processing.noiseVar

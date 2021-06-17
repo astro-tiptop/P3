@@ -57,8 +57,8 @@ if sys.platform[0:3] == 'win':
 else:
     path_root  = '/'.join(psfao21Main.__file__.split('/')[0:-3]) + '/'
     path_p3    = '/'.join(psfao21Main.__file__.split('/')[0:-2])
-    #path_ini   = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
-    path_ini   = path_p3 + '/aoSystem/parFiles/nirc2.ini'
+    path_ini   = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
+    #path_ini   = path_p3 + '/aoSystem/parFiles/nirc2.ini'
     path_img   = path_p3 + '/data/20130801_n0004.fits'
     path_calib = path_p3 + '/aoSystem/data/KECK_CALIBRATION/'
 
@@ -77,7 +77,7 @@ def TestFourierFitting():
     
     # fitting the residual jitter + astrometry/photometry
     x0  = [fao.ao.cam.spotFWHM[0][0],fao.ao.cam.spotFWHM[0][1],fao.ao.cam.spotFWHM[0][2],1,0,0,0]
-    res_Fourier = psfFitting(im_nirc2,fao,x0,verbose=2,fixed=(False,False,False,False,False,False,False))
+    res_Fourier = psfFitting(im_nirc2,fao,x0,verbose=2,fixed=(True,True,True,False,False,False,False))
     
     # display
     displayResults(fao,res_Fourier,nBox=90,scale='log10abs')

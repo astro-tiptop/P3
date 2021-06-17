@@ -69,6 +69,7 @@ class configFile():
             parser.set('sources_HO','Height', str(sysdiag.trs.lgs.height))
             if not parser.has_section('sources_LO'):
                 parser.add_section('sources_LO')
+            parser.set('sources_LO','Wavelength', str(sysdiag.trs.tipTilt.wvl))
             parser.set('sources_LO','Zenith',str(sysdiag.trs.ngs.zenith))
             parser.set('sources_LO','Azimuth',str(sysdiag.trs.ngs.azimuth))
         else:
@@ -164,7 +165,7 @@ class configFile():
         parser.set('sensor_science','PixelScale', str(sysdiag.trs.cam.psInMas))
         parser.set('sensor_science','SigmaRON', str(sysdiag.trs.cam.ron))
         parser.set('sensor_science','Gain', str(sysdiag.trs.cam.gain))
-        parser.set('sensor_science','Transmittance', str(sysdiag.trs.cam.transmission))
+        parser.set('sensor_science','Transmittance', str(list(sysdiag.trs.cam.transmission)))
         parser.set('sensor_science','SpectralBandwidth', str(sysdiag.trs.cam.bw))
         parser.set('sensor_science','Dispersion', str(sysdiag.trs.cam.dispersion))
        
