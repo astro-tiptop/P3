@@ -71,7 +71,7 @@ class psfao21:
                 z = zernike([2,3],nPup,pupil=self.ao.tel.pupil.astype(bool))
                 M = z.modes.reshape((2,nPup**2)).T
                 H = np.linalg.pinv(M)
-                self.spatialFilter = np.eye(nPup) - np.dot(M,H)
+                self.spatialFilter = np.eye(nPup**2) - np.dot(M,H)
             else:
                 self.spatialFilter = 1
             

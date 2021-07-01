@@ -77,7 +77,8 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0,spatialFilter=1):
                 phaseStat += phaseMap
                 
         # FILTERING
-        phaseStat *= spatialFilter
+        if not np.isscalar(spatialFilter):
+            phaseStat = (np.dot(spatialFilter,phaseStat.reshape(-1))).reshape((nPup,nPup))
         
         # INSTRUMENTAL OTF
         otfStat = pupil2otf(tel.pupil * tel.apodizer,phaseStat,samp)

@@ -289,6 +289,9 @@ class deepLoopPerformance:
         self.psf_mean = np.empty(self.nCases,dtype=list)
         self.psf_diff_mean = np.empty(self.nCases,dtype=list)
         self.psf_diff_std  = np.empty(self.nCases,dtype=list)
+        if fit:
+            self.psf_diff_mean_fit = np.empty(self.nCases,dtype=list)
+            self.psf_diff_std_fit  = np.empty(self.nCases,dtype=list)
         nPx = self.psfao.ao.cam.fovInPix
         nC  = 2 + fit*1
         
