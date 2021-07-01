@@ -16,6 +16,7 @@ import sys as sys
 
 import aoSystem.FourierUtils as FourierUtils
 from aoSystem.aoSystem import aoSystem as aoSys
+from aoSystem.zernike import zernike
 from aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
 
 #%%
@@ -40,7 +41,7 @@ def parse_input_param (x0):
 
 class psfao21:
     # INIT
-    def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False,otfPixel=1,coo_stars=None):
+    def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False,otfPixel=1,coo_stars=None,filter_tt=False):
         
         tstart = time.time()
         
@@ -63,6 +64,17 @@ class psfao21:
                 
             # DEFINING BOUNDS
             self.bounds = self.defineBounds()
+            
+            # DEFINING THE PHASE SPATIAL FILTER
+            if filter_tt:
+                nPup = self.ao.tel.resolution
+                z = zernike([2,3],nPup,pupil=self.ao.tel.pupil.astype(bool))
+                M = z.modes.reshape((2,nPup**2)).T
+                H = np.linalg.pinv(M)
+                self.spatialFilter = np.eye(nPup) - np.dot(M,H)
+            else:
+                self.spatialFilter = 1
+            
         self.t_init = 1000*(time.time()  - tstart)
         
     def _repr__(self):
@@ -224,7 +236,8 @@ class psfao21:
         # ----------------- COMPUTING THE PSF
         PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
                         jitterX=x0_jitter[0],jitterY=x0_jitter[1],jitterXY=x0_jitter[2],\
-                        F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel)
+                        F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel,
+                        spatialFilter=self.spatialFilter)
         
         return PSF
 

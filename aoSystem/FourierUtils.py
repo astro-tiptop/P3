@@ -56,7 +56,7 @@ def freq_array(nX,L=1,offset=1e-10):
     k2D     = k2D*L + offset
     return k2D[0],k2D[1]
 
-def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0):
+def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0,spatialFilter=1):
         
         # DEFINING THE RESOLUTION/PUPIL
         nPup = tel.pupil.shape[0]
@@ -76,6 +76,9 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0):
                 phaseMap = 2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)
                 phaseStat += phaseMap
                 
+        # FILTERING
+        phaseStat *= spatialFilter
+        
         # INSTRUMENTAL OTF
         otfStat = pupil2otf(tel.pupil * tel.apodizer,phaseStat,samp)
         if np.any(otfStat.shape !=nOtf):
@@ -240,7 +243,8 @@ def telescopePsf(pupil,samp,kind='spline'):
         return interpolateSupport(otf2psf(otf),nSize,kind=kind)
 
 
-def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0.]],bkg=0,xStat=[],theta_ext=0,nPix=None,otfPixel=1):
+def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0.]],bkg=0,xStat=[],
+           theta_ext=0,nPix=None,otfPixel=1,spatialFilter=1):
         """
           Computation of the PSF and the Strehl-ratio (from the OTF integral). The Phase structure function
           must be expressed in nm^2 and of the size nPx x nPx x nSrc
@@ -281,7 +285,8 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             # UPDATE THE INSTRUMENTAL OTF
             if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(xStat)>0:
                 freq.otfNCPA, freq.otfDL, freq.phaseMap = \
-                getStaticOTF(ao.tel,int(freq.nOtf),freq.samp[j],freq.wvl[j],xStat=xStat,theta_ext=theta_ext)
+                getStaticOTF(ao.tel,int(freq.nOtf),freq.samp[j],freq.wvl[j],
+                             xStat=xStat,theta_ext=theta_ext,spatialFilter=spatialFilter)
                 
             # UPDATE THE RESIDUAL JITTER
             if freq.nyquistSampling == True and freq.nWvl > 1 and (np.any(ao.cam.spotFWHM)):
@@ -306,7 +311,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
                 if nPix < freq.nOtf:
                     psf = np.zeros((nPix,nPix,ao.src.nSrc))
                     for kk in range(ao.src.nSrc):
-                        psf[:,:,kk] = cropSupport(np.squeeze(psf_[:,:,kk]),int(freq.nOtf/nPix))   
+                        psf[:,:,kk] = cropSupport(np.squeeze(psf_[:,:,kk]),freq.nOtf/nPix)   
             else:
                 psf = psf_
             
