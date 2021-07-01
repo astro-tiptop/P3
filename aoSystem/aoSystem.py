@@ -24,7 +24,7 @@ from aoSystem.rtc import rtc
 #%%
 class aoSystem():
     
-    def __init__(self,path_ini,path_root='',nLayer=None,getPSDatNGSpositions=False):
+    def __init__(self,path_ini,path_root='',nLayer=None,getPSDatNGSpositions=False,coo_stars=None):
                             
         self.error = False
         # verify if the file exists
@@ -251,7 +251,11 @@ class aoSystem():
             azimuthSrc = eval(config['sources_science']['Azimuth']) 
         else:
             azimuthSrc = [0.0]
-            
+        
+        if np.any(coo_stars):
+            zenithSrc = np.hypot(coo_stars[0],coo_stars[1])
+            azimuthSrc = np.arctan2(coo_stars[0],coo_stars[1])
+        
         #----- verification
         if len(zenithSrc) != len(azimuthSrc):
             print('%%%%%%%% ERROR %%%%%%%%')
@@ -665,6 +669,11 @@ class aoSystem():
         else:
             nph = np.inf
         
+        if config.has_option('sensor_science','Saturation'):
+            saturation = eval(config['sensor_science']['Saturation'])
+        else:
+            saturation = np.inf
+            
         if config.has_option('sensor_science','SigmaRON'):
             ron = eval(config['sensor_science']['SigmaRON'])
         else:
@@ -690,7 +699,7 @@ class aoSystem():
         else:
             excess = 1.0
         
-        self.cam = detector(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
+        self.cam = detector(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,saturation=saturation,\
                             nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
                        gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,tag=camName)
         

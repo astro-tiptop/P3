@@ -268,12 +268,12 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
         if np.any(dx!=0) or np.any(dy!=0):
             # shift by half a pixel
-            fftPhasor = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl),dtype=complex)
+            fftPhasor = np.zeros((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
             for iSrc in range(ao.src.nSrc):
                 for jWvl in range(freq.nWvl):
                     fftPhasor[:,:,iSrc,jWvl] = np.exp(-np.pi*complex(0,1)*(dx[iSrc,jWvl]*freq.U_ + dy[iSrc,jWvl]*freq.V_))
         else:
-            fftPhasor = np.ones((nPix,nPix,ao.src.nSrc,freq.nWvl),dtype=complex)
+            fftPhasor = np.ones((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
 
         # LOOP ON WAVELENGTHS   
         for j in range(freq.nWvl):
@@ -309,8 +309,10 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
                         psf[:,:,kk] = cropSupport(np.squeeze(psf_[:,:,kk]),int(freq.nOtf/nPix))   
             else:
                 psf = psf_
+            
+            
             PSF[:,:,:,j] = psf * F[:,j]
-                
+            
             # STREHL-RATIO COMPUTATION
             SR[:,j] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
             
@@ -892,33 +894,41 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
         imx     = im_hr[int(Nx*rebin/2),:]
         w       = np.where(imx >= imx.max()/2)[0]
         FWHMx   = (w.max() - w.min())/rebin*pixelScale
+        aRatio  = 1
         theta   = 0
+
     elif method == 'contour':
         # Contour approach~: something wrong about the ellipse orientation
         mpl.interactive(False)
-        fig     = plt.figure()
-        C       = plt.contour(im_hr,levels=[im_hr.max()/2])
-        plt.close(fig)
-        C       = C.collections[0].get_paths()[0]
-        C       = C.vertices
-        xC      = C[:,0]
-        yC      = C[:,1]
-        # centering the ellispe
-        mx      = np.array([xC.max(),yC.max()])
-        mn      = np.array([xC.min(),yC.min()])
-        cent    = (mx+mn)/2
-        wx      = xC - cent[0]
-        wy      = yC - cent[1] 
-        # Get the module
-        wr      = np.hypot(wx,wy)/rebin*pixelScale                
-        # Getting the FWHM
-        FWHMx   = 2*wr.max()
-        FWHMy   = 2*wr.min()
-        #Getting the ellipse orientation
-        xm      = wx[wr.argmax()]
-        ym      = wy[wr.argmax()]
-        theta   = np.mean(180*np.arctan2(ym,xm)/np.pi)
-        mpl.interactive(True)
+        try:
+            plt.figure(666)
+            C       = plt.contour(im_hr,levels=[im_hr.max()/2])
+            plt.close(666)
+            C       = C.collections[0].get_paths()[0]
+            C       = C.vertices
+            xC      = C[:,0]
+            yC      = C[:,1]
+            # centering the ellispe
+            mx      = np.array([xC.max(),yC.max()])
+            mn      = np.array([xC.min(),yC.min()])
+            cent    = (mx+mn)/2
+            wx      = xC - cent[0]
+            wy      = yC - cent[1] 
+            # Get the module
+            wr      = np.hypot(wx,wy)/rebin*pixelScale                
+            # Getting the FWHM
+            FWHMx   = 2*wr.max()
+            FWHMy   = 2*wr.min()
+            #Getting the ellipse orientation
+            xm      = wx[wr.argmax()]
+            ym      = wy[wr.argmax()]
+            theta   = np.mean(180*np.arctan2(ym,xm)/np.pi)
+        except:
+            FWHMx = -1 
+            FWHMy = -1 
+            aRatio= -1
+            theta = -1
+        mpl.interactive(True)   
     elif method == 'gaussian':
         # Prepare array r with radius in arcseconds
         y, x = np.indices(psf.shape, dtype=float)

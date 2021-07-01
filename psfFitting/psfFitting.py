@@ -77,6 +77,8 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
     sqW = np.sqrt(weights)
     
     # NORMALIZING THE IMAGE
+    if image.sum() < 0 :
+        image[image<0]= 0    
     im_norm,param = FourierUtils.normalizeImage(image,normType=normType)
     nPix = im_norm.shape[1]
     
@@ -88,7 +90,9 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
             if (self.iter%3)==0 and (method=='lm' or verbose == 0 or verbose == 1): print("-",end="")
             self.iter += 1
             im_est = imageModel(psfModelInst(mini2input(y),nPix=im_norm.shape[0]),
-                                spatialStacking=spatialStacking,spectralStacking=spectralStacking)
+                                spatialStacking=spatialStacking,spectralStacking=spectralStacking,
+                                saturation=psfModelInst.ao.cam.saturation/param)
+            
             return (sqW * (im_est - im_norm)).reshape(-1)
     cost = CostClass()   
     
@@ -140,7 +144,9 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
     result.xinit  = x0
     result.im_sky = image
     # scale fitted image
-    tmp           = imageModel(psfModelInst(result.x,nPix=nPix),spatialStacking=spatialStacking,spectralStacking=spectralStacking)
+    tmp           = imageModel(psfModelInst(result.x,nPix=nPix),
+                               spatialStacking=spatialStacking,spectralStacking=spectralStacking,
+                               saturation=psfModelInst.ao.cam.saturation/param)
     result.im_fit = FourierUtils.normalizeImage(tmp,param=param,normType=normType)
     # psf
     xpsf          = np.copy(result.x)
@@ -163,7 +169,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
         result.xerr = mini2input(confidence_interval(result.fun,result.jac),forceZero=True)
     except:
         print('Identification of the confidence interval failed ')
-        result.xerr = []
+        result.xerr = list(-1 * np.ones_like(result.x))
     
     return result
 

@@ -16,8 +16,11 @@ import matplotlib.ticker as mtick
 import time
 from astropy.table import QTable
 from scipy.stats import linregress
-from psfao21.psfao21 import psfao21
+
 import aoSystem.FourierUtils as FourierUtils
+from psfao21.psfao21 import psfao21
+from psfFitting.psfFitting import psfFitting
+np.random.seed(1)
 
 #%% CLASS
 class deepLoopPerformance:
@@ -25,7 +28,8 @@ class deepLoopPerformance:
     reconstruction performance of DEEPLOOP from the output .txt files
     '''
     
-    def __init__(self,path_txt,path_ini=None,path_save=None,path_root='',nPSF=1000):
+    def __init__(self,path_txt,path_ini=None,path_save=None,path_root='',nPSF=1000,
+                 fit=False,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=60):
         '''
         path_txt can be either:
             - a string of characters that gives the path to the txt file
@@ -95,10 +99,10 @@ class deepLoopPerformance:
         # COMPUTING PSF METRICS
         if self.path_ini:
             self.psfao = psfao21(path_ini,path_root=path_root)
-            self.get_psf_metrics(nPSF=nPSF)
+            self.get_psf_metrics(nPSF=nPSF,fit=fit,mag=mag,zP=zP,DIT=DIT,nDIT=nDIT,skyMag=skyMag,ron=ron)
         
     def __call__(self,fontsize=16,fontfamily='serif',fontserif='Palatino',
-                 figsize=(20,20),getPSF=False,constrained_layout=True,nBins=1000):
+                 figsize=(20,20),getPSF=False,constrained_layout=True,nBins=100,nstd=5):
         '''
         Display DEEPLOOP performance
         '''
@@ -169,7 +173,7 @@ class deepLoopPerformance:
                 axs[a,b].hist(err, weights=np.ones_like(err) / len(err), bins=nBins)
                 axs[a,b].set_xlabel(self.labels[n][m] + ' error ('+lab+')')
                 axs[a,b].set_ylabel('Probability')
-                axs[a,b].set_xlim([-5*err.std(),5*err.std()])
+                axs[a,b].set_xlim([-nstd*err.std(),nstd*err.std()])
 
         # ------ PSFs
         if self.path_ini:
@@ -179,28 +183,28 @@ class deepLoopPerformance:
                 # MSE
                 err = self.mse[n]
                 nPSF = len(err)
-                axs[0,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
+                axs[0,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[0,0].set_xlabel('Mean square error (\%)')
                 axs[0,0].set_ylabel('Probability')
-                axs[0,0].set_xlim([0,5*err.std()])
+                axs[0,0].set_xlim([0,nstd*err.std()])
                 # SR
-                err = self.SR[n][1] - self.SR[n][0]
-                axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
+                err = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
+                axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[0,1].set_xlabel('Strehl-ratio error (\%)')
                 axs[0,1].set_ylabel('Probability')
-                axs[0,1].set_xlim([-5*err.std(),5*err.std()])
+                axs[0,1].set_xlim([-nstd*err.std(),nstd*err.std()])
                 # FWHM
-                err = self.FWHM[n][1] - self.FWHM[n][0]
-                axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
+                err = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
+                axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[1,0].set_xlabel('FWHM error (\%)')
                 axs[1,0].set_ylabel('Probability')
-                axs[1,0].set_xlim([-5*err.std(),5*err.std()])
+                axs[1,0].set_xlim([-nstd*err.std(),nstd*err.std()])
                 # Photometry
                 err = self.mag_err[n]
-                axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(500,nPSF/10)))
+                axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[1,1].set_xlabel('Photometric error (mag)')
                 axs[1,1].set_ylabel('Probability')
-                axs[1,1].set_xlim([-5*err.std(),5*err.std()])
+                axs[1,1].set_xlim([-nstd*err.std(),nstd*err.std()])
                 
                 plt.figure()
                 nPx = self.psf_mean[n].shape[0]
@@ -271,7 +275,7 @@ class deepLoopPerformance:
 
         return dabs_mean, dabs_med, dabs_std,drel_mean, drel_med, drel_std,coeff_pearson[0,1]
         
-    def get_psf_metrics(self,nPSF=1000):
+    def get_psf_metrics(self,nPSF=1000,fit=False,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=60):
         
         t0 = time.time()
         print('Regenerating the PSFs ... ')
@@ -286,19 +290,23 @@ class deepLoopPerformance:
         self.psf_diff_mean = np.empty(self.nCases,dtype=list)
         self.psf_diff_std  = np.empty(self.nCases,dtype=list)
         nPx = self.psfao.ao.cam.fovInPix
+        nC  = 2 + fit*1
         
         for n in range(self.nCases):
             # instantiating outputs
             nPSFtot          = self.gtruth[n].shape[1]
-            self.mag_err[n]  = np.zeros(nPSF)
-            self.mse[n]      = np.zeros(nPSF)
-            self.SR[n]       = np.zeros((2,nPSF))
-            self.FWHM[n]     = np.zeros((2,nPSF))
+            self.mag_err[n]  = np.zeros((nC-1,nPSF))
+            self.mse[n]      = np.zeros((nC-1,nPSF))
+            self.SR[n]       = np.zeros((nC,nPSF))
+            self.FWHM[n]     = np.zeros((nC,nPSF))
             
             self.psf_mean[n] = np.zeros((nPx,nPx))
             self.psf_diff_mean[n] = np.zeros((nPx,nPx))
             self.psf_diff_std[n]  = np.zeros((nPx,nPx))
-            
+            if fit:
+                self.psf_diff_mean_fit[n] = np.zeros((nPx,nPx))
+                self.psf_diff_std_fit[n]  = np.zeros((nPx,nPx))  
+                
             # down-selection 
             idx = np.random.randint(0,high=nPSFtot,size=nPSF)
             
@@ -309,7 +317,7 @@ class deepLoopPerformance:
                 
                 # PHOTOMETRY
                 tmp,_,_,_,_     = linregress(psf_true.reshape(-1),psf_ml.reshape(-1))
-                self.mag_err[n][k] = -2.5*np.log10(tmp)
+                self.mag_err[n][0,k] = -2.5*np.log10(tmp)
                 
                 # AVERAGE PSF
                 self.psf_mean[n]      += psf_true/nPSF
@@ -317,10 +325,49 @@ class deepLoopPerformance:
                 self.psf_diff_std[n]  += (psf_ml - psf_true)**2 /nPSF
                 
                 # GETTING METRICS
-                self.mse[n][k]    = 1e2 * np.sqrt(np.sum((psf_ml-psf_true)**2))/psf_true.sum()
+                self.mse[n][0,k]    = 1e2 * np.sqrt(np.sum((psf_ml-psf_true)**2))/psf_true.sum()
                 self.SR[n][0,k]   = FourierUtils.getStrehl(psf_true,self.psfao.ao.tel.pupil,self.psfao.freq.sampRef) 
                 self.SR[n][1,k]   = FourierUtils.getStrehl(psf_ml,self.psfao.ao.tel.pupil,self.psfao.freq.sampRef) 
                 self.FWHM[n][0,k] = FourierUtils.getFWHM(psf_true,self.psfao.ao.cam.psInMas,nargout=1) 
                 self.FWHM[n][1,k] = FourierUtils.getFWHM(psf_ml,self.psfao.ao.cam.psInMas,nargout=1) 
+                
+                # PSF-FITTING
+                if fit:
+                    weights = 1
+                    if mag != 0:
+                        # noising the image
+                        Flux      = 10 ** (-0.4*(mag - zP))*DIT*nDIT
+                        skyFlux   = 10 ** (-0.4*(skyMag - zP)) * nDIT * DIT * (self.psfao.ao.cam.psInMas/1e3) ** 2
+                        ronStack  = ron * np.sqrt(nDIT)
+                        noise_sky = np.random.poisson(skyFlux*np.ones_like(psf_true))
+                        noise_dec = ronStack*np.random.randn(psf_true.shape[0],psf_true.shape[1])
+                        noise_dec-= noise_dec.min()
+                        im_noise  = np.random.poisson(Flux*psf_true) + noise_sky  + noise_dec
+                        # computing the weights
+                        weights   = 1.0/np.sqrt(ronStack**2 + psf_true)   
+                    else:
+                        im_noise = psf_true
+                        
+                    # defining the initial guess
+                    x0   = p2x(self.gtruth[n][:,idx[k]])
+                    fixed= (False,)*5 + (True,False,) + (True,)*3 + (False,)*4 + (False,)*self.psfao.ao.tel.nModes
+                    # fit the image
+                    res  = psfFitting(im_noise,self.psfao,x0,fixed=fixed,verbose=-1,weights=weights)
+                    
+                    # averaged fitted-PSF
+                    self.psf_diff_mean_fit[n] += abs(res.psf - psf_true)/nPSF
+                    self.psf_diff_std_fit[n]  += (res.psf - psf_true)**2 /nPSF
+                
+                    # compare PSFs
+                    tmp,_,_,_,_     = linregress(psf_true.reshape(-1),res.psf.reshape(-1))
+                    self.mag_err[n][1,k] = -2.5*np.log10(tmp)
+                    self.mse[n][1,k]    = res.mse
+                    self.SR[n][2,k]     = FourierUtils.getStrehl(res.psf,self.psfao.ao.tel.pupil,self.psfao.freq.sampRef) 
+                    self.FWHM[n][2,k]   = FourierUtils.getFWHM(res.psf,self.psfao.ao.cam.psInMas,nargout=1)
+                
+                
             self.psf_diff_std[n] = np.sqrt(self.psf_diff_std[n])
+            if fit:
+                self.psf_diff_std_fit[n] = np.sqrt(self.psf_diff_std_fit[n])
+                
             print('... Done in %.2f s ! '%(time.time() - t0))

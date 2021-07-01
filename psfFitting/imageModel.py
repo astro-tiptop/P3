@@ -7,7 +7,7 @@ Created on Wed Apr 21 09:56:54 2021
 """
 import numpy as np
 
-def imageModel(psf4D, spectralStacking = True, spatialStacking = True):
+def imageModel(psf4D, spectralStacking = True, spatialStacking = True, saturation=np.inf):
     """
     Function to model an image of a stellar population fields from the psfModelInst class
     The model is: 
@@ -52,6 +52,9 @@ def imageModel(psf4D, spectralStacking = True, spatialStacking = True):
     else:
         im = np.squeeze(psf4D.sum(axis=(2,3)))
         
+    if saturation < np.inf:
+        im[np.where(im>=saturation)] = saturation
+                
     return im
 
                         

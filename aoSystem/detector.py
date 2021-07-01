@@ -13,7 +13,7 @@ class detector:
         Detector class that gathers characteristics of the detector
     """
     
-    def __init__(self,pixel_scale,fov,binning=1,spotFWHM=[[0.0,0.0,0.0]],\
+    def __init__(self,pixel_scale,fov,binning=1,spotFWHM=[[0.0,0.0,0.0]],saturation=np.inf,\
                  nph=np.inf,bandwidth=0.0,transmittance=[1.0],dispersion=[[0.0],[0.0]],\
                  ron=0.0,gain=1.0,dark=0.0,sky=0.0,excess=1.0, tag='DETECTOR'):
         
@@ -24,6 +24,7 @@ class detector:
         self.fovInPix    = fov
         self.fovInArcsec = pixel_scale * fov/1e3
         self.spotFWHM    = spotFWHM
+        self.saturation  = saturation
         
         # spectral width
         self.bandwidth     = bandwidth

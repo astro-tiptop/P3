@@ -40,14 +40,14 @@ def parse_input_param (x0):
 
 class psfao21:
     # INIT
-    def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False,otfPixel=1):
+    def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False,otfPixel=1,coo_stars=None):
         
         tstart = time.time()
         
         # PARSING INPUTS
         self.file      = path_ini
         self.antiAlias = antiAlias
-        self.ao        = aoSys(path_ini,path_root=path_root)    
+        self.ao        = aoSys(path_ini,path_root=path_root,coo_stars=coo_stars)    
         self.isStatic  = self.ao.tel.nModes > 0
         self.tag       = 'PSFAO21'
         self.otfPixel  = otfPixel
@@ -80,7 +80,7 @@ class psfao21:
         bounds_up   = list(np.inf * np.ones(self.ao.atm.nL))          
         # PSD Parameters
         bounds_down += [0,0,_EPSILON,_EPSILON,-np.pi,1+_EPSILON]
-        bounds_up   += [np.inf,np.inf,np.inf,np.inf,np.pi,5]         
+        bounds_up   += [np.inf,np.inf,np.inf,np.inf,np.pi,10]         
         # Jitter
         bounds_down += [0,0,-1]
         bounds_up   += [np.inf,np.inf,1]
@@ -94,8 +94,8 @@ class psfao21:
         bounds_down += [-np.inf]
         bounds_up   += [np.inf]
         # Static aberrations
-        bounds_down += list(-self.freq.wvlRef/10*1e9 * np.ones(self.ao.tel.nModes))
-        bounds_up   += list(self.freq.wvlRef/10 *1e9 * np.ones(self.ao.tel.nModes))
+        bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
+        bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
         
         return (bounds_down,bounds_up)
         
@@ -225,6 +225,7 @@ class psfao21:
         PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
                         jitterX=x0_jitter[0],jitterY=x0_jitter[1],jitterXY=x0_jitter[2],\
                         F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel)
+        
         return PSF
 
     def moffat(self,kx,ky,x0):
