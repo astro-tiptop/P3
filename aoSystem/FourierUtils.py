@@ -1004,7 +1004,7 @@ def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
     '''
     nCn2        = len(Cn2)
     if nEqLayers > nCn2:
-        raise ValueError('nEqLayers is smaller than the number of input layers')
+        raise ValueError('nEqLayers is larger than the number of input layers')
     nAltitudes  = len(altitudes)
     nSlab       = np.floor(np.round(nCn2)/np.fix(nEqLayers))
              

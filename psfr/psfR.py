@@ -81,6 +81,9 @@ class psfR:
             else:
                 self.otfPixel = 1.0
             
+            # COMPUTING THE ERROR BREAKDOWN:
+            self.get_error_breakdown()
+            
         self.t_init = 1000*(time.time()  - tstart)
     
     def _repr__(self):
@@ -136,10 +139,10 @@ class psfR:
             du = self.trs.rec.res
         elif method == 'dm-based':
             du = np.diff(self.trs.dm.com,axis=0)/self.ao.rtc.holoop['gain']    
-        Cao  =  np.matmul(du.T,du)/du.shape[0]
+        self.Cao  =  np.matmul(du.T,du)/du.shape[0]
        
         # Unbiasing noise and accounting for the wave number
-        Cao = (2*np.pi/self.freq.wvlRef)**2 * (Cao - self.trs.wfs.Cn_ao)
+        Cao = (2*np.pi/self.freq.wvlRef)**2 * (self.Cao - self.trs.wfs.Cn_ao)
         
         # Computing the phase structure function
         _,dphi_ao = psfrUtils.modes2Otf(Cao,self.trs.mat.dmIF,self.ao.tel.pupil,self.freq.nOtf,basis=basis,samp=self.freq.sampRef/2)
@@ -150,10 +153,10 @@ class psfR:
         """
         """
         # computing the empirical covariance matrix of the residual tip-tilt in meter
-        Ctt = np.matmul(self.trs.tipTilt.slopes.T,self.trs.tipTilt.slopes)/self.trs.tipTilt.nExp
+        self.Ctt = np.matmul(self.trs.tipTilt.slopes.T,self.trs.tipTilt.slopes)/self.trs.tipTilt.nExp
         
         # computing the coefficients of the Gaussian Kernel in rad^2
-        Guu = (2*np.pi/self.freq.wvlRef)**2 *(Ctt - self.trs.tipTilt.Cn_tt) 
+        Guu = (2*np.pi/self.freq.wvlRef)**2 *(self.Ctt - self.trs.tipTilt.Cn_tt) 
         
         # rotating the axes
         ang = self.trs.tel.pupilAngle * np.pi/180
@@ -224,3 +227,82 @@ class psfR:
         PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
                         F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel)
         return PSF
+    
+    def get_error_breakdown(self,r0=None,gho=1,gtt=1):
+        '''
+        Computing the AO error breakdown from the variance of each individual covariance terms.
+        INPUTS:
+            - an instance of the psfr object
+        OUTPUTS
+        '''
+        sr2fwe = lambda x: np.sqrt(-np.log(x))* self.trs.atm.wvl*1e9/2/np.pi
+        otf_dl = self.freq.otfDL
+        S      = otf_dl.sum()
+        self.wfe = dict()
+        
+        #1. STATIC ABERRATIONS
+        self.wfe['NCPA'] = np.std(self.ao.tel.opdMap_on[self.ao.tel.pupil.astype(bool)])
+        
+        #2. DM FITTING ERROR
+        if not r0:
+            r0 = self.trs.atm.r0
+        otf_fit = np.exp(-0.5 * r0**(-5/3) * self.dphi_fit)
+        sr_fit  = np.sum(otf_dl * otf_fit)/S
+        self.wfe['FITTING'] = sr2fwe(sr_fit)
+        
+        #3. WFS ALIASING ERROR
+        otf_alias = np.exp(-0.5 * r0**(-5/3) * self.dphi_alias)
+        sr_alias  = np.sum(otf_dl * otf_alias)/S
+        self.wfe['ALIASING'] = sr2fwe(sr_alias)
+        
+        #4. WFS NOISE ERROR
+        # noise on high-order modes
+        msk = self.trs.dm.validActuators.reshape(-1)
+        self.wfe['HO NOISE'] = 1e9 * np.sqrt(self.trs.holoop.tf.pn * np.mean(self.trs.wfs.Cn_ao[msk,msk]))
+        # noise on tip-tilt modes
+        self.wfe['TT NOISE'] = 1e9 * np.sqrt(self.trs.ttloop.tf.pn * np.diag(self.trs.tipTilt.Cn_tt).sum())
+        
+        #5. AO BANDWIDTH ERROR
+        C = self.Cao - self.trs.wfs.Cn_ao
+        self.wfe['SERVO-LAG'] = 1e9*np.sqrt(np.mean(np.mean(C[msk,msk])))
+        
+        #6. RESIDUAL TIP-TILT
+        self.wfe['TIP-TILT'] = np.sqrt(np.sum(np.diag(self.Ctt - self.trs.tipTilt.Cn_tt)))*1e9
+        sr_pixel = np.sum(otf_dl * self.otfPixel)/S
+        self.wfe['PIXEL TF'] = np.sqrt(-np.log(sr_pixel))* self.freq.wvlRef*1e9/2/np.pi
+      
+        #7. ANISOPLANATISM
+        otf_ani = np.exp(-0.5 * self.dphi_ani)
+        sr_ani  = np.sum(otf_dl * otf_ani)/S
+        self.wfe['ANISOPLANATISM'] = sr2fwe(sr_ani)
+        
+        #8. TOTAL WFE
+        self.wfe['TOTAL WFE'] =  np.sqrt(self.wfe['NCPA']**2 +  self.wfe['FITTING']**2
+                + self.wfe['HO NOISE']**2 + self.wfe['TT NOISE']**2 + self.wfe['SERVO-LAG']**2
+                + self.wfe['TIP-TILT']**2 + self.wfe['ANISOPLANATISM']**2)
+        
+        self.wfe['TOTAL WFE WITH PIXEL'] = np.hypot(self.wfe['TOTAL WFE'],self.wfe['PIXEL TF']) 
+        
+        # TOTAL STREHL-RATIO
+        self.wfe['REF WAVELENGTH'] = self.freq.wvlRef
+        self.wfe['MARECHAL SR'] = 1e2*np.exp(-(self.wfe['TOTAL WFE'] * 2*np.pi*1e-9/self.freq.wvlRef)**2 )
+        self.wfe['MARECHAL SR WITH PIXEL'] = 1e2*np.exp(-(self.wfe['TOTAL WFE WITH PIXEL'] * 2*np.pi*1e-9/self.freq.wvlRef)**2 )
+        
+        if hasattr(self,'SR'):
+            self.wfe['PSF SR'] = self.SR[0]
+        self.wfe['IMAGE-BASED SR'] = 1e2*FourierUtils.getStrehl(self.trs.cam.image,self.ao.tel.pupil,self.freq.sampRef)
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        

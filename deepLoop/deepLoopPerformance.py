@@ -98,8 +98,9 @@ class deepLoopPerformance:
         
         # COMPUTING PSF METRICS
         if self.path_ini:
+            self.fit = fit
             self.psfao = psfao21(path_ini,path_root=path_root)
-            self.get_psf_metrics(nPSF=nPSF,fit=fit,mag=mag,zP=zP,DIT=DIT,nDIT=nDIT,skyMag=skyMag,ron=ron)
+            self.get_psf_metrics(nPSF=nPSF,fit=self.fit,mag=mag,zP=zP,DIT=DIT,nDIT=nDIT,skyMag=skyMag,ron=ron)
         
     def __call__(self,fontsize=16,fontfamily='serif',fontserif='Palatino',
                  figsize=(20,20),getPSF=False,constrained_layout=True,nBins=100,nstd=5):
@@ -180,31 +181,59 @@ class deepLoopPerformance:
             for n in range(self.nCases):
                 # creating the figure
                 fig , axs = plt.subplots(2,2,figsize=figsize,constrained_layout=constrained_layout)
-                # MSE
+                # MSE                
                 err = self.mse[n]
-                nPSF = len(err)
-                axs[0,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
+                if self.fit:
+                    axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
+                    axs[0,0].hist(err[1], weights=np.ones_like(err[1]) / len(err[1]), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                else:
+                    axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(100,nBins)))
                 axs[0,0].set_xlabel('Mean square error (\%)')
                 axs[0,0].set_ylabel('Probability')
-                axs[0,0].set_xlim([0,nstd*err.std()])
+                #axs[0,0].set_xlim([0,nstd*err[0].std()])
+                axs[0,0].legend()
+                
                 # SR
-                err = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
-                axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
+                if self.fit:
+                    err = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
+                    axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
+                    errfit = 1e2*(self.SR[n][2] - self.SR[n][0])/self.SR[n][0]
+                    axs[0,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                else:
+                    err = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
+                    axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[0,1].set_xlabel('Strehl-ratio error (\%)')
                 axs[0,1].set_ylabel('Probability')
-                axs[0,1].set_xlim([-nstd*err.std(),nstd*err.std()])
+                #axs[0,1].set_xlim([-nstd*err.std(),nstd*err.std()])
+                axs[0,1].legend()
+                
                 # FWHM
-                err = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
-                axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
+                if self.fit:
+                    err = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
+                    axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
+                    errfit = 1e2*(self.FWHM[n][2] - self.FWHM[n][0])/self.FWHM[n][0]
+                    axs[1,0].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                else:
+                    err = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
+                    axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[1,0].set_xlabel('FWHM error (\%)')
                 axs[1,0].set_ylabel('Probability')
-                axs[1,0].set_xlim([-nstd*err.std(),nstd*err.std()])
+                #axs[1,0].set_xlim([-nstd*err.std(),nstd*err.std()])
+                axs[1,0].legend()
+                
                 # Photometry
-                err = self.mag_err[n]
-                axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
+                if self.fit:
+                    err = self.mag_err[n][0]
+                    axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
+                    errfit = self.mag_err[n][1]
+                    axs[1,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                else:
+                    err = self.mag_err[n]
+                    axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[1,1].set_xlabel('Photometric error (mag)')
                 axs[1,1].set_ylabel('Probability')
-                axs[1,1].set_xlim([-nstd*err.std(),nstd*err.std()])
+                #axs[1,1].set_xlim([-nstd*err.std(),nstd*err.std()])
+                axs[1,1].legend()
                 
                 plt.figure()
                 nPx = self.psf_mean[n].shape[0]
@@ -213,6 +242,10 @@ class deepLoopPerformance:
                 plt.semilogy(x,self.psf_mean[n][nPx//2,:],'k',label='Mean PSF')
                 plt.semilogy(x,self.psf_diff_mean[n][nPx//2,:],'b',label='Mean differential PSF')
                 plt.semilogy(x,self.psf_diff_std[n][nPx//2,:],'r',label='Std differential PSF')
+                if self.fit:
+                    plt.semilogy(x,self.psf_diff_mean_fit[n][nPx//2,:],'g',label='Mean differential PSF - fitting')
+                    plt.semilogy(x,self.psf_diff_std_fit[n][nPx//2,:],'m',label='Std differential PSF - fitting')
+                
                 plt.legend()
             
     def read_txt_files(self,path_txt,getParamNumberOnly=False):
@@ -292,6 +325,7 @@ class deepLoopPerformance:
         if fit:
             self.psf_diff_mean_fit = np.empty(self.nCases,dtype=list)
             self.psf_diff_std_fit  = np.empty(self.nCases,dtype=list)
+            self.fitEstimates =  np.empty(self.nCases,dtype=list) 
         nPx = self.psfao.ao.cam.fovInPix
         nC  = 2 + fit*1
         
@@ -306,13 +340,18 @@ class deepLoopPerformance:
             self.psf_mean[n] = np.zeros((nPx,nPx))
             self.psf_diff_mean[n] = np.zeros((nPx,nPx))
             self.psf_diff_std[n]  = np.zeros((nPx,nPx))
+            self.fitEstimates[n]  = np.zeros((self.nParam[n],nPSF))
             if fit:
                 self.psf_diff_mean_fit[n] = np.zeros((nPx,nPx))
                 self.psf_diff_std_fit[n]  = np.zeros((nPx,nPx))  
                 
             # down-selection 
             idx = np.random.randint(0,high=nPSFtot,size=nPSF)
-            
+            if self.nParam[n] == 6:
+                nModes = 0
+            else:
+                nModes = self.psfao.ao.tel.nModes
+                
             for k in range(nPSF):
                 # GETTING THE GROUND TRUTH AND THE ESTIMATED PSF
                 psf_true = np.squeeze(self.psfao( p2x(self.gtruth[n][:,idx[k]]) ))
@@ -328,7 +367,7 @@ class deepLoopPerformance:
                 self.psf_diff_std[n]  += (psf_ml - psf_true)**2 /nPSF
                 
                 # GETTING METRICS
-                self.mse[n][0,k]    = 1e2 * np.sqrt(np.sum((psf_ml-psf_true)**2))/psf_true.sum()
+                self.mse[n][0,k]  = 1e2 * np.sqrt(np.sum((psf_ml-psf_true)**2))/psf_true.sum()
                 self.SR[n][0,k]   = FourierUtils.getStrehl(psf_true,self.psfao.ao.tel.pupil,self.psfao.freq.sampRef) 
                 self.SR[n][1,k]   = FourierUtils.getStrehl(psf_ml,self.psfao.ao.tel.pupil,self.psfao.freq.sampRef) 
                 self.FWHM[n][0,k] = FourierUtils.getFWHM(psf_true,self.psfao.ao.cam.psInMas,nargout=1) 
@@ -336,7 +375,7 @@ class deepLoopPerformance:
                 
                 # PSF-FITTING
                 if fit:
-                    weights = 1
+                    weights = np.ones_like(psf_true)
                     if mag != 0:
                         # noising the image
                         Flux      = 10 ** (-0.4*(mag - zP))*DIT*nDIT
@@ -347,15 +386,18 @@ class deepLoopPerformance:
                         noise_dec-= noise_dec.min()
                         im_noise  = np.random.poisson(Flux*psf_true) + noise_sky  + noise_dec
                         # computing the weights
-                        weights   = 1.0/np.sqrt(ronStack**2 + psf_true)   
+                        #weights   = 1.0/np.sqrt(ronStack**2 + psf_true)   
                     else:
                         im_noise = psf_true
                         
                     # defining the initial guess
                     x0   = p2x(self.gtruth[n][:,idx[k]])
-                    fixed= (False,)*5 + (True,False,) + (True,)*3 + (False,)*4 + (False,)*self.psfao.ao.tel.nModes
+                    fixed= (False,)*5 + (True,False,) + (True,)*3 + (False,)*4 + (False,)*nModes
                     # fit the image
                     res  = psfFitting(im_noise,self.psfao,x0,fixed=fixed,verbose=-1,weights=weights)
+                    
+                    # Get parameters
+                    self.fitEstimates[n][:,k] = list(res.x[0:5]) + [res.x[6]] + list(res.x[14:])
                     
                     # averaged fitted-PSF
                     self.psf_diff_mean_fit[n] += abs(res.psf - psf_true)/nPSF
@@ -363,12 +405,11 @@ class deepLoopPerformance:
                 
                     # compare PSFs
                     tmp,_,_,_,_     = linregress(psf_true.reshape(-1),res.psf.reshape(-1))
-                    self.mag_err[n][1,k] = -2.5*np.log10(tmp)
-                    self.mse[n][1,k]    = res.mse
+                    self.mag_err[n][1,k]= -2.5*np.log10(tmp)
+                    self.mse[n][1,k]    = 1e2 * np.sqrt(np.sum((res.psf-psf_true)**2))/psf_true.sum()
                     self.SR[n][2,k]     = FourierUtils.getStrehl(res.psf,self.psfao.ao.tel.pupil,self.psfao.freq.sampRef) 
                     self.FWHM[n][2,k]   = FourierUtils.getFWHM(res.psf,self.psfao.ao.cam.psInMas,nargout=1)
-                
-                
+                    
             self.psf_diff_std[n] = np.sqrt(self.psf_diff_std[n])
             if fit:
                 self.psf_diff_std_fit[n] = np.sqrt(self.psf_diff_std_fit[n])

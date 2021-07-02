@@ -47,7 +47,10 @@ class systemDiagnosis:
         Cnn = np.diag(self.trs.wfs.Cn_ao)
         Cnn = Cnn[Cnn!=0]
         self.trs.wfs.noiseVar = [(2*np.pi/self.trs.wfs.wvl)**2 *np.mean(Cnn),]*len(self.trs.wfs.nSubap)
-        
+        if self.trs.aoMode == 'LGS':
+            self.trs.tipTilt.noiseVar = [(2*np.pi/self.trs.tipTilt.wvl)**2 *np.mean(np.diag(self.trs.tipTilt.Cn_tt))]
+        else:
+            self.trs.tipTilt.noiseVar = [(2*np.pi/self.trs.wfs.wvl)**2 *np.mean(np.diag(self.trs.tipTilt.Cn_tt))]
         # Zernike
         self.trs.wfs.Cz_ao, self.trs.tipTilt.Cz_tt = self.reconstruct_zernike(nZer=nZer,j0=j0,Dout=Dout,Din=Din)
         
@@ -101,7 +104,7 @@ class systemDiagnosis:
         self.trs.holoop.tf.rtf = 1 - self.trs.holoop.tf.ctf
         #1.8. noise transfer function
         self.trs.holoop.tf.ntf = np.squeeze(self.trs.holoop.tf.servo/(1+self.trs.holoop.tf.ol))
-        self.trs.holoop.tf.pn  = (np.trapz(self.trs.holoop.tf.freq,abs(self.trs.holoop.tf.ntf)**2)*2/self.trs.holoop.freq)
+        self.trs.holoop.tf.pn  = (np.trapz(abs(self.trs.holoop.tf.ntf)**2 , self.trs.holoop.tf.freq)*2/self.trs.holoop.freq)
         
         # 2\ TT LOOP
         #2.1. Define the frequency vectors
@@ -120,7 +123,7 @@ class systemDiagnosis:
         self.trs.ttloop.tf.rtf = 1 - self.trs.ttloop.tf.ctf
         #2.8 noise transfer function
         self.trs.ttloop.tf.ntf = np.squeeze(self.trs.ttloop.tf.servo/(1+self.trs.ttloop.tf.ol))
-        self.trs.ttloop.tf.pn  = (np.trapz(self.trs.ttloop.tf.freq,abs(self.trs.ttloop.tf.ntf)**2)*2/self.trs.ttloop.freq)
+        self.trs.ttloop.tf.pn  = (np.trapz(abs(self.trs.ttloop.tf.ntf)**2 , self.trs.ttloop.tf.freq)*2/self.trs.ttloop.freq)
 
     def get_number_photons(self):
         """
@@ -203,11 +206,9 @@ class systemDiagnosis:
         else:
             rtf  = self.trs.holoop.tf.ctf/self.trs.holoop.tf.wfs
             Cn_ao = slopes_to_noise(self.trs.dm.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit,rtf=rtf)
-            if self.trs.aoMode == 'LGS':
-                rtf  = self.trs.ttloop.tf.ctf/self.trs.ttloop.tf.wfs
-                Cn_tt = slopes_to_noise(self.trs.tipTilt.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit)
-            else:
-                Cn_tt = 0
+            rtf  = self.trs.ttloop.tf.ctf/self.trs.ttloop.tf.wfs
+            Cn_tt = slopes_to_noise(self.trs.tipTilt.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit)
+
                 
         return Cn_ao, Cn_tt
      

@@ -17,7 +17,7 @@ def anisoplanatismStructureFunction(tel,atm,src,lgs,ngs,nOtf,samp,Hfilter=1):
     else:
         # LGS mode, focal-angular anisoplanatism + anisokinetism
         # angular + focal anisoplanatism
-        H = lgs.heights
+        H = lgs.height
         dani_focang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,lgs,nOtf,samp,Hfilter=Hfilter)
         # angular anisoplanatism only
         lgs.heights = 0

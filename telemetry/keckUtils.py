@@ -230,7 +230,7 @@ def samplingFilterProfile(path_filter,hdr,nWvl=3,thresold=0.9,bwMin = 100e-9,dis
         wvl_c  = np.linspace(wvlMin,wvlMax,nWvl)
         
     elif nWvl <=1:
-         wvl_c  = [getCentralWavelength(hdr)]
+         wvl_c  = np.array([getCentralWavelength(hdr)])
          bw     = 0.0
     tr_c   = np.polyval(p,wvl_c)
     

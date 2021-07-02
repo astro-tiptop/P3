@@ -77,8 +77,8 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
     sqW = np.sqrt(weights)
     
     # NORMALIZING THE IMAGE
-    if image.sum() < 0 :
-        image[image<0]= 0    
+    if image.min() < 0 :
+        image -= image.min()
     im_norm,param = FourierUtils.normalizeImage(image,normType=normType)
     nPix = im_norm.shape[1]
     
@@ -151,12 +151,12 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
     # psf
     xpsf          = np.copy(result.x)
     nparam        = len(result.x) - 3*psfModelInst.ao.src.nSrc - 1
-    if nparam > psfModelInst.ao.tel.nModes:
+    if nparam > 10:
         nparam -= psfModelInst.ao.tel.nModes
         
-    xpsf[nparam]  = 1.0 # flux=1
-    xpsf[nparam+1:nparam+3*psfModelInst.ao.src.nSrc+1]   = 0.0 # dx,dy,bkcg=0
-    result.psf    = np.squeeze(psfModelInst(xpsf,nPix=nPix)[:,:,0].sum(axis=2))
+    xpsf[10]  = 1.0 # flux=1
+    xpsf[11:10+3*psfModelInst.ao.src.nSrc+1]   = 0.0 # dx,dy,bkcg=0
+    result.psf    = np.squeeze(psfModelInst(xpsf,nPix=nPix)[:,:,0,:].sum(axis=2))
     result        = evaluateFittingQuality(result,psfModelInst)
     
     # static map
