@@ -282,8 +282,8 @@ class aoSystem():
             self.error = True
             return
         
-        if config.has_option('sensor_HO','FiedOfView'):
-            fov = eval(config['sensor_HO']['FiedOfView'])
+        if config.has_option('sensor_HO','FieldOfView'):
+            fov = eval(config['sensor_HO']['FieldOfView'])
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
             print('You must provide a value for the science detector field of view\n')
@@ -409,8 +409,8 @@ class aoSystem():
                 self.error = True
                 return
             
-            if config.has_option('sensor_LO','FiedOfView'):
-                fov = eval(config['sensor_LO']['FiedOfView'])
+            if config.has_option('sensor_LO','FieldOfView'):
+                fov = eval(config['sensor_LO']['FieldOfView'])
             else:
                 print('%%%%%%%% ERROR %%%%%%%%')
                 print('You must provide a value for the science detector field of view\n')
@@ -633,8 +633,8 @@ class aoSystem():
             self.error = True
             return
         
-        if config.has_option('sensor_science','FiedOfView'):
-            fov = eval(config['sensor_science']['FiedOfView'])
+        if config.has_option('sensor_science','FieldOfView'):
+            fov = eval(config['sensor_science']['FieldOfView'])
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
             print('You must provide a value for the science detector field of view\n')

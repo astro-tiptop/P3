@@ -70,6 +70,14 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
     '''
     nY , nX = im.shape
     
+    from configparser import ConfigParser
+    parser = ConfigParser()
+    parser.optionxform = str
+    parser.read(path_ini)
+    parser.set('sensor_science','FieldOfView', str(nPx*2))
+    with open(path_ini, 'w') as configfile:
+        parser.write(configfile)
+            
     ################### PSF MODEL CALIBRATION
     # segmenting the images
     im_seg, centers = segment_image_in_tiles(im,nSeg)
@@ -118,7 +126,7 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
         plt.ylabel('Y-axis [pixels]')
         plt.gca().set_aspect('equal')
         
-    return psfs_interp , coo_interp , coo_extr
+    return psfs_interp , psfs_fit , sub_im , coo_interp , coo_extr
     
     
 def detect_peaks(image):
@@ -317,7 +325,7 @@ def extract_multiple_psf(im,coo_seg,nPx,xon=0,yon=0):
     return psfs
     
 def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
-                      threshold=3,ratio=5,saturation = 2**15-1,verbose=2,display=False,mseLim=0.5):
+                      threshold=3,saturation = 2**15-1,verbose=2,display=False,mseLim=0.5):
     '''
     Fitting individually multiple PSFs by using the PSFAO21 model.
     INPUTS:
@@ -361,25 +369,28 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
         # measuring cog
         ycog , xcog = center_of_mass(psfs[k])
         ymax , xmax = psfs[k].shape
-        rcog = np.hypot(ycog-ymax//2,xcog-xmax//2)
-        if rcog > threshold:
+        #rcog = np.hypot(ycog-ymax//2,xcog-xmax//2)
+        #if rcog > threshold:
             # considering there are more than 1 star
-            max_on = psfs[k][ymax//2,xmax//2]
-            tmp    = np.copy(psfs[k])
-            tmp[tmp<max_on/ratio] = 0
-            # detect peaks
-            A  = detect_peaks(tmp)
-            nPeaks = len(A.nonzero()[0])
-            if nPeaks > 0:
-                y_s    = A.nonzero()[0] - ymax//2
-                x_s    = A.nonzero()[1] - xmax//2
-                _,id_s = np.unique(psfs[k][A],return_index=True)
-                nStars = len(id_s)
-                y_s = y_s[id_s]
-                x_s = x_s[id_s] 
-                p_s = psfs[k][A][id_s]
-                xstars = list(p_s/p_s.sum()) + list(y_s) + list(x_s) + [0]
-                fixed = (False,True,False,False,False,False,False) + (True,)*3 + (False,)*(3*nStars+1)
+        # thresholding
+        tmp    = np.copy(psfs[k])
+        
+        # detect peaks
+        _,ron = FourierUtils.getFlux(tmp,nargout=2)        
+        tmp[tmp<5*ron] = 0
+        A  = detect_peaks(tmp)
+        nPeaks = len(A.nonzero()[0])
+        
+        if nPeaks > 0:
+            y_s    = A.nonzero()[0] - ymax//2
+            x_s    = A.nonzero()[1] - xmax//2
+            _,id_s = np.unique(psfs[k][A],return_index=True)
+            nStars = len(id_s)
+            y_s = y_s[id_s]
+            x_s = x_s[id_s] 
+            p_s = psfs[k][A][id_s]
+            xstars = list(p_s/p_s.sum()) + list(y_s) + list(x_s) + [0]
+            fixed = (False,True,False,False,False,False,False) + (True,)*3 + (False,)*(3*nStars+1)
                     
         # Instantiating the PSF model
         coo_stars= np.array([y_s , x_s])* psInArcsec
@@ -431,6 +442,8 @@ def interpolate_psfs_in_fov(psfs_in,coo_in,coo_out,nNeighbors=4):
         id_out = np.argsort(d_out)[:nNeighbors]
         # interpolating
         w_out = 1/d_out[id_out] / (np.sum(1/d_out[id_out]))
+        print(id_out)
+        print(w_out)
         psfs_out[k] = np.sum(psfs_in[id_out] * w_out[:,np.newaxis,np.newaxis],axis=0)
     
     return psfs_out
