@@ -142,8 +142,8 @@ class frequencyDomain():
         self.nWvl    = self.nBin * self.nWvlCen #central wavelengths
         wvlCen_      = np.unique(self.ao.src.wvl)
         bw           = self.ao.cam.bandwidth
-        self.wvl_    = np.linspace(wvlCen_ - bw/2,wvlCen_ + bw/2,num=self.nBin).T[0]
-        
+        self.wvl_ = np.array([np.linspace(wvlCen_[k] - bw/2,wvlCen_[k] + bw/2,num=self.nBin).T[0] for k in range(self.nWvl)])
+  
         # MANAGING THE PIXEL SCALE
         t0 = time.time()
         if nyquistSampling:
@@ -163,7 +163,7 @@ class frequencyDomain():
         self.pitch  = self.ao.dms.pitch
         
         self.tfreq = 1000*(time.time()-t0)
-        
+                
         # DEFINING THE DOMAIN ANGULAR FREQUENCIES
         t0 = time.time()
         self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf,fact=2)

@@ -59,7 +59,6 @@ class sensor:
         nph         = np.array(self.detector.nph)
         pixelScale  = self.detector.psInMas/1e3 # in arcsec
         ron         = self.detector.ron
-
         for k in range(self.nWfs):
             nPix = self.detector.fovInPix/np.array(self.optics[k].nL)
             dsub = self.optics[k].dsub

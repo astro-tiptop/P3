@@ -25,6 +25,7 @@ from psfFitting.psfFitting import psfFitting
 import aoSystem.FourierUtils as FourierUtils
 import telemetry.keckUtils as keckUtils
 from psfFitting.psfFitting import displayResults
+from psfFitting.imageModel import imageModel
 
 mpl.rcParams['font.size'] = 12
 usetex = False
@@ -99,7 +100,7 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
     
     # interpolation
     if method == 'interpolation':
-        psfs_interp = interpolate_psfs_in_fov(psfs_fit,coo_extr,coo_interp)
+        psfs_interp = interpolate_psfs_in_fov(psfs_fit,coo_extr,coo_interp,X,nPSFMax=nPSFMax)
     else:
         # spatial variation model
         M        = create_spatial_variations_psf_model(X,order=2)
@@ -126,7 +127,7 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
         plt.ylabel('Y-axis [pixels]')
         plt.gca().set_aspect('equal')
         
-    return psfs_interp , psfs_fit , sub_im , coo_interp , coo_extr
+    return psfs_interp , psfs_fit , X , sub_im , coo_interp , coo_extr
     
     
 def detect_peaks(image):
@@ -352,7 +353,7 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
     nPSF   = psfs.shape[0]
     nParam  = 7
     X = np.zeros((nParam*2 + 10,nPSF))
-    psfs_out = np.zeros_like(psfs)
+    psfs_out = np.zeros((nPSF,psfao.ao.cam.fovInPix,psfao.ao.cam.fovInPix))
     # initial guess
     x0 = [0.5,0,1,1e-1,0.5,0,1.8,0,0,0]
     fixed = (False,True,False,False,False,False,False) + (True,)*3 + (False,)*4
@@ -369,10 +370,6 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
         # measuring cog
         ycog , xcog = center_of_mass(psfs[k])
         ymax , xmax = psfs[k].shape
-        #rcog = np.hypot(ycog-ymax//2,xcog-xmax//2)
-        #if rcog > threshold:
-            # considering there are more than 1 star
-        # thresholding
         tmp    = np.copy(psfs[k])
         
         # detect peaks
@@ -398,7 +395,8 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
     
         # performing the fit
         res = psfFitting(psfs[k],psfao,x0+xstars,fixed=fixed,verbose=verbose,gtol=gtol,ftol=ftol,xtol=xtol)
-        psfs_out[k] = res.psf
+        psfao = psfao21(path_ini , coo_stars = np.array([0.0 , 0.0]))
+        psfs_out[k] = imageModel(psfao(list(res.x[0:7]) + [0,0,0,1,0,0,0],nPix=psfao.ao.cam.fovInPix))
         # getting the PSFs coordinates
         y   = coo_seg[k,0]
         x   = coo_seg[k,1]
@@ -414,7 +412,7 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
             
     return X , psfs_out
 
-def interpolate_psfs_in_fov(psfs_in,coo_in,coo_out,nNeighbors=4):
+def interpolate_psfs_in_fov(psfs_in,coo_in,coo_out,X,nPSFMax=1,nNeighbors=4):
     '''
     Spatially interpolate the psfs at the coo_out coordinates from a input grid of PSFs obtained at coo_psfs.
     INPUTS:
@@ -429,21 +427,22 @@ def interpolate_psfs_in_fov(psfs_in,coo_in,coo_out,nNeighbors=4):
     nOut = coo_out.shape[0]
     y_in = coo_in[:,0]
     x_in = coo_in[:,1]
-        
+    nSeg = int(nPSF/nPSFMax)
     psfs_out = np.zeros((nOut,nPx,nPx))
     
+    # grab the mse value
+    mse   = X[-1,:].reshape((nPSFMax,nSeg))
+    w_mse = (1/mse/np.sum(1/mse,axis=0)).reshape(nPSF)
     # loop on target locations
     for k in range(nOut):
         # get position and distance
         y_out = coo_out[k,0]
         x_out = coo_out[k,1]
-        d_out = np.hypot(y_out - y_in, x_out - x_in)
+        d_out = w_mse * np.hypot(y_out - y_in, x_out - x_in)
         # finding closest input psfs
         id_out = np.argsort(d_out)[:nNeighbors]
         # interpolating
         w_out = 1/d_out[id_out] / (np.sum(1/d_out[id_out]))
-        print(id_out)
-        print(w_out)
         psfs_out[k] = np.sum(psfs_in[id_out] * w_out[:,np.newaxis,np.newaxis],axis=0)
     
     return psfs_out

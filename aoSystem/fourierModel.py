@@ -77,7 +77,7 @@ class fourierModel:
             
             # DEFINING THE FREQUENCY DOMAIN
             self.freq = frequencyDomain(self.ao,nyquistSampling=nyquistSampling)
-            
+
             # DEFINING THE GUIDE STAR AND THE STRECHING FACTOR
             if self.ao.lgs:
                 self.gs  = self.ao.lgs
@@ -107,10 +107,13 @@ class fourierModel:
             self.atm_mod = atmosphere(self.ao.atm.wvl,self.ao.atm.r0,weights_mod,heights_mod,wSpeed_mod,wDir_mod,self.ao.atm.L0)
             
             #updating the atmosphere wavelength !
-            self.ao.atm.wvl  = self.freq.wvlCen
-            self.atm_mod.wvl = self.freq.wvlCen
+            self.ao.atm.wvl  = self.freq.wvlRef
+            self.atm_mod.wvl = self.freq.wvlRef
             self.t_initFreq = 1000*(time.time() - tstart)
-
+            
+            if (2*self.freq.kcInMas/self.freq.psInMas)[0] > self.freq.nOtf:
+                raise ValueError('Error : the PSF field of view is too small to simulate the AO correction area')
+            
             # DEFINING THE NOISE AND ATMOSPHERE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
                 self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0 ,self.ao.atm.wvl)
@@ -466,7 +469,6 @@ class fourierModel:
             # AO correction area
             id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
             id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
-            
             # Noise
             self.psdNoise = np.real(self.noisePSD())       
             if self.nGs == 1:
