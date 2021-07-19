@@ -84,7 +84,7 @@ class configFile():
         parser.set('sensor_HO','WfsType', '\''+sysdiag.trs.wfs.type+'\'')
         parser.set('sensor_HO','Modulation', str(sysdiag.trs.wfs.modulation))
         parser.set('sensor_HO','PixelScale', str(sysdiag.trs.wfs.pixel_scale))
-        parser.set('sensor_HO','FiedOfView', str(sysdiag.trs.wfs.fov))
+        parser.set('sensor_HO','FieldOfView', str(sysdiag.trs.wfs.fov))
         parser.set('sensor_HO','Binning', str(sysdiag.trs.wfs.binning))
         parser.set('sensor_HO','NumberPhotons', str(sysdiag.trs.wfs.nph))
         parser.set('sensor_HO','SpotFWHM', str(sysdiag.trs.wfs.spot_fwhm))
@@ -108,7 +108,7 @@ class configFile():
             if not parser.has_section('sensor_LO'):
                 parser.add_section('sensor_LO')
             parser.set('sensor_LO','PixelScale', str(sysdiag.trs.tipTilt.pixel_scale))
-            parser.set('sensor_LO','FiedOfView', str(sysdiag.trs.tipTilt.fov))
+            parser.set('sensor_LO','FieldOfView', str(sysdiag.trs.tipTilt.fov))
             parser.set('sensor_LO','Binning', str(sysdiag.trs.tipTilt.binning))
             parser.set('sensor_LO','NumberPhotons', str(sysdiag.trs.tipTilt.nph))
             parser.set('sensor_LO','SpotFWHM', str(sysdiag.trs.tipTilt.spot_fwhm))
@@ -161,7 +161,7 @@ class configFile():
         if not parser.has_section('sensor_science'):
             parser.add_section('sensor_science')
         parser.set('sensor_science','Name', str('\''+sysdiag.trs.cam.name+'\''))
-        parser.set('sensor_science','FiedOfView', str(sysdiag.trs.cam.fov))
+        parser.set('sensor_science','FieldOfView', str(sysdiag.trs.cam.fov))
         parser.set('sensor_science','PixelScale', str(sysdiag.trs.cam.psInMas))
         parser.set('sensor_science','SigmaRON', str(sysdiag.trs.cam.ron))
         parser.set('sensor_science','Gain', str(sysdiag.trs.cam.gain))

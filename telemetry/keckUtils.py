@@ -117,7 +117,7 @@ def getFilterName(hdr):
     else:
         return None
     
-def getFilterProfile(path_filter,filter):
+def getFilterProfile(path_filter,spectral_filter):
     """
     Returns the wavelength (in microns) and the transmission for 
     the specified NIRC2 filter.
@@ -129,17 +129,20 @@ def getFilterProfile(path_filter,filter):
     py.xlabel('Wavelength (microns)')
     py.ylabel('Transmission')
     """
+    spectral_filter = spectral_filter.replace('_','')
+    
     filters = ['J', 'H', 'K', 'Kcont', 'Kp', 'Ks', 'Lp', 'Ms',
                'Hcont', 'Brgamma', 'FeII']
+    
     filters_upper = [x.upper() for x in filters]
     
-    if filter.upper() not in filters_upper:
-        print( 'Could not find profile for filter %s.' % filter)
+    if spectral_filter.upper() not in filters_upper:
+        print( 'Could not find profile for filter %s.' % spectral_filter)
         print( 'Choices are: ', filters)
         return
     
-    filter = filters[filters_upper.index(filter.upper())]
-    table = Table.read(path_filter + filter + '.dat', format='ascii')
+    spectral_filter = filters[filters_upper.index(spectral_filter.upper())]
+    table = Table.read(path_filter + spectral_filter + '.dat', format='ascii')
 
     wavelength = table[table.colnames[0]]
     transmission = table[table.colnames[1]]

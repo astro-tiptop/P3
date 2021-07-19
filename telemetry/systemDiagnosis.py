@@ -207,7 +207,7 @@ class systemDiagnosis:
             rtf  = self.trs.holoop.tf.ctf/self.trs.holoop.tf.wfs
             Cn_ao = slopes_to_noise(self.trs.dm.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit,rtf=rtf)
             rtf  = self.trs.ttloop.tf.ctf/self.trs.ttloop.tf.wfs
-            Cn_tt = slopes_to_noise(self.trs.tipTilt.com,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit)
+            Cn_tt = slopes_to_noise(self.trs.tipTilt.slopes,noiseMethod=noiseMethod,nshift=nshift,nfit=nfit,rtf=rtf)
 
                 
         return Cn_ao, Cn_tt

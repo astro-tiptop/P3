@@ -177,7 +177,7 @@ class telemetryKeck:
     def restoringInstrumentData(self):
         """
         """
-        hdr = fits.getheader(self.path_img)
+        hdr = fits.getheader(self.path_img, ignore_missing_end=True)
         
         #1\ Dates
         self.obsdate = hdr['DATE-OBS'].replace('-','')
@@ -199,9 +199,13 @@ class telemetryKeck:
         self.cam.name = keckUtils.getInstName(hdr)
         self.cam.psInMas = keckUtils.getScale(hdr)
         
-        if self.cam.name == 'NIRC2':
+        if self.cam.name == 'OSIRIS':
+            raise ValueError('THE OSIRIS CASE IS NOT YET IMPLEMENTED\n')
+        elif self.cam.name == 'NIRSPEC':
+            raise ValueError('THE NIRSPEC CASE IS NOT YET IMPLEMENTED\n')
+        else:
             # image
-            self.cam.image = fits.getdata(self.path_img) #in DN
+            self.cam.image = fits.getdata(self.path_img, ignore_missing_end=True) #in DN
             self.cam.fov   = self.cam.image.shape[0] #square image
             # positions
             self.cam.zenith = [0.0]
@@ -223,10 +227,7 @@ class telemetryKeck:
                 self.cam.path_ncpa = self.path_calib + '/NIRC2_STAT/' +  keckUtils.getNCPAstr(hdr)
             else:
                 self.cam.path_ncpa = ''
-        else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('THE OSIRIS CASE IS NOT YET IMPLEMENTED\n')
-            return 0
+
         
     def restoringCalibrationData(self,nLayer=1):
         """
@@ -318,7 +319,7 @@ class telemetryKeck:
         
         # 1\ Restore telemetry data and header
         trsData = readsav(self.path_trs,verbose=verbose)
-        hdr     = fits.getheader(self.path_img)
+        hdr     = fits.getheader(self.path_img, ignore_missing_end=True)
         
         # 2\ Get AO control loop data                 
     
