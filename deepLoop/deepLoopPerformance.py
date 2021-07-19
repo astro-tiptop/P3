@@ -89,7 +89,8 @@ class deepLoopPerformance:
             for k in range(self.nParam[n]):
                 self.metrics_param[n][k] = self.get_parameters_metrics(self.gtruth[n][k],self.nnest[n][k])
                 
-            if path_save:
+            self.path_save = path_save
+            if self.path_save:
                 Tab = QTable(names=self.labels[n])   
                 for k in range(7):
                     Tab.add_row(self.metrics_param[n][:,k])
@@ -143,12 +144,18 @@ class deepLoopPerformance:
                 axs[a,b].plot([mn,mx],[mn,mx],'k--')
                 axs[a,b].set_xlabel(self.labels[n][m] + ' simulated')
                 axs[a,b].set_ylabel(self.labels[n][m] + ' reconstructed')
+                #axs[a,b].set_aspect('equal')
                 if mx > 10 or mn < 0.1:
                     formatter.set_powerlimits((-1,1)) 
                     axs[a,b].yaxis.set_major_formatter(formatter) 
                     axs[a,b].xaxis.set_major_formatter(formatter) 
             
-            
+            if self.path_save:
+                path_fig = self.path_save + 'versusplots_parameters_' + self.dataType[n]\
+                            + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
+                            + '_' + str(len(self.nnest[n][0])) 
+                plt.savefig(path_fig)    
+        
         # ------ HISTOGRAMS
         for n in range(self.nCases):
             # creating the figure
@@ -175,7 +182,12 @@ class deepLoopPerformance:
                 axs[a,b].set_xlabel(self.labels[n][m] + ' error ('+lab+')')
                 axs[a,b].set_ylabel('Probability')
                 axs[a,b].set_xlim([-nstd*err.std(),nstd*err.std()])
-
+            if self.path_save:
+                path_fig = self.path_save + 'histograms_parameters_' + self.dataType[n]\
+                            + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
+                            + '_' + str(len(self.nnest[n][0])) 
+                plt.savefig(path_fig)   
+                
         # ------ PSFs
         if self.path_ini:
             for n in range(self.nCases):
@@ -186,12 +198,12 @@ class deepLoopPerformance:
                 if self.fit:
                     axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
                     axs[0,0].hist(err[1], weights=np.ones_like(err[1]) / len(err[1]), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                    axs[0,0].legend()
                 else:
                     axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(100,nBins)))
                 axs[0,0].set_xlabel('Mean square error (\%)')
                 axs[0,0].set_ylabel('Probability')
                 #axs[0,0].set_xlim([0,nstd*err[0].std()])
-                axs[0,0].legend()
                 
                 # SR
                 if self.fit:
@@ -199,13 +211,13 @@ class deepLoopPerformance:
                     axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
                     errfit = 1e2*(self.SR[n][2] - self.SR[n][0])/self.SR[n][0]
                     axs[0,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                    axs[0,1].legend()
                 else:
                     err = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
                     axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[0,1].set_xlabel('Strehl-ratio error (\%)')
                 axs[0,1].set_ylabel('Probability')
                 #axs[0,1].set_xlim([-nstd*err.std(),nstd*err.std()])
-                axs[0,1].legend()
                 
                 # FWHM
                 if self.fit:
@@ -213,13 +225,13 @@ class deepLoopPerformance:
                     axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
                     errfit = 1e2*(self.FWHM[n][2] - self.FWHM[n][0])/self.FWHM[n][0]
                     axs[1,0].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                    axs[1,0].legend()
                 else:
                     err = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
                     axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[1,0].set_xlabel('FWHM error (\%)')
                 axs[1,0].set_ylabel('Probability')
                 #axs[1,0].set_xlim([-nstd*err.std(),nstd*err.std()])
-                axs[1,0].legend()
                 
                 # Photometry
                 if self.fit:
@@ -227,13 +239,21 @@ class deepLoopPerformance:
                     axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
                     errfit = self.mag_err[n][1]
                     axs[1,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                    axs[1,1].legend()
+
                 else:
                     err = self.mag_err[n]
                     axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
                 axs[1,1].set_xlabel('Photometric error (mag)')
                 axs[1,1].set_ylabel('Probability')
                 #axs[1,1].set_xlim([-nstd*err.std(),nstd*err.std()])
-                axs[1,1].legend()
+                
+                
+                if self.path_save:
+                path_fig = self.path_save + 'histograms_psf_' + self.dataType[n]\
+                            + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
+                            + '_' + str(len(self.nnest[n][0])) 
+                plt.savefig(path_fig) 
                 
                 plt.figure()
                 nPx = self.psf_mean[n].shape[0]
@@ -245,9 +265,8 @@ class deepLoopPerformance:
                 if self.fit:
                     plt.semilogy(x,self.psf_diff_mean_fit[n][nPx//2,:],'g',label='Mean differential PSF - fitting')
                     plt.semilogy(x,self.psf_diff_std_fit[n][nPx//2,:],'m',label='Std differential PSF - fitting')
-                
                 plt.legend()
-            
+        
     def read_txt_files(self,path_txt,getParamNumberOnly=False):
         '''
         Reading the .txt input file and populating the gtruth and nnest arrays
@@ -340,8 +359,8 @@ class deepLoopPerformance:
             self.psf_mean[n] = np.zeros((nPx,nPx))
             self.psf_diff_mean[n] = np.zeros((nPx,nPx))
             self.psf_diff_std[n]  = np.zeros((nPx,nPx))
-            self.fitEstimates[n]  = np.zeros((self.nParam[n],nPSF))
             if fit:
+                self.fitEstimates[n]  = np.zeros((self.nParam[n],nPSF))
                 self.psf_diff_mean_fit[n] = np.zeros((nPx,nPx))
                 self.psf_diff_std_fit[n]  = np.zeros((nPx,nPx))  
                 

@@ -65,7 +65,7 @@ def joint_fit(im, psfao, x0, fixed, weights):
 #%% BUILDING PSFS SPATIAL VARIATIONS MODELS
 def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
         nPSFMax=1,method='interpolation',crit='isolated',magMin=None,magMax=None,
-        display=False,gtol=1e-5,xtol=1e-5,ftol=1e-5,verbose=2,mseLim=0.5):
+        display=False,gtol=1e-5,xtol=1e-5,ftol=1e-5,verbose=2,fact=2):
     '''
     
     '''
@@ -75,7 +75,7 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
     parser = ConfigParser()
     parser.optionxform = str
     parser.read(path_ini)
-    parser.set('sensor_science','FieldOfView', str(nPx*2))
+    parser.set('sensor_science','FieldOfView', str(nPx*fact))
     with open(path_ini, 'w') as configfile:
         parser.write(configfile)
             
@@ -89,7 +89,7 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
     sub_im = extract_multiple_psf(im,coo_extr,nPx,xon=nX//2,yon=nY//2)
     # fit PSFs
     X , psfs_fit = fit_multiple_psfs(sub_im,coo_extr,path_ini,
-                    gtol=gtol,xtol=xtol,ftol=ftol,verbose=verbose,display=False,mseLim=mseLim)
+                    gtol=gtol,xtol=xtol,ftol=ftol,verbose=verbose,display=False)
 
     ################### INTERPOLATION
     # defining the interpolation points
@@ -326,7 +326,7 @@ def extract_multiple_psf(im,coo_seg,nPx,xon=0,yon=0):
     return psfs
     
 def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
-                      threshold=3,saturation = 2**15-1,verbose=2,display=False,mseLim=0.5):
+                      threshold=3,saturation = 2**15-1,verbose=2,display=False,nSeg=7):
     '''
     Fitting individually multiple PSFs by using the PSFAO21 model.
     INPUTS:
@@ -360,7 +360,6 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
                       
     # loops on segments and psf
     for k in range(nPSF):
-        print(k)
         # default config
         y_s = [0.0]
         x_s = [0.0]
@@ -370,33 +369,36 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
         # measuring cog
         ycog , xcog = center_of_mass(psfs[k])
         ymax , xmax = psfs[k].shape
-        tmp    = np.copy(psfs[k])
         
         # detect peaks
-        _,ron = FourierUtils.getFlux(tmp,nargout=2)        
+        tmp            = np.copy(psfs[k])
+        if nSeg > 0:
+            tmp_seg, _  = segment_image_in_tiles(tmp,nSeg)
+            ron  = np.median(tmp_seg.reshape((int(nSeg**2),int(tmp_seg.shape[1]**2))).std(axis=1))
+        else:
+            _,ron = FourierUtils.getFlux(tmp,nargout=2)     
+            
         tmp[tmp<5*ron] = 0
-        A  = detect_peaks(tmp)
-        nPeaks = len(A.nonzero()[0])
+        A              = detect_peaks(tmp)
+        nPeaks         = len(A.nonzero()[0])
         
         if nPeaks > 0:
-            y_s    = A.nonzero()[0] - ymax//2
-            x_s    = A.nonzero()[1] - xmax//2
-            _,id_s = np.unique(psfs[k][A],return_index=True)
-            nStars = len(id_s)
-            y_s = y_s[id_s]
-            x_s = x_s[id_s] 
-            p_s = psfs[k][A][id_s]
-            xstars = list(p_s/p_s.sum()) + list(y_s) + list(x_s) + [0]
-            fixed = (False,True,False,False,False,False,False) + (True,)*3 + (False,)*(3*nStars+1)
+            y_s     = A.nonzero()[0] - ymax//2
+            x_s     = A.nonzero()[1] - xmax//2
+            _,id_s  = np.unique(psfs[k][A],return_index=True)
+            nStars  = len(id_s)
+            y_s     = y_s[id_s]
+            x_s     = x_s[id_s] 
+            p_s     = psfs[k][A][id_s]
+            xstars  = list(p_s/p_s.sum()) + list(y_s) + list(x_s) + [0]
+            fixed   = (False,True,False,False,False,False,False) + (True,)*3 + (False,)*(3*nStars+1)
                     
         # Instantiating the PSF model
         coo_stars= np.array([y_s , x_s])* psInArcsec
         psfao = psfao21(path_ini , coo_stars = coo_stars)
     
         # performing the fit
-        res = psfFitting(psfs[k],psfao,x0+xstars,fixed=fixed,verbose=verbose,gtol=gtol,ftol=ftol,xtol=xtol)
-        psfao = psfao21(path_ini , coo_stars = np.array([0.0 , 0.0]))
-        psfs_out[k] = imageModel(psfao(list(res.x[0:7]) + [0,0,0,1,0,0,0],nPix=psfao.ao.cam.fovInPix))
+        res         = psfFitting(psfs[k],psfao,x0+xstars,fixed=fixed,verbose=verbose,gtol=gtol,ftol=ftol,xtol=xtol)
         # getting the PSFs coordinates
         y   = coo_seg[k,0]
         x   = coo_seg[k,1]
@@ -407,9 +409,14 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
         X[:,k] = list(res.x[0:nParam]) + list(res.xerr[0:nParam]) + [y,x,r] + psf_metrics
      
         if display:
-            if res.mse < mseLim:
-                displayResults(psfao,res)
+            displayResults(psfao,res)
             
+        # Regenerating PSFs
+        psfao = psfao21(path_ini , coo_stars = np.array([0.0 , 0.0]))
+        r0 = np.median(X[0,:])
+        for k in range(nPSF):
+            psfs_out[k] = imageModel(psfao([r0] + list(X[1:7,k]) + [0,0,0,1,0,0,0],nPix=psfao.ao.cam.fovInPix))
+        
     return X , psfs_out
 
 def interpolate_psfs_in_fov(psfs_in,coo_in,coo_out,X,nPSFMax=1,nNeighbors=4):
@@ -623,9 +630,6 @@ def adjust_init_file(path_file, path_ini):
         parser.write(configfile)
 
 
-
-
-    
 def fit_all_PSFs(pathData, x0, fixed, weights, statMode, path_ini, pathFilter, outputName, NbPSF = None):
     
     files = os.listdir(pathData)
