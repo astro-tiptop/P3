@@ -42,7 +42,11 @@ def commandLine():
     parser.add_argument('--skyMag', help='Sky magnitude in mag/arcsec^2/s',
                         default=13.6, type=int) 
     parser.add_argument('--ron', help='read-out noise in e-',
-                        default=60, type=int)   
+                        default=60, type=int)  
+    
+    # FORMAT
+    parser.add_argument('--fontsize', help='Font size on figure',
+                        default=22, type=int) 
     args = parser.parse_args()
     
     return (args)
@@ -57,4 +61,4 @@ if __name__=='__main__':
     dlp = deepLoopPerformance(args.txt,path_ini=args.ini,path_save=args.savePath,path_root=args.rootPath,\
                 nPSF=args.nPSF,fit=args.fit,
                 mag=args.mag,zP=args.zP,DIT=args.DIT,nDIT=args.nDIT,skyMag=args.skyMag,ron=args.ron)
-    dlp()
+    dlp(fontsize=args.fontsize)

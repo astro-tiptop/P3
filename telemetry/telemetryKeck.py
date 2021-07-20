@@ -23,7 +23,8 @@ class structtype():
 class telemetryKeck:
     
     
-    def __init__(self,path_trs,path_img,path_calib,path_save='./',nLayer=1,verbose=False,addNCPA=True):
+    def __init__(self,path_trs,path_img,path_calib,path_save='./',
+                 nLayer=1,verbose=False,addNCPA=True,cam_fov = 150):
         
         # Check the telemetry path
         self.path_trs = path_trs
@@ -58,7 +59,7 @@ class telemetryKeck:
         self.instantiatingFields()
         
         #2\ restoring instrument data
-        self.restoringInstrumentData()
+        self.restoringInstrumentData(cam_fov=cam_fov)
     
         if self.path_trs != None:
             #3\ restoring calibration data
@@ -174,7 +175,7 @@ class telemetryKeck:
         self.ttloop = structtype()
         self.ttloop.tf = structtype()
        
-    def restoringInstrumentData(self):
+    def restoringInstrumentData(self,cam_fov=None):
         """
         """
         hdr = fits.getheader(self.path_img, ignore_missing_end=True)
@@ -206,7 +207,10 @@ class telemetryKeck:
         else:
             # image
             self.cam.image = fits.getdata(self.path_img, ignore_missing_end=True) #in DN
-            self.cam.fov   = self.cam.image.shape[0] #square image
+            if cam_fov:
+                self.cam.fov   = cam_fov
+            else:
+                self.cam.fov   = self.cam.image.shape[0] #square image
             # positions
             self.cam.zenith = [0.0]
             self.cam.azimuth = [0.0]
@@ -380,7 +384,7 @@ class telemetryKeck:
         #3.2\ Get the reconstructed wavefront in OPD and in the actuators space
         self.rec.res   = self.dm.volt2meter*trsData.A['RESIDUALWAVEFRONT'][0][:,0:self.dm.nCom]
         self.rec.res  -= np.mean(self.rec.res,axis=0) 
-        self.rec.focus = np.copy(trsData.A['RESIDUALWAVEFRONT'][0][:,-1])
+        self.rec.focus = np.copy(trsData.A['RESIDUALWAVEFRONT'][0][:,-1]) #in nm, but TBC 
         self.rec.focus-= np.mean(self.rec.focus,axis=0) 
         
         # compute the residual error

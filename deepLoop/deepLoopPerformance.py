@@ -103,23 +103,28 @@ class deepLoopPerformance:
             self.psfao = psfao21(path_ini,path_root=path_root)
             self.get_psf_metrics(nPSF=nPSF,fit=self.fit,mag=mag,zP=zP,DIT=DIT,nDIT=nDIT,skyMag=skyMag,ron=ron)
         
-    def __call__(self,fontsize=16,fontfamily='serif',fontserif='Palatino',
-                 figsize=(20,20),getPSF=False,constrained_layout=True,nBins=100,nstd=5):
+    def __call__(self,fontsize=22,fontfamily='normal',fontserif='Palatino',
+                 figsize=20,constrained_layout=True,nBins=100,nstd=np.inf):
         '''
         Display DEEPLOOP performance
         '''
         # managing display configuration
-        mpl.rcParams['font.size'] = fontsize
+        
+        plt.close('all')
+        # format
+        font = {'weight' : 'normal',
+        'size'   : fontsize,
+        'family': fontfamily,
+        'serif': fontserif}
+        mpl.rc('font', **font)
+        # latex
         if find_executable('tex'): 
             usetex = True
         else:
             usetex = False
-        plt.rcParams.update({
-                "text.usetex": usetex,
-                "font.family": fontfamily,
-                "font.serif": fontserif,
-                })
-        plt.close('all')
+        text = {'usetex': usetex}
+        mpl.rc('text',**text)
+
         
         #number of axes in scientific notation
         formatter = mtick.ScalarFormatter(useMathText=False)
@@ -131,7 +136,7 @@ class deepLoopPerformance:
             nP = self.nParam[n]
             k1 = int(np.sqrt(nP))
             k2 = int(nP/k1)
-            fig , axs = plt.subplots(k1,k2,figsize=figsize,constrained_layout=constrained_layout)
+            fig , axs = plt.subplots(k1,k2,figsize=(int(figsize*k2),int(figsize*k1)),constrained_layout=constrained_layout)
             a=-1
             for m in range(nP):
                 b = m%k2
@@ -142,14 +147,15 @@ class deepLoopPerformance:
                 mx = max(self.gtruth[n][m].max(),self.nnest[n][m].max())
                 axs[a,b].plot(self.gtruth[n][m],self.nnest[n][m],'bo')
                 axs[a,b].plot([mn,mx],[mn,mx],'k--')
-                axs[a,b].set_xlabel(self.labels[n][m] + ' simulated')
-                axs[a,b].set_ylabel(self.labels[n][m] + ' reconstructed')
+                axs[a,b].set_xlabel(self.labels[n][m] + ' simulated',fontsize=fontsize)
+                axs[a,b].set_ylabel(self.labels[n][m] + ' reconstructed',fontsize=fontsize)
                 #axs[a,b].set_aspect('equal')
                 if mx > 10 or mn < 0.1:
                     formatter.set_powerlimits((-1,1)) 
                     axs[a,b].yaxis.set_major_formatter(formatter) 
                     axs[a,b].xaxis.set_major_formatter(formatter) 
             
+            # saving 
             if self.path_save:
                 path_fig = self.path_save + 'versusplots_parameters_' + self.dataType[n]\
                             + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
@@ -162,7 +168,7 @@ class deepLoopPerformance:
             nP = self.nParam[n]
             k1 = int(np.sqrt(nP))
             k2 = int(nP/k1)
-            fig , axs = plt.subplots(k1,k2,figsize=figsize,constrained_layout=constrained_layout)
+            fig , axs = plt.subplots(k1,k2,figsize=(int(figsize*k2),int(figsize*k1)),constrained_layout=constrained_layout)
             a=-1
             for m in range(nP):
                 b = m%k2
@@ -177,85 +183,98 @@ class deepLoopPerformance:
                     err = self.nnest[n][m] - self.gtruth[n][m]
                     lab = 'nm'
                     
-                err = err[abs(err)<5*err.std()]
+                err = err[abs(err)<nstd*err.std()]
                 axs[a,b].hist(err, weights=np.ones_like(err) / len(err), bins=nBins)
                 axs[a,b].set_xlabel(self.labels[n][m] + ' error ('+lab+')')
                 axs[a,b].set_ylabel('Probability')
-                axs[a,b].set_xlim([-nstd*err.std(),nstd*err.std()])
+                axs[a,b].plot([0,0],axs[a,b].get_ylim(),'k--')
+                if nstd != np.inf:
+                    axs[a,b].set_xlim([-nstd*err.std(),nstd*err.std()])
+            
+            # saving 
             if self.path_save:
                 path_fig = self.path_save + 'histograms_parameters_' + self.dataType[n]\
                             + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
                             + '_' + str(len(self.nnest[n][0])) 
                 plt.savefig(path_fig)   
                 
-        # ------ PSFs
+        # ------ PSFs METRICS
         if self.path_ini:
             for n in range(self.nCases):
                 # creating the figure
-                fig , axs = plt.subplots(2,2,figsize=figsize,constrained_layout=constrained_layout)
+                fig , axs = plt.subplots(2,2,figsize=(figsize,figsize),constrained_layout=constrained_layout)
                 # MSE                
                 err = self.mse[n]
+                nPSF= err.shape[1]
                 if self.fit:
-                    axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
-                    axs[0,0].hist(err[1], weights=np.ones_like(err[1]) / len(err[1]), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                    axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(nPSF/10,nBins)),label='DEEPLOOP',alpha=0.5)
+                    axs[0,0].hist(err[1], weights=np.ones_like(err[1]) / len(err[1]), bins=int(min(nPSF/10,nBins)),label='PSF-FITTING',alpha=0.5)
                     axs[0,0].legend()
                 else:
-                    axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(100,nBins)))
+                    axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(nPSF/10,nBins)))
                 axs[0,0].set_xlabel('Mean square error (\%)')
                 axs[0,0].set_ylabel('Probability')
-                #axs[0,0].set_xlim([0,nstd*err[0].std()])
+                if nstd != np.inf:
+                    axs[0,0].set_xlim([0,nstd*err[0].std()])
                 
                 # SR
                 if self.fit:
                     err = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
-                    axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
+                    axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='DEEPLOOP',alpha=0.5)
                     errfit = 1e2*(self.SR[n][2] - self.SR[n][0])/self.SR[n][0]
-                    axs[0,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                    axs[0,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='PSF-FITTING',alpha=0.5)
                     axs[0,1].legend()
                 else:
                     err = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
-                    axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
+                    axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)))
                 axs[0,1].set_xlabel('Strehl-ratio error (\%)')
                 axs[0,1].set_ylabel('Probability')
-                #axs[0,1].set_xlim([-nstd*err.std(),nstd*err.std()])
+                axs[0,1].plot([0,0],axs[0,1].get_ylim(),'k--')
+                if nstd != np.inf:
+                    axs[0,1].set_xlim([-nstd*err.std(),nstd*err.std()])
                 
                 # FWHM
                 if self.fit:
                     err = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
-                    axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
+                    axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='DEEPLOOP',alpha=0.5)
                     errfit = 1e2*(self.FWHM[n][2] - self.FWHM[n][0])/self.FWHM[n][0]
-                    axs[1,0].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                    axs[1,0].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='PSF-FITTING',alpha=0.5)
                     axs[1,0].legend()
                 else:
                     err = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
-                    axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
+                    axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)))
                 axs[1,0].set_xlabel('FWHM error (\%)')
                 axs[1,0].set_ylabel('Probability')
-                #axs[1,0].set_xlim([-nstd*err.std(),nstd*err.std()])
+                axs[1,0].plot([0,0],axs[1,0].get_ylim(),'k--')
+                if nstd != np.inf:
+                    axs[1,0].set_xlim([-nstd*err.std(),nstd*err.std()])
                 
                 # Photometry
                 if self.fit:
                     err = self.mag_err[n][0]
-                    axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='DEEPLOOP',alpha=0.5)
+                    axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='DEEPLOOP',alpha=0.5)
                     errfit = self.mag_err[n][1]
-                    axs[1,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)),label='PSF-FITTING',alpha=0.5)
+                    axs[1,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='PSF-FITTING',alpha=0.5)
                     axs[1,1].legend()
-
                 else:
-                    err = self.mag_err[n]
-                    axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(100,nBins)))
+                    err = self.mag_err[n][0]
+                    axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)))
                 axs[1,1].set_xlabel('Photometric error (mag)')
                 axs[1,1].set_ylabel('Probability')
-                #axs[1,1].set_xlim([-nstd*err.std(),nstd*err.std()])
+                axs[1,1].plot([0,0],axs[1,1].get_ylim(),'k--')
+                if nstd != np.inf:
+                    axs[1,1].set_xlim([-nstd*err.std(),nstd*err.std()])
                 
-                
+                # saving 
                 if self.path_save:
-                path_fig = self.path_save + 'histograms_psf_' + self.dataType[n]\
-                            + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
-                            + '_' + str(len(self.nnest[n][0])) 
-                plt.savefig(path_fig) 
+                    path_fig = self.path_save + 'histograms_psf_' + self.dataType[n]\
+                                + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
+                                + '_' + str(len(self.nnest[n][0])) 
+                    plt.savefig(path_fig) 
                 
-                plt.figure()
+                
+            # ------ PSFs PLOTS
+                plt.figure(figsize=(figsize,figsize),constrained_layout=constrained_layout)
                 nPx = self.psf_mean[n].shape[0]
                 fov = nPx * self.psfao.ao.cam.psInMas
                 x = np.linspace(-fov/2,fov/2,num=nPx)
@@ -266,7 +285,14 @@ class deepLoopPerformance:
                     plt.semilogy(x,self.psf_diff_mean_fit[n][nPx//2,:],'g',label='Mean differential PSF - fitting')
                     plt.semilogy(x,self.psf_diff_std_fit[n][nPx//2,:],'m',label='Std differential PSF - fitting')
                 plt.legend()
-        
+                plt.xlabel('Separation from the optical axis [mas]')
+                # saving
+                if self.path_save:
+                    path_fig = self.path_save + 'psf_plots' + self.dataType[n]\
+                                + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
+                                + '_' + str(len(self.nnest[n][0])) 
+                    plt.savefig(path_fig) 
+                    
     def read_txt_files(self,path_txt,getParamNumberOnly=False):
         '''
         Reading the .txt input file and populating the gtruth and nnest arrays

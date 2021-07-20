@@ -190,4 +190,3 @@ def generatePSF(path_ini,nIntervals=10,nPSFperFolder=3500,addStatic=0,mag=0,zP=2
                 hdu.writeto(savePath + idsub + '/' + idpsf + '.fits',overwrite=True)
                 
     print('Simulation of %d PSF done in %.2fs'%(nPSFperFolder*nSubFolder,time.time()-tstart))
-    return psf_i

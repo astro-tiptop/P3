@@ -269,7 +269,7 @@ def getStagePositionWFS(hdr):
     
     """
     OBWF   = float(hdr['OBWF'])
-    LSPROP = hdr['LSPROP']
+    LSPROP = hdr['LSPROP'].upper()
     if LSPROP == 'YES':
         aoMode = 'LGS'     
         AOFCLGFO    = float(hdr['AOFCLGFO'])*1e3 #mm

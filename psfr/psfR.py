@@ -64,16 +64,18 @@ class psfR:
             # INSTANTIATING THE TT RESIDUAL PHASE STRUCTURE FUNCTION IN LGS MODE
             # IN NGS MODE, THE TIP-TILT CONTRIBUTION SHOULD BE ADDED TO THE RESIDUAL WAVEFRONT
             # TO ACCOUNT FOR THE CROSS-TERMS
-#            if self.trs.aoMode == 'LGS':
-#                self.dphi_tt = self.tipTiltPhaseStructureFunction()
-#            else:
-#                self.dphi_tt = 0
             self.dphi_tt = self.tipTiltPhaseStructureFunction()
 
             # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
-            self.dphi_ani = anisoplanatismStructureFunction(\
-            self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,\
-            self.freq.nOtf,self.freq.sampRef,Hfilter=self.trs.mat.Hdm)
+            if (self.ao.lgs==None) or (self.ao.lgs.height == 0):
+                self.dphi_ani = anisoplanatismStructureFunction(\
+                self.ao.tel,self.ao.atm,self.ao.src,self.ao.ngs,self.ao.ngs,\
+                self.freq.nOtf,self.freq.sampRef,self.ao.dms.nActu1D,Hfilter=1)#self.trs.mat.Hdm)        
+            else:
+                self.dani_focang, self.dani_ang, self.dani_tt = anisoplanatismStructureFunction(\
+                self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,\
+                self.freq.nOtf,self.freq.sampRef,self.ao.dms.nActu1D,Hfilter=1)#self.trs.mat.Hdm)  
+                self.dphi_ani = self.dani_focang + self.dani_tt
             
             # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION
             if self.trs.tel.name != 'simulation':
@@ -180,7 +182,7 @@ class psfR:
         SF   = gho*self.dphi_ao + gtt*self.dphi_tt + r0**(-5/3) * (self.dphi_fit + self.dphi_alias)
         # Anisoplanatism phase structure function
         if self.freq.isAniso and (len(Cn2) == self.freq.dani_ang.shape[1]):
-            SF = SF[:,:,np.newaxis] + (self.freq.dphi_ani * Cn2).sum(axis=2)
+            SF = SF[:,:,np.newaxis] + (self.dphi_ani * Cn2).sum(axis=2)
         else:
             SF = np.repeat(SF[:,:,np.newaxis],self.ao.src.nSrc,axis=2)
         return SF/(2*np.pi*1e-9/self.freq.wvlRef)**2
@@ -272,14 +274,33 @@ class psfR:
         self.wfe['PIXEL TF'] = np.sqrt(-np.log(sr_pixel))* self.freq.wvlRef*1e9/2/np.pi
       
         #7. ANISOPLANATISM
-        otf_ani = np.exp(-0.5 * self.dphi_ani)
+        Cn2     = self.ao.atm.weights * self.ao.atm.r0**(-5/3) * (self.ao.atm.wvl/self.ao.src.wvl[0])**2
+        dani    = (self.dphi_ani[0].transpose(1,2,0) * Cn2).sum(axis=2)
+        otf_ani = np.exp(-0.5 * dani)
         sr_ani  = np.sum(otf_dl * otf_ani)/S
-        self.wfe['ANISOPLANATISM'] = sr2fwe(sr_ani)
-        
+        self.wfe['TOTAL ANISOPLANATISM'] = sr2fwe(sr_ani)
+            
+        if self.trs.aoMode == 'LGS':
+            # Angular
+            dani    = (self.dani_ang[0].transpose(1,2,0) * Cn2).sum(axis=2)
+            otf_ani = np.exp(-0.5 * dani)
+            sr_ani  = np.sum(otf_dl * otf_ani)/S
+            self.wfe['ANGULAR ANISOPLANATISM'] = sr2fwe(sr_ani)
+            #tiptilt
+            dani    = (self.dani_tt[0].transpose(1,2,0) * Cn2).sum(axis=2)
+            otf_ani = np.exp(-0.5 * dani)
+            sr_ani  = np.sum(otf_dl * otf_ani)/S
+            self.wfe['ANISOKINETISM'] = sr2fwe(sr_ani)
+            # focal
+            dani    = (self.dani_focang[0].transpose(1,2,0) * Cn2).sum(axis=2)
+            otf_ani = np.exp(-0.5 * dani)
+            sr_ani  = np.sum(otf_dl * otf_ani)/S
+            self.wfe['FOCAL ANISOPLANATISM'] = np.sqrt(sr2fwe(sr_ani) **2 - self.wfe['ANGULAR ANISOPLANATISM']**2)
+            
         #8. TOTAL WFE
         self.wfe['TOTAL WFE'] =  np.sqrt(self.wfe['NCPA']**2 +  self.wfe['FITTING']**2
                 + self.wfe['HO NOISE']**2 + self.wfe['TT NOISE']**2 + self.wfe['SERVO-LAG']**2
-                + self.wfe['TIP-TILT']**2 + self.wfe['ANISOPLANATISM']**2)
+                + self.wfe['TIP-TILT']**2 + self.wfe['TOTAL ANISOPLANATISM']**2)
         
         self.wfe['TOTAL WFE WITH PIXEL'] = np.hypot(self.wfe['TOTAL WFE'],self.wfe['PIXEL TF']) 
         

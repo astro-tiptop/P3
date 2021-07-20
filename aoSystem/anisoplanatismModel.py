@@ -8,26 +8,27 @@ Created on Mon Apr  5 14:54:57 2021
 import numpy as np
 import aoSystem.FourierUtils as FourierUtils
 
-def anisoplanatismStructureFunction(tel,atm,src,lgs,ngs,nOtf,samp,Hfilter=1):
+def anisoplanatismStructureFunction(tel,atm,src,lgs,ngs,nOtf,samp,nActu,Hfilter=1):
         
     if (lgs==None) or (lgs.height == 0):
         # NGS mode, angular anisoplanatism 
-        dani_ang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,ngs,nOtf,samp,Hfilter=Hfilter)
+        dani_ang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,ngs,nOtf,samp,nActu,Hfilter=Hfilter)
         return dani_ang
     else:
         # LGS mode, focal-angular anisoplanatism + anisokinetism
         # angular + focal anisoplanatism
         H = lgs.height
-        dani_focang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,lgs,nOtf,samp,Hfilter=Hfilter)
+        dani_focang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,lgs,nOtf,samp,nActu,Hfilter=Hfilter)
         # angular anisoplanatism only
-        lgs.heights = 0
-        dani_ang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,lgs,nOtf,samp,Hfilter=Hfilter)
-        lgs.heights = H
+        lgs.height = 0
+        dani_ang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,lgs,nOtf,samp,nActu,Hfilter=Hfilter)
+        #np.zeros((src.nSrc,atm.nL,nOtf,nOtf))#
+        lgs.height = H
         # anisokinetism
         dani_tt = AnisokinetismPhaseStructureFunction(tel,atm,src,ngs,nOtf,samp)
         return dani_focang, dani_ang, dani_tt
     
-def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,Hfilter=1):
+def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,nActu,Hfilter=1):
     """
     """
     
@@ -41,7 +42,12 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,Hf
     nSrc    = len(ax)
     
     #2\ SF Calculation
-    Dani_l = np.zeros((nSrc,nLayer,nOtf,nOtf))
+    nOtf_hr = nOtf
+    if gs.height:
+        # Must reduce nOtf to decrease the computationnal power and memory; causes Python crash otherwise
+        nOtf    = int(nActu * samp/2)
+        
+    Dani_l = np.zeros((nSrc,nLayer,nOtf_hr,nOtf_hr))
 
     # Angular frequencies
     if np.mod(nOtf,2):
@@ -70,19 +76,29 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,Hf
     for iSrc in range(nSrc):
         thx = ax[iSrc]
         thy = ay[iSrc]            
-        if thx !=0 or thy !=0:
-            for l in range(nLayer):
-                zl    = Hs[l]
-                if zl !=0: 
-                    if gs.height: # focal-angular case -> computing the covariance matrix
-                        g     = zl/gs.height
-                        I2    = FourierUtils.Ialpha(f0*(rhoX*(1-g)) , f0*(rhoY*(1-g)) )
-                        I3    = FourierUtils.Ialpha(f0*(rhoX -g*X1 + zl*thx) , f0*(rhoY - g*Y1 + zl*thy) )
-                        I4    = FourierUtils.Ialpha(f0*( g*X1 - zl*thx) , f0*(g*Y1 - zl*thy))
-                        I5    = FourierUtils.Ialpha(f0*(g*(rhoX-X1) -zl*thx) , f0*(g*(rhoY-Y1) - zl*thy) )
-                        I6    = FourierUtils.Ialpha(f0*((1-g)*rhoX + g*X1 - zl*thx) , f0*((1-g)*rhoY + g*Y1 - zl*thy))
-                        Dani_l[iSrc,l] = Hfilter*(2*I0 - I1 - I2 + I3 - I4 - I5 + I6)*Hfilter.T
-                    else: #angular case -> computing the covariance map
+        for l in range(nLayer):
+            zl    = Hs[l]
+            if zl !=0: 
+                if gs.height: # focal-angular case -> computing the covariance matrix
+                    g     = zl/gs.height
+                    I2    = FourierUtils.Ialpha(f0*(rhoX*(1-g)) , f0*(rhoY*(1-g)) )
+                    I3    = FourierUtils.Ialpha(f0*(rhoX -g*X1 + zl*thx) , f0*(rhoY - g*Y1 + zl*thy) )
+                    I4    = FourierUtils.Ialpha(f0*( g*X1 - zl*thx) , f0*(g*Y1 - zl*thy))
+                    I5    = FourierUtils.Ialpha(f0*(g*(rhoX-X1) -zl*thx) , f0*(g*(rhoY-Y1) - zl*thy) )
+                    I6    = FourierUtils.Ialpha(f0*((1-g)*rhoX + g*X1 - zl*thx) , f0*((1-g)*rhoY + g*Y1 - zl*thy))
+                    if np.isscalar(Hfilter):
+                        tmp   = (2*I0 - I1 - I2 + I3 - I4 - I5 + I6)
+                    else:
+                        tmp   = Hfilter*(2*I0 - I1 - I2 + I3 - I4 - I5 + I6)*Hfilter.T
+                    
+                    # interpolating
+                    if nOtf != nOtf_hr:
+                        Dani_l[iSrc,l] = FourierUtils.interpolateSupport(tmp,nOtf_hr)
+                    else:
+                        Dani_l[iSrc,l] = tmp
+                        
+                else: #angular case -> computing the covariance map
+                    if thx !=0 or thy !=0:
                         I2    = FourierUtils.Ialpha( f0*(rhoX+zl*thx) , f0*(rhoY+zl*thy) )
                         I3    = FourierUtils.Ialpha( f0*(zl*thx) , f0*(zl*thy) )
                         I4    = FourierUtils.Ialpha( f0*(rhoX-zl*thx) , f0*(rhoY-zl*thy) )
