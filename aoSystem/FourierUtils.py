@@ -364,35 +364,6 @@ def enlargeSupport(im,n):
     nx,ny  = im.shape
     return np.pad(im,[int((n-1)*nx/2),int((n-1)*ny/2)])
     
-    # Otf sizes
-#    nx2 = int(n*nx)
-#    ny2 = int(n*ny)
-#    
-#    if np.any(np.iscomplex(im)):
-#        imNew = np.zeros((nx2,ny2)) + complex(0,1)*np.zeros((nx2,ny2))
-#    else:
-#        imNew = np.zeros((nx2,ny2))
-#        
-#    #Zero-padding    
-#    if nx2%2 ==0:
-#        xi = int(0.5*(nx2-nx))
-#        xf = int(0.5*(nx2 + nx))
-#    else:
-#        xi = int(0.5*(nx2-nx))
-#        xf = int(0.5*(nx2+nx))
-#        
-#    if ny2%2 ==0:
-#        yi = int(0.5*(ny2-ny))
-#        yf = int(0.5*(ny2 + ny))
-#    else:
-#        yi = int(0.5*(ny2-ny))
-#        yf = int(0.5*(ny2+ny))        
-#        
-#            
-#    imNew[xi:xf,yi:yf] = im
-#    
-#    return imNew
-
 def inpolygon(xq, yq, xv, yv):
         shape = xq.shape
         xq = xq.reshape(-1)
@@ -969,26 +940,35 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     elif nargout == 4:
         return FWHMx,FWHMy,aRatio,theta
                           
-def getStrehl(psf0,pupil,samp,recentering=False,nR=5):
+def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='max'):
     if recentering:    
         psf = centerPsf(psf0,2)
     else:
         psf = psf0
         
-    #% Get the OTF
-    otf     = abs(fft.fftshift(psf2otf(psf)))
-    otf     = otf/otf.max()
-    notf    = np.array(otf.shape)
-    
-    # Get the Diffraction-limit OTF
-    nX,nY   = pupil.shape
-    pup_pad = enlargeSupport(pupil,samp)
-    otfDL   = fft.fftshift(abs(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2)))
-    otfDL   = interpolateSupport(otfDL,notf)
-    otfDL   = otfDL/otfDL.max()
-    
-    # Get the Strehl
-    return np.round(otf.sum()/otfDL.sum(),nR)
+    if method == 'otf':
+        #% Get the OTF
+        otf     = fft.fftshift(psf2otf(psf))
+        otf     = otf/otf.max()
+        notf    = np.array(otf.shape)
+        
+        # Get the Diffraction-limit OTF
+        nX,nY   = pupil.shape
+        pup_pad = enlargeSupport(pupil,samp)
+        otfDL   = fft.fftshift(abs(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2)))
+        otfDL   = interpolateSupport(otfDL,notf)
+        otfDL   = otfDL/otfDL.max()
+        # Get the Strehl
+        SR      = otf.sum()/otfDL.sum()
+    elif method == 'max':
+        psfDL   = telescopePsf(pupil,samp)
+        psfDL   = interpolateSupport(psfDL,np.array(psfDL.shape))
+        psf[psf<0]  =0 
+        SR      = psf.max()/psfDL.max() * psfDL.sum()/psf.sum()
+    else:
+        raise ValueError("Method must be 'otf' or 'max'")
+        
+    return np.round(SR,nR)
 
 #%% Data treatment
     

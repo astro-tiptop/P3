@@ -15,6 +15,7 @@ from aoSystem.deformableMirror import deformableMirror
 import aoSystem.FourierUtils as FourierUtils
 import telemetry.keckUtils as keckUtils
 from telemetry.massdimm import fetch_data, DIMM, MASS, MASSPROF, CombineMASSandDIMM
+from scipy.signal import medfilt2d
 
 #%%
 class structtype():
@@ -207,12 +208,18 @@ class telemetryKeck:
         else:
             # image
             self.cam.image = fits.getdata(self.path_img, ignore_missing_end=True) #in DN
-            if cam_fov:
+            
+            if cam_fov and (cam_fov < min(self.cam.image.shape)) :
                 self.cam.fov   = cam_fov
+                # retrieving the cog and cropping the image
+                im_tmp         = medfilt2d(self.cam.image.astype(float),kernel_size=5)
+                y0 , x0        = np.unravel_index(im_tmp.argmax(),im_tmp.shape)
+                self.cam.image = self.cam.image[int(y0-cam_fov/2):int(y0+cam_fov/2),
+                                                int(x0-cam_fov/2):int(x0+cam_fov/2)]
             else:
-                self.cam.fov   = self.cam.image.shape[0] #square image
+                self.cam.fov = self.cam.image.shape[0] #square image
             # positions
-            self.cam.zenith = [0.0]
+            self.cam.zenith  = [0.0]
             self.cam.azimuth = [0.0]
             
             # wavelengths and transmission
