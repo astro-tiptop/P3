@@ -23,7 +23,7 @@ def commandLine():
     parser.add_argument('--nPSF', help='Number of fitted PSFs',
                         default=100, type=int) 
     parser.add_argument('--fit', help='To fit the PSF',
-                        default=False, type=bool) 
+                        default=0, type=int) 
     # PATHS
     parser.add_argument('--savePath', help='Path to the saving folder',
                         default='', type=str) 
@@ -47,6 +47,10 @@ def commandLine():
     # FORMAT
     parser.add_argument('--fontsize', help='Font size on figure',
                         default=22, type=int) 
+    parser.add_argument('--nstd', help='number of times the std of distribution to be plotted',
+                        default=5, type=float) 
+    parser.add_argument('--nBins', help='number of bins in the histograms',
+                        default=100, type=int) 
     args = parser.parse_args()
     
     return (args)
@@ -57,8 +61,8 @@ if __name__=='__main__':
     
     args = commandLine()
     print(args.txt)
-
+    print(args)
     dlp = deepLoopPerformance(args.txt,path_ini=args.ini,path_save=args.savePath,path_root=args.rootPath,\
                 nPSF=args.nPSF,fit=args.fit,
                 mag=args.mag,zP=args.zP,DIT=args.DIT,nDIT=args.nDIT,skyMag=args.skyMag,ron=args.ron)
-    dlp(fontsize=args.fontsize)
+    dlp(fontsize=args.fontsize,nstd=args.nstd)

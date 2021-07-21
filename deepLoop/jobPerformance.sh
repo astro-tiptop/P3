@@ -9,4 +9,4 @@
 #SBATCH --mail-type=BEGIN,END  
 #SBATCH --mail-user=olivier.beltramo-martin@lam.fr
 
-python3 ./deepLoopPerformanceBatch.py --txt='/home/omartin/Projects/APPLY/RESULTS/task1_fetick/NN3/NOISE_NOSTATIC/MAG12/ResTest_NN06291109_DS06291109_Sc1_all.txt' --ini='/home/omartin/Projects/APPLY/CODES/_ANN/dataGen/nirc2.ini' --mag=12 --nPSF=50 --fit=True > 'perfStatus.txt'
+python3 ./deepLoopPerformanceBatch.py --txt='/home/omartin/Projects/APPLY/RESULTS/task1_fetick/NN3/NOISE_NOSTATIC/MAG12/ResTest_NN06291109_DS06291109_Sc1_all.txt' --ini='/home/omartin/Projects/APPLY/CODES/_ANN/dataGen/nirc2.ini' --savePath='/home/omartin/Projects/APPLY/RESULTS/' --mag=12 --nPSF=100 --fit=1 --fontsize=42 --nstd=10 --nBins=100 > '/home/omartin/Projects/APPLY/RESULTS/perfStatus.txt'
