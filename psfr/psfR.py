@@ -243,8 +243,11 @@ class psfR:
         self.wfe = dict()
         
         #1. STATIC ABERRATIONS
-        self.wfe['NCPA'] = np.std(self.ao.tel.opdMap_on[self.ao.tel.pupil.astype(bool)])
-        
+        if np.any(self.ao.tel.opdMap_on):
+            self.wfe['NCPA'] = np.std(self.ao.tel.opdMap_on[self.ao.tel.pupil.astype(bool)])
+        else:
+            self.wfe['NCPA'] = 0
+            
         #2. DM FITTING ERROR
         if not r0:
             r0 = self.trs.atm.r0
