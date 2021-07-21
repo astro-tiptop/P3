@@ -120,7 +120,7 @@ class psfR:
     
     def aliasingPhaseStructureFunction(self,r0):
         # computing the aliasing PSD over the AO-corrected area
-        self.psdAlias_ = self.fao.aliasingPSD()
+        self.psdAlias_ = self.fao.aliasingPSD()/self.fao.ao.atm.r0**(-5/3)
         
         # zero-padding the PSD
         self.psdAlias_ = FourierUtils.enlargeSupport(self.psdAlias_,self.freq.nOtf/self.freq.resAO)
