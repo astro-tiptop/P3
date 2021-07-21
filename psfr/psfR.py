@@ -265,15 +265,18 @@ class psfR:
         self.wfe['TT NOISE'] = 1e9 * np.sqrt(self.trs.ttloop.tf.pn * np.diag(self.trs.tipTilt.Cn_tt).sum())
         
         #5. AO BANDWIDTH ERROR
-        C = self.Cao - self.trs.wfs.Cn_ao
+        C = self.Cao - (1+self.trs.holoop.tf.pn)*self.trs.wfs.Cn_ao
         self.wfe['SERVO-LAG'] = 1e9*np.sqrt(np.mean(np.mean(C[msk,msk])))
         
         #6. RESIDUAL TIP-TILT
-        self.wfe['TIP-TILT'] = np.sqrt(np.sum(np.diag(self.Ctt - self.trs.tipTilt.Cn_tt)))*1e9
+        C = np.diag(self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt)
+        self.wfe['TIP-TILT'] = np.sqrt(np.sum(C))*1e9
+        
+        #7. PIXEL TF
         sr_pixel = np.sum(otf_dl * self.otfPixel)/S
         self.wfe['PIXEL TF'] = np.sqrt(-np.log(sr_pixel))* self.freq.wvlRef*1e9/2/np.pi
       
-        #7. ANISOPLANATISM
+        #8. ANISOPLANATISM
         Cn2     = self.ao.atm.weights * self.ao.atm.r0**(-5/3) * (self.ao.atm.wvl/self.ao.src.wvl[0])**2
         dani    = (self.dphi_ani[0].transpose(1,2,0) * Cn2).sum(axis=2)
         otf_ani = np.exp(-0.5 * dani)
@@ -297,14 +300,14 @@ class psfR:
             sr_ani  = np.sum(otf_dl * otf_ani)/S
             self.wfe['FOCAL ANISOPLANATISM'] = np.sqrt(sr2fwe(sr_ani) **2 - self.wfe['ANGULAR ANISOPLANATISM']**2)
             
-        #8. TOTAL WFE
+        #9. TOTAL WFE
         self.wfe['TOTAL WFE'] =  np.sqrt(self.wfe['NCPA']**2 +  self.wfe['FITTING']**2
                 + self.wfe['HO NOISE']**2 + self.wfe['TT NOISE']**2 + self.wfe['SERVO-LAG']**2
                 + self.wfe['TIP-TILT']**2 + self.wfe['TOTAL ANISOPLANATISM']**2)
         
         self.wfe['TOTAL WFE WITH PIXEL'] = np.hypot(self.wfe['TOTAL WFE'],self.wfe['PIXEL TF']) 
         
-        # TOTAL STREHL-RATIO
+        #10. TOTAL STREHL-RATIO
         self.wfe['REF WAVELENGTH'] = self.freq.wvlRef
         self.wfe['MARECHAL SR'] = 1e2*np.exp(-(self.wfe['TOTAL WFE'] * 2*np.pi*1e-9/self.freq.wvlRef)**2 )
         self.wfe['MARECHAL SR WITH PIXEL'] = 1e2*np.exp(-(self.wfe['TOTAL WFE WITH PIXEL'] * 2*np.pi*1e-9/self.freq.wvlRef)**2 )
