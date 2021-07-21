@@ -311,7 +311,7 @@ class psfR:
         
         if hasattr(self,'SR'):
             self.wfe['PSF SR'] = self.SR[0]
-        self.wfe['IMAGE-BASED SR'] = 1e2*FourierUtils.getStrehl(self.trs.cam.image,self.ao.tel.pupil,self.freq.sampRef)
+        self.wfe['IMAGE-BASED SR'] = 1e2*FourierUtils.getStrehl(self.trs.cam.image,self.ao.tel.pupil,self.freq.sampRef,method='max')
         
         
         

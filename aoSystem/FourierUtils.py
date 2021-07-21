@@ -940,7 +940,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     elif nargout == 4:
         return FWHMx,FWHMy,aRatio,theta
                           
-def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='max'):
+def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf'):
     if recentering:    
         psf = centerPsf(psf0,2)
     else:
@@ -959,7 +959,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='max'):
         otfDL   = interpolateSupport(otfDL,notf)
         otfDL   = otfDL/otfDL.max()
         # Get the Strehl
-        SR      = otf.sum()/otfDL.sum()
+        SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
         psfDL   = telescopePsf(pupil,samp)
         psfDL   = interpolateSupport(psfDL,np.array(psfDL.shape))
