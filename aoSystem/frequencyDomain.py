@@ -29,7 +29,7 @@ class frequencyDomain():
             self.samp  = 2.0 * np.ones_like(self.psInMas)
         else:
             self.samp  = val* rad2mas/(self.psInMas*self.ao.tel.D)
-        self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)      
+        
     @property
     def wvlCen(self):
         return self.__wvlCen
@@ -37,9 +37,10 @@ class frequencyDomain():
     def wvlCen(self,val):
         self.__wvlCen = val
         if self.nyquistSampling == True:
-            self.sampCen  = 2.0
+            self.sampCen  = 2.0 * np.ones(len(val))
         else:
             self.sampCen  = val* rad2mas/(self.psInMasCen*self.ao.tel.D)
+            
     @property
     def wvlRef(self):
         return self.__wvlRef
@@ -58,12 +59,17 @@ class frequencyDomain():
     def samp(self,val):
         self.k_      = np.ceil(2.0/val).astype('int') # works for oversampling
         self.__samp  = self.k_ * val     
+        if np.any(self.k_ > 2):
+            self.PSDstep= np.min(1/self.ao.tel.D/2)      
+        else:
+            self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)      
+            
     @property
     def sampCen(self):
         return self.__sampCen
     @sampCen.setter
     def sampCen(self,val):
-        self.kCen_      = int(np.ceil(2.0/val))# works for oversampling
+        self.kCen_      = np.ceil(2.0/val).astype(int)# works for oversampling
         self.__sampCen  = self.kCen_ * val  
     @property
     def sampRef(self):
@@ -99,6 +105,8 @@ class frequencyDomain():
         self.resAO  = int(np.max(2*self.kc_/self.PSDstep))
         
         # ---- SPATIAL FREQUENCY DOMAIN OF THE AO-CORRECTED AREA
+        #import pdb
+        #pdb.set_trace()
         self.kxAO_,self.kyAO_ = FourierUtils.freq_array(self.resAO,offset=1e-10,L=self.PSDstep)
         self.k2AO_            = self.kxAO_**2 + self.kyAO_**2   
         self.pistonFilterAO_  = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2AO_))

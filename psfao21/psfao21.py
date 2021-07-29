@@ -97,14 +97,14 @@ class psfao21:
         bounds_down += [0,0,-1]
         bounds_up   += [np.inf,np.inf,1]
         # Photometry
-        bounds_down += list(np.zeros(self.ao.src.nSrc))
-        bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
+        bounds_down += list(np.zeros(self.ao.src.nSrc * self.freq.nWvl))
+        bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc * self.freq.nWvl))
         # Astrometry
-        bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
-        bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+        bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc * self.freq.nWvl))
+        bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc * self.freq.nWvl))
         # Background
-        bounds_down += [-np.inf]
-        bounds_up   += [np.inf]
+        bounds_down += list(-np.inf * np.ones(self.freq.nWvl))
+        bounds_up   += list(np.inf * np.ones(self.freq.nWvl))
         # Static aberrations
         bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
         bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
@@ -226,13 +226,13 @@ class psfao21:
         
         # ----------------- GETTING THE PHASE STRUCTURE FUNCTION
         self.psd = self.getPSD([r0]+ x0_psd)
+        
         if self.antiAlias:
             	self.psd = np.pad(self.psd,(self.freq.nOtf//2,self.freq.nOtf//2)) 
         self.SF = self.getSF(Cn2=Cn2)
         if self.antiAlias:
             	self.SF   = FourierUtils.interpolateSupport(self.Dphi,self.freq.nOtf)    
-
-
+        
         # ----------------- COMPUTING THE PSF
         PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
                         jitterX=x0_jitter[0],jitterY=x0_jitter[1],jitterXY=x0_jitter[2],\

@@ -20,10 +20,15 @@ def commandLine():
     # INI FILE
     parser.add_argument('--ini', help='Path to the .ini file for instantiating the model',
                         default='', type=str)   
+    
+    # FIT
     parser.add_argument('--nPSF', help='Number of fitted PSFs',
                         default=100, type=int) 
     parser.add_argument('--fit', help='To fit the PSF',
                         default=0, type=int) 
+    parser.add_argument('--init', help='option to define the initial guess for the PSF-fitting; -1=median, 0=ground truth, float>0=precision on the estimates',
+                        default=0, type=float) 
+    
     # PATHS
     parser.add_argument('--savePath', help='Path to the saving folder',
                         default='', type=str) 
@@ -62,7 +67,19 @@ if __name__=='__main__':
     args = commandLine()
     print(args.txt)
     print(args)
+    
+    # manage the init field
+    if args.init < 0:
+        init = 'median'
+    elif args.init == 0:
+        init = 'truth'
+    else:
+        init = args.init
+       
+    # instantiate deepLoopPerformance
     dlp = deepLoopPerformance(args.txt,path_ini=args.ini,path_save=args.savePath,path_root=args.rootPath,\
-                nPSF=args.nPSF,fit=args.fit,
+                nPSF=args.nPSF,fit=args.fit,init=init,
                 mag=args.mag,zP=args.zP,DIT=args.DIT,nDIT=args.nDIT,skyMag=args.skyMag,ron=args.ron)
+    
+    # run the display
     dlp(fontsize=args.fontsize,nstd=args.nstd)

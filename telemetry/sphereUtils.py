@@ -129,19 +129,21 @@ def GetStarMagnitudes(hdr):
     DICT_SIMBAD= query_simbad(Time(hdr['DATE-OBS']),SkyCoord(RA*u.degree,DEC*u.degree),name=OB_NAME)
     
     # get magnitudes
-    VMAG = RMAG = JMAG = HMAG = KMAG = -1
+    VMAG = RMAG = GMAG = JMAG = HMAG = KMAG = -1
     if 'simbad_FLUX_V' in DICT_SIMBAD:
         VMAG = DICT_SIMBAD['simbad_FLUX_V']
     if 'simbad_FLUX_R' in DICT_SIMBAD:
         RMAG = DICT_SIMBAD['simbad_FLUX_R']
+    if 'simbad_FLUX_G' in DICT_SIMBAD:
+        GMAG = DICT_SIMBAD['simbad_FLUX_G']
     if 'simbad_FLUX_J' in DICT_SIMBAD:
         JMAG = DICT_SIMBAD['simbad_FLUX_J']
     if 'simbad_FLUX_H' in DICT_SIMBAD:
         HMAG = DICT_SIMBAD['simbad_FLUX_H']
     if 'simbad_FLUX_K' in DICT_SIMBAD:
         KMAG = DICT_SIMBAD['simbad_FLUX_K']
-        
-    return VMAG, RMAG, JMAG, HMAG, KMAG
+    
+    return VMAG, RMAG, GMAG, JMAG, HMAG, KMAG
 
 def GetDetectorConfig(hdr):
     """

@@ -29,7 +29,7 @@ class deepLoopPerformance:
     '''
     
     def __init__(self,path_txt,path_ini=None,path_save=None,path_root='',nPSF=1000,
-                 fit=False,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=60):
+                 fit=False,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=60,init='truth'):
         '''
         path_txt can be either:
             - a string of characters that gives the path to the txt file
@@ -101,7 +101,11 @@ class deepLoopPerformance:
         if self.path_ini:
             self.fit = fit
             self.psfao = psfao21(path_ini,path_root=path_root)
-            self.get_psf_metrics(nPSF=nPSF,fit=self.fit,mag=mag,zP=zP,DIT=DIT,nDIT=nDIT,skyMag=skyMag,ron=ron)
+            #if type(init) == str:
+            self.init_fit = init
+            #else:
+            #    self.init_fit = str(init)
+            self.get_psf_metrics(nPSF=nPSF,fit=self.fit,init=self.init_fit,mag=mag,zP=zP,DIT=DIT,nDIT=nDIT,skyMag=skyMag,ron=ron)
         
     def __call__(self,fontsize=22,fontfamily='normal',fontserif='Palatino',
                  figsize=20,constrained_layout=True,nBins=100,nstd=np.inf):
@@ -206,70 +210,108 @@ class deepLoopPerformance:
                 # MSE                
                 err = self.mse[n]
                 nPSF= err.shape[1]
-                if self.fit:
-                    axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(nPSF/10,nBins)),label='DEEPLOOP',alpha=0.5)
-                    axs[0,0].hist(err[1], weights=np.ones_like(err[1]) / len(err[1]), bins=int(min(nPSF/10,nBins)),label='PSF-FITTING',alpha=0.5)
+                if self.fit:      
+                    err    = self.mse[n][0]
+                    errfit = self.mse[n][1]
+                    err    = err[err==err]
+                    errfit = errfit[errfit==errfit]
+                    err    = err[err <= nstd*err.std()]
+                    errfit = errfit[errfit <= nstd*errfit.std()]
+                    mn     = 0
+                    mx     = max([max(err),max(errfit)])
+                    bins   = np.linspace(mn,mx,num=int(min(nPSF/10,nBins)))           
+                    axs[0,0].hist(err, weights=np.ones_like(err) / len(err), bins=bins,label='DEEPLOOP',alpha=0.5)
+                    axs[0,0].hist(errfit, weights=np.ones_like(errfit) / len(errfit), bins=bins,label='PSF-FITTING',alpha=0.5)
                     axs[0,0].legend()
                 else:
+                    err = err[0][err[0]==err[0]]
                     axs[0,0].hist(err[0], weights=np.ones_like(err[0]) / len(err[0]), bins=int(min(nPSF/10,nBins)))
+                
                 axs[0,0].set_xlabel('Mean square error (\%)')
                 axs[0,0].set_ylabel('Probability')
-                if nstd != np.inf:
-                    axs[0,0].set_xlim([0,nstd*err[0].std()])
+                #if nstd != np.inf:
+                #    axs[0,0].set_xlim([0,nstd*err[0].std()])
                 
                 # SR
                 if self.fit:
-                    err = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
-                    axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='DEEPLOOP',alpha=0.5)
+                    err    = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
                     errfit = 1e2*(self.SR[n][2] - self.SR[n][0])/self.SR[n][0]
-                    axs[0,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='PSF-FITTING',alpha=0.5)
+                    err    = err[err==err]
+                    errfit = errfit[errfit==errfit]
+                    err    = err[abs(err) <= np.median(err) + nstd*err.std()]
+                    errfit = errfit[abs(errfit) <= np.median(errfit) + nstd*errfit.std()]
+                    mn     = min([min(err),min(errfit)])
+                    mx     = max([max(err),max(errfit)])
+                    bins   = np.linspace(mn,mx,num=int(min(nPSF/10,nBins)))           
+                    axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=bins,label='DEEPLOOP',alpha=0.5)
+                    axs[0,1].hist(errfit, weights=np.ones_like(errfit) / len(errfit), bins=bins,label='PSF-FITTING',alpha=0.5)
                     axs[0,1].legend()
                 else:
                     err = 1e2*(self.SR[n][1] - self.SR[n][0])/self.SR[n][0]
+                    err = err[err==err]
                     axs[0,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)))
+                
                 axs[0,1].set_xlabel('Strehl-ratio error (\%)')
                 axs[0,1].set_ylabel('Probability')
                 axs[0,1].plot([0,0],axs[0,1].get_ylim(),'k--')
-                if nstd != np.inf:
-                    axs[0,1].set_xlim([-nstd*err.std(),nstd*err.std()])
+                #if nstd != np.inf:
+                #    axs[0,1].set_xlim([-nstd*err.std(),nstd*err.std()])
                 
                 # FWHM
                 if self.fit:
-                    err = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
-                    axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='DEEPLOOP',alpha=0.5)
+                    err    = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
                     errfit = 1e2*(self.FWHM[n][2] - self.FWHM[n][0])/self.FWHM[n][0]
-                    axs[1,0].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='PSF-FITTING',alpha=0.5)
+                    err = err[err==err]
+                    errfit = errfit[errfit==errfit]
+                    err    = err[abs(err) <= np.median(err) + nstd*err.std()]
+                    errfit = errfit[abs(errfit) <= np.median(errfit) + nstd*errfit.std()]
+                    mn     = min([min(err),min(errfit)])
+                    mx     = max([max(err),max(errfit)])
+                    bins   = np.linspace(mn,mx,num=int(min(nPSF/10,nBins)))
+                    axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=bins,label='DEEPLOOP',alpha=0.5) 
+                    axs[1,0].hist(errfit, weights=np.ones_like(errfit) / len(errfit), bins=bins,label='PSF-FITTING',alpha=0.5)
                     axs[1,0].legend()
                 else:
                     err = 1e2*(self.FWHM[n][1] - self.FWHM[n][0])/self.FWHM[n][0]
+                    err = err[err==err]
                     axs[1,0].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)))
+                
                 axs[1,0].set_xlabel('FWHM error (\%)')
                 axs[1,0].set_ylabel('Probability')
                 axs[1,0].plot([0,0],axs[1,0].get_ylim(),'k--')
-                if nstd != np.inf:
-                    axs[1,0].set_xlim([-nstd*err.std(),nstd*err.std()])
+                #if nstd != np.inf:
+                #    axs[1,0].set_xlim([-nstd*err.std(),nstd*err.std()])
                 
                 # Photometry
                 if self.fit:
-                    err = self.mag_err[n][0]
-                    axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='DEEPLOOP',alpha=0.5)
+                    err    = self.mag_err[n][0]
                     errfit = self.mag_err[n][1]
-                    axs[1,1].hist(errfit, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)),label='PSF-FITTING',alpha=0.5)
+                    err = err[err==err]
+                    errfit = errfit[errfit==errfit]
+                    err    = err[abs(err) <= np.median(err) + nstd*err.std()]
+                    errfit = errfit[abs(errfit) <= np.median(errfit) + nstd*errfit.std()]
+                    mn     = min([min(err),min(errfit)])
+                    mx     = max([max(err),max(errfit)])
+                    bins   = np.linspace(mn,mx,num=int(min(nPSF/10,nBins)))
+                    axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=bins,label='DEEPLOOP',alpha=0.5)
+                    axs[1,1].hist(errfit, weights=np.ones_like(errfit) / len(errfit), bins=bins,label='PSF-FITTING',alpha=0.5)
                     axs[1,1].legend()
                 else:
                     err = self.mag_err[n][0]
+                    err = err[err==err]
                     axs[1,1].hist(err, weights=np.ones_like(err) / len(err), bins=int(min(nPSF/10,nBins)))
+                
                 axs[1,1].set_xlabel('Photometric error (mag)')
                 axs[1,1].set_ylabel('Probability')
                 axs[1,1].plot([0,0],axs[1,1].get_ylim(),'k--')
-                if nstd != np.inf:
-                    axs[1,1].set_xlim([-nstd*err.std(),nstd*err.std()])
+                #if nstd != np.inf:
+                #    axs[1,1].set_xlim([-nstd*err.std(),nstd*err.std()])
                 
                 # saving 
                 if self.path_save:
                     path_fig = self.path_save + 'histograms_psf_' + self.dataType[n]\
                                 + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
-                                + '_' + str(len(self.nnest[n][0])) 
+                                + '_' + str(len(self.nnest[n][0])) + '_init_' + str(self.init_fit) +'.png'
                     plt.savefig(path_fig) 
                 
                 
@@ -282,15 +324,15 @@ class deepLoopPerformance:
                 plt.semilogy(x,self.psf_diff_mean[n][nPx//2,:],'b',label='Mean differential PSF')
                 plt.semilogy(x,self.psf_diff_std[n][nPx//2,:],'r',label='Std differential PSF')
                 if self.fit:
-                    plt.semilogy(x,self.psf_diff_mean_fit[n][nPx//2,:],'g',label='Mean differential PSF - fitting')
-                    plt.semilogy(x,self.psf_diff_std_fit[n][nPx//2,:],'m',label='Std differential PSF - fitting')
+                    plt.semilogy(x,self.psf_diff_mean_fit[n][nPx//2,:],'g--',label='Mean differential PSF - fitting')
+                    plt.semilogy(x,self.psf_diff_std_fit[n][nPx//2,:],'m--',label='Std differential PSF - fitting')
                 plt.legend()
                 plt.xlabel('Separation from the optical axis [mas]')
                 # saving
                 if self.path_save:
                     path_fig = self.path_save + 'psf_plots' + self.dataType[n]\
                                 + 'data_' + self.idNN[n] + '_' + str(self.idData[n])\
-                                + '_' + str(len(self.nnest[n][0])) 
+                                + '_' + str(len(self.nnest[n][0])) + '_init_' + str(self.init_fit) +'.png'
                     plt.savefig(path_fig) 
                     
     def read_txt_files(self,path_txt,getParamNumberOnly=False):
@@ -353,24 +395,25 @@ class deepLoopPerformance:
 
         return dabs_mean, dabs_med, dabs_std,drel_mean, drel_med, drel_std,coeff_pearson[0,1]
         
-    def get_psf_metrics(self,nPSF=1000,fit=False,mag=0,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=60):
+    def get_psf_metrics(self,nPSF=1000,fit=False,mag=0,init=0.1,zP=25.44,DIT=0.5,nDIT=50,skyMag=13.6,ron=60):
         
         t0 = time.time()
         print('Regenerating the PSFs ... ')
         p2x = lambda x: list(x[0:5]) + [0] + [x[5]] + [0,0,0,1,0,0,0] + list(x[6:-1])
         
         self.mag_err = np.empty(self.nCases,dtype=list)
-        self.mse   = np.empty(self.nCases,dtype=list)
-        self.SR    = np.empty(self.nCases,dtype=list)
-        self.FWHM  = np.empty(self.nCases,dtype=list)
+        self.mse     = np.empty(self.nCases,dtype=list)
+        self.SR      = np.empty(self.nCases,dtype=list)
+        self.FWHM    = np.empty(self.nCases,dtype=list)
         
-        self.psf_mean = np.empty(self.nCases,dtype=list)
+        self.psf_mean      = np.empty(self.nCases,dtype=list)
         self.psf_diff_mean = np.empty(self.nCases,dtype=list)
         self.psf_diff_std  = np.empty(self.nCases,dtype=list)
         if fit:
             self.psf_diff_mean_fit = np.empty(self.nCases,dtype=list)
             self.psf_diff_std_fit  = np.empty(self.nCases,dtype=list)
-            self.fitEstimates =  np.empty(self.nCases,dtype=list) 
+            self.fitEstimates      = np.empty(self.nCases,dtype=list) 
+            p_median               = np.median(self.gtruth[0],axis=1)
         nPx = self.psfao.ao.cam.fovInPix
         nC  = 2 + fit*1
         
@@ -386,10 +429,12 @@ class deepLoopPerformance:
             self.psf_diff_mean[n] = np.zeros((nPx,nPx))
             self.psf_diff_std[n]  = np.zeros((nPx,nPx))
             if fit:
-                self.fitEstimates[n]  = np.zeros((self.nParam[n],nPSF))
+                self.fitEstimates[n]      = np.zeros((self.nParam[n],nPSF))
                 self.psf_diff_mean_fit[n] = np.zeros((nPx,nPx))
                 self.psf_diff_std_fit[n]  = np.zeros((nPx,nPx))  
-                
+                if type(init) == float:
+                    frandn = np.random.normal(1,0.2,(nPSF,self.nParam[n]))
+                    
             # down-selection 
             idx = np.random.randint(0,high=nPSFtot,size=nPSF)
             if self.nParam[n] == 6:
@@ -431,15 +476,34 @@ class deepLoopPerformance:
                         noise_dec-= noise_dec.min()
                         im_noise  = np.random.poisson(Flux*psf_true) + noise_sky  + noise_dec
                         # computing the weights
-                        #weights   = 1.0/np.sqrt(ronStack**2 + psf_true)   
+                        weights   = 1.0/np.sqrt(ronStack**2 + psf_true)   
                     else:
                         im_noise = psf_true
                         
                     # defining the initial guess
-                    x0   = p2x(self.gtruth[n][:,idx[k]])
+                    if init == 'truth':
+                        x0 = p2x(self.gtruth[n][:,idx[k]])
+                    elif init == 'median':
+                        x0 = p2x(p_median)
+                    elif type(init) == float:
+                        if init > 1:
+                            init/=100
+                        p_r= self.gtruth[n][:,idx[k]] * frandn[k]
+                        p_r= np.maximum(p_r,self.gtruth[n].min(axis=1))
+                        p_r= np.minimum(p_r,self.gtruth[n].max(axis=1))
+                        x0 = p2x(p_r)
+                    else:
+                        raise ValueError("The init field must be 'truth', 'median' or a float")                    
+                    # fit the image; the image musn't be normalized to properly account for the Poisson noise
+
+                    if mag != 0:
+                        x0[10]   = Flux
+                        normType = 0
+                    else:
+                        normType = 1
                     fixed= (False,)*5 + (True,False,) + (True,)*3 + (False,)*4 + (False,)*nModes
-                    # fit the image
-                    res  = psfFitting(im_noise,self.psfao,x0,fixed=fixed,verbose=-1,weights=weights)
+
+                    res  = psfFitting(im_noise,self.psfao,x0,fixed=fixed,verbose=-1,weights=weights,normType=normType)
                     
                     # Get parameters
                     self.fitEstimates[n][:,k] = list(res.x[0:5]) + [res.x[6]] + list(res.x[14:])
@@ -460,3 +524,5 @@ class deepLoopPerformance:
                 self.psf_diff_std_fit[n] = np.sqrt(self.psf_diff_std_fit[n])
                 
             print('... Done in %.2f s ! '%(time.time() - t0))
+            
+# 35421.20 for 10k cases, init=0.1

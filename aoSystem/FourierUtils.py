@@ -253,7 +253,8 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         
         # INSTANTIATING THE OUTPUTS
         if nPix == None:
-            nPix = freq.nOtf
+            nPix = int(freq.nOtf /freq.kRef_)
+        
         PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
         SR  = np.zeros((ao.src.nSrc,freq.nWvl))
         
@@ -274,58 +275,89 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         if np.any(dx!=0) or np.any(dy!=0):
             # shift by half a pixel
             fftPhasor = np.zeros((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
+            if freq.kRef_ > 2: #[jWvl] >2:
+                fact = freq.kRef_#[jWvl]
+            else:
+                fact = 1
             for iSrc in range(ao.src.nSrc):
                 for jWvl in range(freq.nWvl):
-                    fftPhasor[:,:,iSrc,jWvl] = np.exp(-np.pi*complex(0,1)*(dx[iSrc,jWvl]*freq.U_ + dy[iSrc,jWvl]*freq.V_))
+                    # account for the binning
+                    fftPhasor[:,:,iSrc,jWvl] = np.exp(-np.pi*complex(0,1)*fact*\
+                             (dx[iSrc,jWvl]*freq.U_ + dy[iSrc,jWvl]*freq.V_))
         else:
             fftPhasor = np.ones((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
 
         # LOOP ON WAVELENGTHS   
-        for j in range(freq.nWvl):
+        for jWvl in range(freq.nWvl):
             
             # UPDATE THE INSTRUMENTAL OTF
             if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(xStat)>0:
                 freq.otfNCPA, freq.otfDL, freq.phaseMap = \
-                getStaticOTF(ao.tel,int(freq.nOtf),freq.samp[j],freq.wvl[j],
+                getStaticOTF(ao.tel,int(freq.nOtf),freq.samp[jWvl],freq.wvl[jWvl],
                              xStat=xStat,theta_ext=theta_ext,spatialFilter=spatialFilter)
                 
             # UPDATE THE RESIDUAL JITTER
             if freq.nyquistSampling == True and freq.nWvl > 1 and (np.any(ao.cam.spotFWHM)):
-                normFact2    = ff_jitter*(freq.samp[j]*ao.tel.D/freq.wvl[j]/(3600*180*1e3/np.pi))**2  * (2 * np.sqrt(2*np.log(2)))**2
+                normFact2    = ff_jitter*(freq.samp[jWvl]*ao.tel.D/freq.wvl[jWvl]/(3600*180*1e3/np.pi))**2  * (2 * np.sqrt(2*np.log(2)))**2
                 Kjitter = np.exp(-0.5 * Djitter * normFact2/normFact)    
                           
             # OTF MULTIPLICATION
             otfStat = freq.otfNCPA * Kjitter * otfPixel    
             otfStat = np.repeat(otfStat[:,:,np.newaxis],ao.src.nSrc,axis=2)      
-            otfTurb = np.exp(-0.5*sf*(2*np.pi*1e-9/freq.wvl[j])**2)
-            otfTot  = fft.fftshift(otfTurb * otfStat * fftPhasor[:,:,:,j],axes=(0,1))
-
+            otfTurb = np.exp(-0.5*sf*(2*np.pi*1e-9/freq.wvl[jWvl])**2)
+            otfTot  = fft.fftshift(otfTurb * otfStat * fftPhasor[:,:,:,jWvl],axes=(0,1))
+                        
             # GET THE FINAL PSF
             psf_ = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
             
             # managing the undersampling
-            if freq.samp[j] <1 or nPix < freq.nOtf: 
-                if freq.samp[j] <1:
-                    psf = np.zeros((nPix,nPix,ao.src.nSrc))
-                    for kk in range(ao.src.nSrc):
-                        psf[:,:,kk] = interpolateSupport(psf_[:,:,kk],round(ao.tel.resolution*2*freq.samp[j]).astype('int'))
-                if nPix < freq.nOtf:
-                    psf = np.zeros((nPix,nPix,ao.src.nSrc))
-                    for kk in range(ao.src.nSrc):
-                        psf[:,:,kk] = cropSupport(np.squeeze(psf_[:,:,kk]),freq.nOtf/nPix)   
-            else:
-                psf = psf_
+            psf = np.copy(psf_)
             
+            if freq.k_[jWvl] >2: # binning the PSF
+                psf = np.zeros((ao.cam.fovInPix,ao.cam.fovInPix,ao.src.nSrc))
+                for iSrc in range(ao.src.nSrc):
+                    tmp           = binning(psf_[:,:,iSrc],int(freq.kRef_))
+                    psf[:,:,iSrc] = tmp
+                psf_ = psf
+                
+            # managing the field of view
+            if nPix < ao.cam.fovInPix:
+                psf = np.zeros((nPix,nPix,ao.src.nSrc))
+                for iSrc in range(ao.src.nSrc):
+                    nC  = psf_[:,:,iSrc].shape[0]/nPix
+                    tmp = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)   
+                    psf[:,:,iSrc] = tmp #no nornalization here to account for the loss of photons
+                
+            # SCALING
             
-            PSF[:,:,:,j] = psf * F[:,j]
+            PSF[:,:,:,jWvl] = psf * F[:,jWvl]
             
             # STREHL-RATIO COMPUTATION
-            SR[:,j] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
-            
+            SR[:,jWvl] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
+        
         return PSF + bkg, SR
     
 #%%  IMAGE PROCESSING
         
+def binning(image, k):
+    """Bin an image by a factor `k`
+    
+    Example
+    -------
+    >>> x,y = _np.mgrid[0:10,0:10]
+    >>> data = (-1)**x * (-1)**y
+    >>> data_bin = binning(data,2)
+    
+    """
+    S = np.shape(image)
+    S0 = int(S[0] / k)
+    S1 = int(S[1] / k)
+    out = np.zeros((S0, S1))
+    for i in range(k):
+        for j in range(k):
+            out += image[i:k*S0:k, j:k*S1:k]
+    return out
+
 def cropSupport(im,n):    
     nx,ny = im.shape
     

@@ -148,6 +148,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
                                spatialStacking=spatialStacking,spectralStacking=spectralStacking,
                                saturation=psfModelInst.ao.cam.saturation/param)
     result.im_fit = FourierUtils.normalizeImage(tmp,param=param,normType=normType)
+    result.im_dif = result.im_sky - result.im_fit
     # psf
     xpsf          = np.copy(result.x)
     nparam        = len(result.x) - 3*psfModelInst.ao.src.nSrc - 1
@@ -210,7 +211,7 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
         im_sky = res.im_sky
         im_fit = res.im_fit
     
-    im_diff= im_fit - im_sky
+    im_diff= im_sky - im_fit
     
     # DEFINING THE FUNCTION TO APPLY
     if scale == 'log10abs':

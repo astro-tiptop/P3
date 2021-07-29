@@ -14,8 +14,6 @@ import math as math
 from random import random
 from configparser import ConfigParser
 import os
-from scipy.ndimage.filters import maximum_filter
-from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
 
 from astropy.io import fits
 from astropy.table import QTable
@@ -64,10 +62,36 @@ def joint_fit(im, psfao, x0, fixed, weights):
 
 #%% BUILDING PSFS SPATIAL VARIATIONS MODELS
 def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
-        nPSFMax=1,method='interpolation',crit='isolated',magMin=None,magMax=None,
-        display=False,gtol=1e-5,xtol=1e-5,ftol=1e-5,verbose=2,fact=2):
+        nPSFMax=1,interpolation='psfs',crit='center',magMin=None,magMax=None,
+        display=False,tol=1e-5,verbose=2,fact=2):
     '''
-    
+        Calibrate the psfao21 model from an astronomical image of stellar fields by : 
+            1. Segmenting the image in nSeg x nSeg parts
+            2. Extracting sub-images according to the criterion crit and the inputs magnitude/coordinates
+            3. Detecting the number of stars in each sub-image
+            4. Fitting the psfao21 model instantiated from the .ini file at path_ini
+            5. Interpolating the PSFs at the image segments
+       INPUTS:
+           - im : the astronomical image
+           - coo : the coordinates of the stars in pixel ((0,0) : top-left corner)
+           - path_ini : the path to the .ini file to instantiate the psfao21 model
+           - nSeg : the number of segments to split the image along one direction
+           - nPx : the number of pixels to extract sub-images from the image
+           - nPSFMAX : the number of sub-images to extract for each segment, default=1
+           - interpolation : the interpolation method, either 'psfs' or 'parameters'
+           - crit : the criterion for selecting PSF candidates for fitting, must be either 'center' or 'isolated'
+           - magMin/magMax : min/max value for the stars magnitude that can be fitted
+           - display : if True, the results fo the fit is diplayed, to be use when a few sub-images are fitted
+           - tol : tolerances on the parameters, function and gradient increment for the fitting, default=1e-5
+           - verbose : makes the fitting talkative (-1:no info up to 2: full info)
+           - fact, multiplication factor to nPx to compute the PSF model, default=2
+       OUTPUTS:
+           - psfs_interp : a numpy array of size nOut x (fact x nPx) x (fact x nPx) containing the interpolated PSFs 
+           - psfs_fit  : a numpy array of size nPSF x (fact x nPx) x (fact x nPx) contained the fitted PSFs
+           - X :  a numpy array of size (2*nParam + 10) x nPSF containing the results of the fit
+           - sub_im :  a numpy array of size nPSf x nPx x nPx containing the extracted sub-images
+           - coo_interp :  the 2D numpy array of size nOut x 2, where  nOut=nSeg**2
+           - coo_extr : the 2D numpy array of size nPSF x 2, where  nPSF the number of sub_im extracted from the image
     '''
     nY , nX = im.shape
     
@@ -75,7 +99,7 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
     parser = ConfigParser()
     parser.optionxform = str
     parser.read(path_ini)
-    parser.set('sensor_science','FieldOfView', str(nPx*fact))
+    parser.set('sensor_science','FieldOfView', str(int(2*(nPx*fact//2))))
     with open(path_ini, 'w') as configfile:
         parser.write(configfile)
             
@@ -89,7 +113,7 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
     sub_im = extract_multiple_psf(im,coo_extr,nPx,xon=nX//2,yon=nY//2)
     # fit PSFs
     X , psfs_fit = fit_multiple_psfs(sub_im,coo_extr,path_ini,
-                    gtol=gtol,xtol=xtol,ftol=ftol,verbose=verbose,display=False)
+                    tol=tol,verbose=verbose,display=False)
 
     ################### INTERPOLATION
     # defining the interpolation points
@@ -99,12 +123,14 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
     coo_interp = np.array([y_interp.reshape(-1),x_interp.reshape(-1)]).T
     
     # interpolation
-    if method == 'interpolation':
+    if interpolation == 'psfs':
         psfs_interp = interpolate_psfs_in_fov(psfs_fit,coo_extr,coo_interp,X,nPSFMax=nPSFMax)
-    else:
+    elif interpolation == 'parameters':
         # spatial variation model
         M        = create_spatial_variations_psf_model(X,order=2)
         psfs_interp = compute_psfs_grid(path_ini,M,coo_interp,nPx)
+    else:
+        raise ValueError('The field interpolation is not valid: must be psfs or parameters')
         
     # display
     if display:
@@ -129,38 +155,6 @@ def generate_psfs_grid_from_image(im,mag,coo,path_ini,nSeg,nPx,
         
     return psfs_interp , psfs_fit , X , sub_im , coo_interp , coo_extr
     
-    
-def detect_peaks(image):
-    """
-    Takes an image and detect the peaks usingthe local maximum filter.
-    Returns a boolean mask of the peaks (i.e. 1 when
-    the pixel's value is the neighborhood maximum, 0 otherwise)
-    """
-
-    # define an 8-connected neighborhood
-    neighborhood = generate_binary_structure(2,2)
-
-    #apply the local maximum filter; all pixel of maximal value 
-    #in their neighborhood are set to 1
-    local_max = maximum_filter(image, footprint=neighborhood)==image
-    #local_max is a mask that contains the peaks we are 
-    #looking for, but also the background.
-    #In order to isolate the peaks we must remove the background from the mask.
-
-    #we create the mask of the background
-    background = (image==0)
-
-    #a little technicality: we must erode the background in order to 
-    #successfully subtract it form local_max, otherwise a line will 
-    #appear along the background border (artifact of the local maximum filter)
-    eroded_background = binary_erosion(background, structure=neighborhood, border_value=1)
-
-    #we obtain the final mask, containing only peaks, 
-    #by removing the background from the local_max mask (xor operation)
-    detected_peaks = local_max ^ eroded_background
-
-    return detected_peaks
-
 def read_catalog(path_cat,nSkip=1):
     '''
     Read Starfinder=produced catalogs identifyied from the path_cat.
@@ -325,8 +319,8 @@ def extract_multiple_psf(im,coo_seg,nPx,xon=0,yon=0):
         
     return psfs
     
-def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
-                      threshold=3,saturation = 2**15-1,verbose=2,display=False,nSeg=7):
+def fit_multiple_psfs(sub_im,coo_seg,path_ini,tol=1e-5,
+                      threshold=3,fwhm=2,saturation = 2**15-1,verbose=2,display=False,nSeg=3):
     '''
     Fitting individually multiple PSFs by using the PSFAO21 model.
     INPUTS:
@@ -334,7 +328,7 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
         - coo_seg, a 2D numpy array of size nPSF x 2 that contains the PSFs coordinates in pixels
         - path_ini, the path to the .ini file that allows to instantiate the psfao21 model
         - xon/yon, are the coordinates of the center of the field in pixels
-        - gtol, xtol, ftol, tolerances for increments on gradient, parameters and model to stop the fitting
+        - tol, tolerances for increments on gradient, parameters and model to stop the fitting
         - verbose, to make the fit talkative, fro -1 (no message) to 2 (detailled message)
     OUTPUTS:
         - X, a 2D numpy array of size (2*nParam + 10) x nPSF, where nParam=7 is the number of parameters for psfao21.
@@ -342,23 +336,25 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
         as well as PSF-based metrics: Strehl-ratio (sky/fit), FWHM (x-sky, y-sky, x-fit, y-fit) and the Mean sqaure error.
         - psfs_out, a 3D numpy array of size nPSF x nPx x nPx
     '''
-    from scipy.ndimage.measurements import center_of_mass
+    from astropy.stats import sigma_clipped_stats
+    from photutils.detection import DAOStarFinder
     
-   
     # Instantiating the PSF model
-    psfao = psfao21(path_ini)
+    psfao      = psfao21(path_ini)
     psInArcsec = psfao.ao.cam.psInMas/1e3
         
     # Allocating memory    
-    nPSF   = psfs.shape[0]
-    nParam  = 7
-    X = np.zeros((nParam*2 + 10,nPSF))
+    nPSF     = sub_im.shape[0]
+    nParam   = 7
+    X        = np.zeros((nParam*2 + 10,nPSF))
     psfs_out = np.zeros((nPSF,psfao.ao.cam.fovInPix,psfao.ao.cam.fovInPix))
-    # initial guess
-    x0 = [0.5,0,1,1e-1,0.5,0,1.8,0,0,0]
+    
+    # initial guess on PSF parameters
+    x0    = [0.5,0,1,1e-1,0.5,0,1.8,0,0,0]
     fixed = (False,True,False,False,False,False,False) + (True,)*3 + (False,)*4
-                      
-    # loops on segments and psf
+    fit_ok= np.zeros(nPSF).astype(bool)    
+                  
+    # ------- loop on images
     for k in range(nPSF):
         # default config
         y_s = [0.0]
@@ -366,59 +362,54 @@ def fit_multiple_psfs(psfs,coo_seg,path_ini,gtol=1e-5,xtol=1e-5,ftol=1e-5,
         xstars = [1,0,0,0]
         fixed = (False,True,False,False,False,False,False) + (True,)*3 + (False,)*4
             
-        # measuring cog
-        ycog , xcog = center_of_mass(psfs[k])
-        ymax , xmax = psfs[k].shape
+        # get image statistics
+        ymax , xmax    = sub_im[k].shape
+        tmp            = np.copy(sub_im[k])
+        _, median, std = sigma_clipped_stats(tmp, sigma=3.0)  
         
-        # detect peaks
-        tmp            = np.copy(psfs[k])
-        if nSeg > 0:
-            tmp_seg, _  = segment_image_in_tiles(tmp,nSeg)
-            ron  = np.median(tmp_seg.reshape((int(nSeg**2),int(tmp_seg.shape[1]**2))).std(axis=1))
-        else:
-            _,ron = FourierUtils.getFlux(tmp,nargout=2)     
-            
-        tmp[tmp<5*ron] = 0
-        A              = detect_peaks(tmp)
-        nPeaks         = len(A.nonzero()[0])
-        
-        if nPeaks > 0:
-            y_s     = A.nonzero()[0] - ymax//2
-            x_s     = A.nonzero()[1] - xmax//2
-            _,id_s  = np.unique(psfs[k][A],return_index=True)
-            nStars  = len(id_s)
-            y_s     = y_s[id_s]
-            x_s     = x_s[id_s] 
-            p_s     = psfs[k][A][id_s]
+        # detect the peaks
+        daofind = DAOStarFinder(fwhm=fwhm, threshold=threshold*std)  
+        sources = daofind(tmp - median)  
+           
+        if sources:
+            # initial guess on stellar parameters
+            y_s = sources['ycentroid'] - ymax//2
+            x_s = sources['xcentroid'] - xmax//2
+            p_s = sources['flux']
+            n_s = len(y_s)
             xstars  = list(p_s/p_s.sum()) + list(y_s) + list(x_s) + [0]
-            fixed   = (False,True,False,False,False,False,False) + (True,)*3 + (False,)*(3*nStars+1)
+            fixed   = (False,True,False,False,False,False,False) + (True,)*3 + (False,)*(3*n_s+1)
                     
-        # Instantiating the PSF model
-        coo_stars= np.array([y_s , x_s])* psInArcsec
-        psfao = psfao21(path_ini , coo_stars = coo_stars)
-    
-        # performing the fit
-        res         = psfFitting(psfs[k],psfao,x0+xstars,fixed=fixed,verbose=verbose,gtol=gtol,ftol=ftol,xtol=xtol)
-        # getting the PSFs coordinates
-        y   = coo_seg[k,0]
-        x   = coo_seg[k,1]
-        r   = np.hypot(y,x)
-        # getting psfs-based metrics
-        psf_metrics = [res.SR_sky,res.SR_fit,res.FWHMx_sky,res.FWHMy_sky,res.FWHMx_fit,res.FWHMy_fit,res.mse]
-        # concatenating parameters
-        X[:,k] = list(res.x[0:nParam]) + list(res.xerr[0:nParam]) + [y,x,r] + psf_metrics
-     
-        if display:
-            displayResults(psfao,res)
-            
-        # Regenerating PSFs
-        psfao = psfao21(path_ini , coo_stars = np.array([0.0 , 0.0]))
-        r0 = np.median(X[0,:])
-        for k in range(nPSF):
-            psfs_out[k] = imageModel(psfao([r0] + list(X[1:7,k]) + [0,0,0,1,0,0,0],nPix=psfao.ao.cam.fovInPix))
+            # Instantiating the multiple-stars image model
+            coo_stars = np.array([y_s , x_s])* psInArcsec
+            psfao     = psfao21(path_ini , coo_stars = coo_stars)
         
+            # performing the fit
+            res = psfFitting(sub_im[k],psfao,x0+xstars,fixed=fixed,verbose=verbose,gtol=tol,ftol=tol,xtol=tol)
+            
+            # getting the PSFs coordinates
+            y = coo_seg[k,0]
+            x = coo_seg[k,1]
+            r = np.hypot(y,x)
+            
+            # getting psfs-based metrics
+            psf_metrics = [res.SR_sky,res.SR_fit,res.FWHMx_sky,res.FWHMy_sky,res.FWHMx_fit,res.FWHMy_fit,res.mse]
+            
+            # concatenating parameters
+            X[:,k]      = list(res.x[0:nParam]) + list(res.xerr[0:nParam]) + [y,x,r] + psf_metrics
+            fit_ok[k]   = True
+            if display:
+                displayResults(psfao,res)
+            
+    #  ----------- Regenerating PSFs
+    psfao = psfao21(path_ini , coo_stars = np.array([0.0 , 0.0]))
+    r0 = np.median(X[0,fit_ok])
+    for k in range(nPSF):
+        if fit_ok[k]:
+            psfs_out[k] = imageModel(psfao([r0] + list(X[1:7,k]) + [0,0,0,1,0,0,0],nPix=psfao.ao.cam.fovInPix))
+    
     return X , psfs_out
-
+            
 def interpolate_psfs_in_fov(psfs_in,coo_in,coo_out,X,nPSFMax=1,nNeighbors=4):
     '''
     Spatially interpolate the psfs at the coo_out coordinates from a input grid of PSFs obtained at coo_psfs.
@@ -426,8 +417,11 @@ def interpolate_psfs_in_fov(psfs_in,coo_in,coo_out,X,nPSFMax=1,nNeighbors=4):
         - psfs_in, a 3D numpy array of size nPSF x nPx x nPx
         - coo_in, a 2D numpy array of size nPSF x 2 containing the y/x coordinates
         - coo_out, a 2D numpy array of size nOut x 2 containing the targetted coordinates
+        - X, a 2D numpy array of size (2*nParam + 10) x nPSF containing the retrieved parameters from the fit
+        - nPSFMax, the number of fitted sub-images per segment, default=1
+        - nNeighbors : the number of closest neighbors to be accounted for during the interpolation
     OUTPUTS:
-        - 
+        - psfs_out, the 3D numpy array of size nOut x nPx x nPx containing the interpolated PSFs.
     '''
     #allocating memory
     nPSF , nPx, _ = psfs_in.shape
