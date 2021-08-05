@@ -9,7 +9,7 @@ Created on Mon Apr 19 11:34:44 2021
 # IMPORTING PYTHON LIBRAIRIES
 import numpy as np
 import aoSystem.FourierUtils as FourierUtils
-from aoSystem.anisoplanatismModel import anisoplanatismStructureFunction
+from aoSystem.anisoplanatismModel import anisoplanatism_structure_function
 import time
 
 #%%
@@ -219,24 +219,20 @@ class frequencyDomain():
             else:
                 self.isAniso = True
                 self.dani_ang = \
-                anisoplanatismStructureFunction(self.ao.tel,self.ao.atm,self.ao.src,
+                anisoplanatism_structure_function(self.ao.tel,self.ao.atm,self.ao.src,
                                                 self.ao.ngs,self.ao.ngs,self.nOtf,
                                                 self.sampRef,self.ao.dms.nActu1D)
                 return (self.dani_ang *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         
         elif self.ao.aoMode == 'SLAO':
             # LGS case : focal-angular  + anisokinetism
-            if np.all(self.ao.src.direction == self.ao.lgs.direction):
-                self.isAniso = False
-                return None
-            else:
-                self.isAniso = True
-                self.dani_focang,self.dani_ang,self.dani_tt = \
-                anisoplanatismStructureFunction(self.ao.tel,self.ao.atm,self.ao.src,
-                                                self.ao.lgs,self.ao.ngs,self.nOtf,
-                                                self.sampRef,self.ao.dms.nActu1D)#self.trs.mat.Hdm)
+            self.isAniso = True
+            self.dani_focang,self.dani_ang,self.dani_tt = \
+            anisoplanatism_structure_function(self.ao.tel,self.ao.atm,self.ao.src,
+                                            self.ao.lgs,self.ao.ngs,self.nOtf,
+                                            self.sampRef,self.ao.dms.nActu1D)#self.trs.mat.Hdm)
                 
-                return ( (self.dani_focang + self.dani_tt) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
+            return ( (self.dani_focang + self.dani_tt) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         else:
             self.isAniso = False
             return None

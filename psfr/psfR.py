@@ -13,7 +13,6 @@ import numpy.fft as fft
 
 from aoSystem.aoSystem import aoSystem
 from aoSystem.fourierModel import fourierModel
-from aoSystem.anisoplanatismModel import anisoplanatismStructureFunction
 import aoSystem.FourierUtils as FourierUtils
 import psfr.psfrUtils as psfrUtils
 from aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
@@ -82,9 +81,13 @@ class psfR:
                 if self.freq.isAniso:
                     self.dphi_ani = self.freq.dani_ang
             else:
-                self.dani_focang, self.dani_ang, self.dani_tt = anisoplanatismStructureFunction(\
-                self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,\
-                self.freq.nOtf,self.freq.sampRef,self.ao.dms.nActu1D,Hfilter=1)#self.trs.mat.Hdm)  
+                #self.dani_focang, self.dani_ang, self.dani_tt = anisoplanatism_structure_function(\
+                #self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,\
+                #self.freq.nOtf,self.freq.sampRef,self.ao.dms.nActu1D,Hfilter=1)#self.trs.mat.Hdm)  
+                
+                self.dani_focang = self.freq.dani_focang
+                self.dani_ang = self.freq.dani_ang
+                self.dani_tt  = self.freq.dani_tt
                 self.dphi_ani = self.dani_focang + self.dani_tt
             
             # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION

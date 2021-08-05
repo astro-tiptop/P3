@@ -8,27 +8,49 @@ Created on Mon Apr  5 14:54:57 2021
 import numpy as np
 import aoSystem.FourierUtils as FourierUtils
 
-def anisoplanatismStructureFunction(tel,atm,src,lgs,ngs,nOtf,samp,nActu,Hfilter=1):
+
+
+def focal_anisoplanatism_variance(tel,atm,lgs):
+    '''
+        Compute the variance of the focal anisoplanatism due to the finite altitude of the LGS in SLAO mode
+        INPUTS:
+            - tel, atm and lgs objects
+        OUTPUTS
+            - wfe, the focal anisoplanatism error in nm
+    '''
+    
+    var = 0
+    zLgs = float(lgs.height)
+    for k in range(atm.nL):
+        if atm.heights[k] > 0:
+            var1 = 0.5*(atm.heights[k]/zLgs)**(5/3)
+            var2 = 0.425*(atm.heights[k]/zLgs)**2
+            var  += atm.weights[k] * (var1 - var2)
+              
+    wfe = np.sqrt(var * (tel.D/atm.r0)**(5/3)) * (atm.wvl*1e9/2/np.pi)
+    return wfe
+    
+def anisoplanatism_structure_function(tel,atm,src,lgs,ngs,nOtf,samp,nActu,Hfilter=1):
         
     if (lgs==None) or (lgs.height == 0):
         # NGS mode, angular anisoplanatism 
-        dani_ang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,ngs,nOtf,samp,nActu,Hfilter=Hfilter)
+        dani_ang = angular_focal_anisoplanatism_phase_structure_function(tel,atm,src,ngs,nOtf,samp,nActu,Hfilter=Hfilter)
         return dani_ang
     else:
         # LGS mode, focal-angular anisoplanatism + anisokinetism
         # angular + focal anisoplanatism
         H = lgs.height
-        dani_focang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,lgs,nOtf,samp,nActu,Hfilter=Hfilter)
+        dani_focang = angular_focal_anisoplanatism_phase_structure_function(tel,atm,src,lgs,nOtf,samp,nActu,Hfilter=Hfilter)
         # angular anisoplanatism only
         lgs.height = 0
-        dani_ang = AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,lgs,nOtf,samp,nActu,Hfilter=Hfilter)
+        dani_ang = angular_focal_anisoplanatism_phase_structure_function(tel,atm,src,lgs,nOtf,samp,nActu,Hfilter=Hfilter)
         #np.zeros((src.nSrc,atm.nL,nOtf,nOtf))#
         lgs.height = H
         # anisokinetism
-        dani_tt = AnisokinetismPhaseStructureFunction(tel,atm,src,ngs,nOtf,samp)
+        dani_tt = anisokinetism_phase_structure_function(tel,atm,src,ngs,nOtf,samp)
         return dani_focang, dani_ang, dani_tt
-    
-def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,nActu,Hfilter=1):
+
+def angular_focal_anisoplanatism_phase_structure_function(tel,atm,src,gs,nOtf,samp,nActu,Hfilter=1):
     """
     """
     
@@ -44,7 +66,7 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,nA
     #2\ SF Calculation
     
     # !!!!! #HACKING FOR TESTING !!!
-    #gs.height = 0 
+    gs.height = 0 
     # !!!!
     
     nOtf_hr = nOtf
@@ -96,7 +118,7 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,nA
                     else:
                         tmp   = Hfilter*(2*I0 - I1 - I2 + I3 - I4 - I5 + I6)*Hfilter.T
                     
-                    # need to compute the covariance map
+                    # need to compute the covariance map !!
                     
                     # interpolating
                     if nOtf != nOtf_hr:
@@ -113,7 +135,7 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,nA
         
     return cte*Dani_l
 
-def AnisokinetismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp):
+def anisokinetism_phase_structure_function(tel,atm,src,gs,nOtf,samp):
     """
     """
     

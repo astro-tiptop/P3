@@ -20,6 +20,7 @@ from aoSystem.deformableMirror import deformableMirror
 from aoSystem.detector import detector
 from aoSystem.sensor import sensor
 from aoSystem.rtc import rtc
+import aoSystem.anisoplanatismModel as anisoplanatismModel
 
 #%%
 class aoSystem():
@@ -756,8 +757,10 @@ class aoSystem():
         
         # DM fitting error
         self.wfe['DM fitting'] = rad2nm(0.23*dactur053)
+        
         # Aliasing error
         self.wfe['WFS aliasing'] = rad2nm(0.07*dsubr053)      
+        
         # Servo-lag errors
         ff = np.pi*0.5**2 # to account for the loss of valid actuator outside the pupil
         nMax = int(np.sqrt(ff)*(self.dms.nControlledRadialOrder[0]+1))
@@ -769,6 +772,7 @@ class aoSystem():
         nrad  = np.array(range(nMin,nMax))
         self.wfe['HO Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.holoop['bandwidth'])\
                                     * Dr053 * np.sum((nrad+1)**(-2/3)))
+        
         # Noise errors        
         if self.wfs.processing.noiseVar == [None]:
             varNoise = self.wfs.NoiseVariance(self.atm.r0 ,self.atm.wvl)
@@ -789,10 +793,18 @@ class aoSystem():
         else:
             self.wfe['TT Servo-lag'] = 0
             self.wfe['TT Noise'] = 0
-        # TO be added : anisoplanatisms
         
+        # Focal anisoplanatism
+        if self.lgs:
+            self.wfe['Focal anisoplanatism'] = anisoplanatismModel.focal_anisoplanatism_variance(self.tel,self.atm,self.lgs)
+        else:
+            self.wfe['Focal anisoplanatism'] = 0
+            
+        # TO be added : angular anisoplanatisms
+           
         self.wfe['Total'] = np.sqrt(self.wfe['DM fitting']**2 + self.wfe['WFS aliasing']**2\
                                     + self.wfe['HO Servo-lag']**2 + self.wfe['HO Noise']**2\
-                                    + self.wfe['TT Servo-lag']**2 + self.wfe['TT Noise']**2)
+                                    + self.wfe['TT Servo-lag']**2 + self.wfe['TT Noise']**2\
+                                    + self.wfe['Focal anisoplanatism']**2)
         self.wfe['Strehl'] = np.exp(-self.wfe['Total']**2 * (2*np.pi*1e-9/self.src.wvl[0])**2)
         
