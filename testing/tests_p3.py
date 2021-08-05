@@ -20,6 +20,7 @@ import aoSystem.FourierUtils as FourierUtils
 
 import psfao21 as psfao21Main
 from telemetry.telemetryKeck import telemetryKeck
+from telemetry.telemetryKASP import telemetryKASP
 from telemetry.systemDiagnosis import systemDiagnosis
 from telemetry.configFile import configFile
 from psfr.psfR import psfR
@@ -67,7 +68,7 @@ filename   = 'n0004_fullNGS_trs.sav'
 
 #%% TEST THE SPATIAL FREQUENCY ADAPTIVE OPTICS MODEL
 
-def TestFourierFitting():
+def test_Fourier_fitting():
     '''
        Test the fitting of the Fourier model 
     '''
@@ -86,7 +87,7 @@ def TestFourierFitting():
 
 #%% TEST THE PSFAO21 MODEL
 
-def TestPsfao21Instantiation():
+def test_psfao21_instantiation():
     '''
         Test the instantiation of the PSFAO21 model
     '''
@@ -218,7 +219,7 @@ def TestPsfao21Instantiation():
     
     return psfao
     
-def TestPsfao21Fitting():
+def test_psfao21_fitting():
     '''
         Test the fitting of a NIRC2 image with the PSFAO21 model with two strategies:
             - joint fitting of PSD parameters and static aberrations
@@ -301,14 +302,49 @@ def TestPsfao21Fitting():
 
 
 #%% PSF RECONSTRUCTION
-def TestPSFR(path_trs):
+
+def test_kasp_psfr(path_mat,path_save,true_r0 = True,tol=1e-5):
+    ''' Test the interface with the KASP .mat output file.
+    '''
+    
+    # instantiating/processing the telemetry and creating the .ini file
+    trs = telemetryKASP(path_mat,path_save=path_save)
+    r0_true = trs.atm.r0
+    L0_true = trs.atm.L0
+    sd  = systemDiagnosis(trs,noiseMethod='nonoise')        
+    if true_r0:
+        trs.atm.r0_tel = r0_true
+        trs.atm.r0     = r0_true
+        trs.atm.L0_tel = L0_true
+        trs.atm.L0     = L0_true
+        trs.atm.seeing = 3600*180/np.pi*0.98*trs.atm.wvl/r0_true
+    configFile(sd)
+    
+    # get the psf
+    psfr = psfR(trs)
+    if psfr.ao.atm.nL > 1:
+        Cn2 = list(np.array(trs.atm.Cn2) * (trs.atm.wvl/trs.cam.wvl[0])**2)
+    else:
+        Cn2 = [trs.atm.r0 * (trs.cam.wvl/trs.atm.wvl)**1.2]
+    x0  = Cn2 + [1,1] + [1,0,0,0]
+    
+    fixed = (True,)*(psfr.ao.atm.nL + 2)+(False,)*3 + (True,)
+    
+    #adjust the flux and the position
+    res   = psfFitting(psfr.trs.cam.image,psfr,x0,verbose=2,fixed=fixed,\
+                       ftol=tol,xtol=tol,gtol=tol)
+    displayResults(psfr,res,scale='log10abs')
+    
+    return psfr , res
+    
+def test_psfr(path_trs):
     ''' Test the PSF reconstruction
     '''
     
     # Get the telemetry
-    trs = TestTelemetry(path_trs)
-    sd  = TestSystemDiagnosis(trs)
-    TestConfigFile(sd)
+    trs = test_telemetry(path_trs)
+    sd  = test_systemDiagnosis(trs)
+    test_configFile(sd)
     
     # Get the PSF
     psfr = psfR(sd.trs)
@@ -320,8 +356,8 @@ def TestPSFR(path_trs):
     
     return psfr
 
-def TestPSFRFitting(psfr):
-    ''' Test the PRIME
+def test_prime(psfr):
+    ''' Test the PRIME approach
     '''
     # Do the fitting of photometri/astrometri/background
     x0   = [0.7,1.0,1.0,1.0,0.0,0.0,0.0]
@@ -331,7 +367,7 @@ def TestPSFRFitting(psfr):
     
     return res
        
-def TestTelemetry(path_trs):
+def test_telemetry(path_trs):
     ''' Test the instantiation of the telemetryKeck object
     '''
     
@@ -349,7 +385,7 @@ def TestTelemetry(path_trs):
     
     return trs
 
-def TestSystemDiagnosis(trs):
+def test_systemDiagnosis(trs):
     ''' Test the instantiation of the telemetryKeck and systemDiagnosis objects
     '''
     
@@ -357,7 +393,7 @@ def TestSystemDiagnosis(trs):
     
     return sd
 
-def TestConfigFile(sd):
+def test_configFile(sd):
     ''' Test the instantiation of the telemetryKeck, systemDiagnosis and configFile objects
     '''
 
@@ -366,8 +402,8 @@ def TestConfigFile(sd):
     return cfg
 
 #%% RUN FUNCTIONS
-TestFourierFitting()
-TestPsfao21Instantiation()
-TestPsfao21Fitting()
-psfr = TestPSFR(path_root)
-TestPSFRFitting(psfr)
+test_Fourier_fitting()
+test_psfao21_instantiation()
+test_psfao21_fitting()
+psfr = test_psfr(path_root)
+res  = test_prime(psfr)

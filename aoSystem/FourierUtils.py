@@ -257,7 +257,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         
         PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
         SR  = np.zeros((ao.src.nSrc,freq.nWvl))
-        
+
         # DEFINING THE RESIDUAL JITTER KERNEL
         if jitterX!=0 or jitterY!=0:        
             # Gaussian kernel
@@ -297,7 +297,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
                              xStat=xStat,theta_ext=theta_ext,spatialFilter=spatialFilter)
                 
             # UPDATE THE RESIDUAL JITTER
-            if freq.nyquistSampling == True and freq.nWvl > 1 and (np.any(ao.cam.spotFWHM)):
+            if freq.nyquistSampling == True and freq.nWvl > 1 and (jitterX!=0 or jitterY!=0):
                 normFact2    = ff_jitter*(freq.samp[jWvl]*ao.tel.D/freq.wvl[jWvl]/(3600*180*1e3/np.pi))**2  * (2 * np.sqrt(2*np.log(2)))**2
                 Kjitter = np.exp(-0.5 * Djitter * normFact2/normFact)    
                           
@@ -393,9 +393,16 @@ def cropSupport(im,n):
             
 def enlargeSupport(im,n):
     
-    nx,ny  = im.shape
-    return np.pad(im,[int((n-1)*nx/2),int((n-1)*ny/2)])
-    
+    if len(im.shape) == 2:
+        nx,ny  = im.shape
+        return np.pad(im,[int((n-1)*nx/2),int((n-1)*ny/2)])
+    elif len(im.shape) == 3:
+        nx,ny,nz  = im.shape
+        if (nz < nx) and (nz < ny):
+            return np.pad(im,[int((n-1)*nx/2),int((n-1)*ny/2),(0,0)])
+        else:
+            return np.pad(im,[(0,0) , int((n-1)*ny/2),int((n-1)*nz/2)])
+        
 def inpolygon(xq, yq, xv, yv):
         shape = xq.shape
         xq = xq.reshape(-1)

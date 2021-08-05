@@ -33,7 +33,7 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,nA
     """
     
     #1\ Defining the spatial filters
-    umax    = tel.D * max([1,samp/2])
+    umax    = tel.D * max([1,samp])
     f0      = 2*np.pi/atm.L0
     nLayer  = atm.nL
     Hs      = atm.heights * tel.airmass

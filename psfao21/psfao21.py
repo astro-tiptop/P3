@@ -203,15 +203,23 @@ class psfao21:
             
         # PSD
         x0_psd = list(xall[nL:nL+6])
+        
         # Jitter
         x0_jitter = list(xall[nL+6:nL+9])
+        
         # Astrometry/Photometry/Background
-        x0_stellar = np.array(xall[nL+9:nL+10+3*self.ao.src.nSrc])
+        x0_stellar = np.array(xall[nL+9:nL+10+3*self.ao.src.nSrc*self.freq.nWvl])
+
         if len(x0_stellar):
-            F  = x0_stellar[0:self.ao.src.nSrc][:,np.newaxis] * np.array(self.ao.cam.transmittance)[np.newaxis,:]
-            dx = x0_stellar[self.ao.src.nSrc:2*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
-            dy = x0_stellar[2*self.ao.src.nSrc:3*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
-            bkg= x0_stellar[3*self.ao.src.nSrc]
+            nn = self.ao.src.nSrc*self.freq.nWvl
+            F  = x0_stellar[0:nn].reshape((self.ao.src.nSrc,self.freq.nWvl))
+            dx = x0_stellar[nn:2*nn].reshape((self.ao.src.nSrc,self.freq.nWvl))
+            dy = x0_stellar[2*nn:3*nn].reshape((self.ao.src.nSrc,self.freq.nWvl))
+            if self.freq.nWvl == 1:
+                F  = x0_stellar[0:self.ao.src.nSrc*self.freq.nWvl][:,np.newaxis] * np.array(self.ao.cam.transmittance)[np.newaxis,:]
+                dx = x0_stellar[self.ao.src.nSrc:2*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
+                dy = x0_stellar[2*self.ao.src.nSrc:3*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
+            bkg= x0_stellar[3*nn:]
         else:
             F  = np.repeat(np.array(self.ao.cam.transmittance)[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
             dx = np.repeat(np.array(self.ao.cam.dispersion[0])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)

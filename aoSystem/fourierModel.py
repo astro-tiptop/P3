@@ -638,8 +638,8 @@ class fourierModel:
                 th  = self.ao.src.direction[:,s] - self.gs.direction[:,0]
                 if np.any(th):
                     A = np.zeros((nK,nK))
-                    for l in range(self.atm.nL):                
-                        A   = A + Ws[l]*np.exp(2*i*np.pi*Hs[l]*(self.kxAO_*th[1] + self.kyAO_*th[0]))            
+                    for l in range(self.ao.atm.nL):                
+                        A   = A + Ws[l]*np.exp(2*i*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]))            
                 else:
                     A = np.ones((self.freq.resAO,self.freq.resAO))
           

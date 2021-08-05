@@ -36,23 +36,17 @@ class telemetryKeck:
         else:
             # Check the telemetry file
             if os.path.isfile(path_trs) == False:
-                print('%%%%%%%% ERROR %%%%%%%%')
-                print('The sav file does not exist\n')
-                return
+                raise ValueError('Error : the sav file does not exist\n')
             
         # Check the presence of the calibration folder
         self.path_calib = path_calib
         if os.path.isdir(path_calib) == False:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The calibration folder does not exist\n')
-            return
+            raise ValueError('Error : the calibration folder does not exist\n')
             
         # Check the image file
         self.path_img = path_img
         if os.path.isfile(path_img) == False:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The image file does not exist\n')
-            return
+            raise ValueError('Error : the image file does not exist\n')
         
         self.path_save = path_save
         self.addNCPA   = addNCPA
@@ -125,9 +119,7 @@ class telemetryKeck:
         self.tipTilt.tilt2meter  = [] # arcsec of tilt to OPD over the Keckpupil 
         self.tipTilt.pixel_scale = 800
         self.tipTilt.fov         = 3200
-        self.tipTilt.binning     = 1
         self.tipTilt.nph         = None
-        self.tipTilt.spot_fwhm   = [[0.0,0.0,0.0]]
         self.tipTilt.bw          = 0.0
         self.tipTilt.tr          = [1.0]
         self.tipTilt.disp        = [[0.0],[0.0]]

@@ -33,28 +33,32 @@ class systemDiagnosis:
         
         self.trs = trs
         
-        # Transfer function
+        # MODEL THE TRANSFER FUNCTIONS
         self.temporal_transfer_function()
         
-        # noise
+        # GET THE NOISE VARIANCE
         self.noiseMethod = noiseMethod
         if hasattr(self.trs.wfs,'intensity') or hasattr(self.trs.tipTilt,'intensity'):
             self.trs.wfs.nph,self.trs.wfs.ron,self.trs.tipTilt.nph,self.trs.tipTilt.ron = self.get_number_photons()
             
         self.trs.wfs.Cn_ao,self.trs.tipTilt.Cn_tt = self.get_noise_variance(noiseMethod=self.noiseMethod,nshift=nshift,nfit=nfit)
         
-        # GET THE VARIANCE
-        Cnn = np.diag(self.trs.wfs.Cn_ao)
-        Cnn = Cnn[Cnn!=0]
-        self.trs.wfs.noiseVar = [(2*np.pi/self.trs.wfs.wvl)**2 *np.mean(Cnn),]*len(self.trs.wfs.nSubap)
-        if self.trs.aoMode == 'LGS':
-            self.trs.tipTilt.noiseVar = [(2*np.pi/self.trs.tipTilt.wvl)**2 *np.mean(np.diag(self.trs.tipTilt.Cn_tt))]
+        if np.any(self.trs.wfs.Cn_ao):
+            Cnn = np.diag(self.trs.wfs.Cn_ao)
+            Cnn = Cnn[Cnn!=0]
+            self.trs.wfs.noiseVar = [(2*np.pi/self.trs.wfs.wvl)**2 *np.mean(Cnn),]*len(self.trs.wfs.nSubap)
+            if self.trs.aoMode == 'LGS':
+                self.trs.tipTilt.noiseVar = [(2*np.pi/self.trs.tipTilt.wvl)**2 *np.mean(np.diag(self.trs.tipTilt.Cn_tt))]
+            else:
+                self.trs.tipTilt.noiseVar = [(2*np.pi/self.trs.wfs.wvl)**2 *np.mean(np.diag(self.trs.tipTilt.Cn_tt))]
         else:
-            self.trs.tipTilt.noiseVar = [(2*np.pi/self.trs.wfs.wvl)**2 *np.mean(np.diag(self.trs.tipTilt.Cn_tt))]
-        # Zernike
+            self.trs.wfs.noiseVar     = [0]
+            self.trs.tipTilt.noiseVar = [0]
+            
+        # ZERNIKE RECONSTRUCTION
         self.trs.wfs.Cz_ao, self.trs.tipTilt.Cz_tt = self.reconstruct_zernike(nZer=nZer,j0=j0,Dout=Dout,Din=Din)
         
-        # Atmosphere statistics
+        # GET ATMOSPHERE STATISTICS
         r0, L0, tau0, v0, dr0, dL0, dtau0, dv0 = self.get_atmosphere_statistics(noise=noise,quantile=quantile,nWin=nWin,Dout=Dout)
         self.trs.atm.r0_tel   = r0
         self.trs.atm.L0_tel   = L0
@@ -200,8 +204,10 @@ class systemDiagnosis:
             return Cnn
             
         if noiseMethod == 'nonoise':
-            Cn_ao = 0
-            Cn_tt = 0
+            nU    = self.trs.dm.com.shape[1]
+            Cn_ao = np.zeros((nU,nU))
+            nT    = self.trs.tipTilt.slopes.shape[1]
+            Cn_tt = np.zeros((nT,nT))
             
         else:
             rtf  = self.trs.holoop.tf.ctf/self.trs.holoop.tf.wfs
@@ -214,12 +220,17 @@ class systemDiagnosis:
      
 #%%    
     def select_actuators(self,Din=None,Dout=None):
-        iF   = np.copy(self.trs.mat.dmIF)
+        iF   = self.trs.mat.dmIF.copy()
+        #import pdb
+        #pdb.set_trace()
         nAct = iF.shape[-1]
         
         if (not Din) and (not Dout):
             actuInPupil = self.trs.dm.validActuators.reshape(-1).nonzero()[0]
-            return iF[:,actuInPupil], actuInPupil
+            if nAct == len(actuInPupil):
+                return iF, np.ones(nAct).astype(bool)
+            else:
+                return iF[:,actuInPupil], actuInPupil
         else:
             # resolution
             nPix      = int(np.sqrt(iF.shape[0]))
@@ -256,6 +267,7 @@ class systemDiagnosis:
         
         # ----  DEFINING ZERNIKE MODES
         # select actuators
+        
         nPix = self.trs.tel.resolution
         iF , self.actuInPupil = self.select_actuators(Dout=Dout,Din=Din)
         # Noll's indexes
@@ -289,7 +301,7 @@ class systemDiagnosis:
         self.trs.dm.u_ol      = self.trs.dm.com + self.trs.dm.com_delta
         self.trs.dm.u_ol     -= np.mean(self.trs.dm.u_ol,axis=1)[:,np.newaxis]
         
-        # reconstructing the amplitude of Zernike coefficients
+        # reconstructing the amplitude of Zernike coefficients 
         self.trs.wfs.coeffs = np.dot(self.trs.mat.u2z,self.trs.dm.u_ol[:,self.actuInPupil].T)
         self.trs.wfs.coeffs -= np.mean(self.trs.wfs.coeffs,axis=1)[:,np.newaxis]
         Cz_ho  = np.dot(self.trs.wfs.coeffs,self.trs.wfs.coeffs.T)/self.trs.wfs.nExp

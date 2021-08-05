@@ -150,8 +150,11 @@ class frequencyDomain():
         self.nWvl    = self.nBin * self.nWvlCen #central wavelengths
         wvlCen_      = np.unique(self.ao.src.wvl)
         bw           = self.ao.cam.bandwidth
-        self.wvl_ = np.array([np.linspace(wvlCen_[k] - bw/2,wvlCen_[k] + bw/2,num=self.nBin).T[0] for k in range(self.nWvl)])
-  
+        self.wvl_    = np.zeros(self.nWvl)
+        for j in range(self.nWvlCen):
+            self.wvl_[j:(j+1)*self.nBin] = np.linspace(wvlCen_[j] - bw/2,wvlCen_[j] + bw/2,num=self.nBin)
+                
+        
         # MANAGING THE PIXEL SCALE
         t0 = time.time()
         if nyquistSampling:
@@ -182,7 +185,7 @@ class frequencyDomain():
         
         # ANISOPLANATISM PHASE STRUCTURE FUNCTION
         t0 = time.time()
-        if (self.ao.aoMode == 'NGS') or (self.ao.aoMode == 'LGS'):
+        if (self.ao.aoMode == 'SCAO') or (self.ao.aoMode == 'SLAO'):
             self.dphi_ani = self.anisoplanatismPhaseStructureFunction()
         else:
             self.isAniso = False
@@ -207,25 +210,32 @@ class frequencyDomain():
         
         # compute th Cn2 profile in m^(-5/3)
         Cn2 = self.ao.atm.weights * self.ao.atm.r0**(-5/3)
-        
-        if self.ao.aoMode == 'NGS':
+
+        if self.ao.aoMode == 'SCAO':
             # NGS case : angular-anisoplanatism only
             if np.all(self.ao.src.direction == self.ao.ngs.direction):
                 self.isAniso = False
                 return None
             else:
                 self.isAniso = True
-                self.dani_ang = anisoplanatismStructureFunction(self.ao.tel,self.ao.atm,self.ao.src,self.ao.ngs,self.ao.ngs,self.nOtf,self.sampRef)
+                self.dani_ang = \
+                anisoplanatismStructureFunction(self.ao.tel,self.ao.atm,self.ao.src,
+                                                self.ao.ngs,self.ao.ngs,self.nOtf,
+                                                self.sampRef,self.ao.dms.nActu1D)
                 return (self.dani_ang *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         
-        elif self.ao.aoMode == 'LGS':
+        elif self.ao.aoMode == 'SLAO':
             # LGS case : focal-angular  + anisokinetism
             if np.all(self.ao.src.direction == self.ao.lgs.direction):
                 self.isAniso = False
                 return None
             else:
                 self.isAniso = True
-                self.dani_focang,self.dani_ang,self.dani_tt = anisoplanatismStructureFunction(self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,self.nOtf,self.sampRef,Hfilter=self.trs.mat.Hdm)
+                self.dani_focang,self.dani_ang,self.dani_tt = \
+                anisoplanatismStructureFunction(self.ao.tel,self.ao.atm,self.ao.src,
+                                                self.ao.lgs,self.ao.ngs,self.nOtf,
+                                                self.sampRef,self.ao.dms.nActu1D,
+                                                Hfilter=self.trs.mat.Hdm)
                 return ( (self.dani_focang.T + self.dani_tt.T) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         else:
             self.isAniso = False

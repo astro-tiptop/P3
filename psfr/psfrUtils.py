@@ -116,8 +116,8 @@ def modes2Otf(Cmm,modes,pupil,nOtf,samp=2,basis='Vii'):
             
     if (np.any(Cmm)) & (basis == 'Vii'):
         # Diagonalizing the Cvv matrix
-        U,s,V   = np.linalg.svd(Cmm)
-        nModes  = len(s)
+        U,ss,V   = np.linalg.svd(Cmm)
+        nModes  = len(ss)
         M       = np.matmul(modes,U)
         #loop on actuators                
         buf     = np.zeros_like(pupExtended)
@@ -128,7 +128,7 @@ def modes2Otf(Cmm,modes,pupil,nOtf,samp=2,basis='Vii'):
             # Vii computation
             Vk   = np.real(fft.fft2(Mk**2 *pupExtended)*conjPupFft) - abs(fft.fft2(Mk*pupExtended))**2
             # Summing modes into dm basis
-            buf += s[k] * Vk
+            buf  = buf +  ss[k] * Vk
                         
         dphi     = den*fft.fftshift(np.real(fft.fft2(2*buf)))
         otf      = G*np.exp(-0.5*dphi)

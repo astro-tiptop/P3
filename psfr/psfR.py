@@ -41,6 +41,14 @@ class psfR:
         self.theta_ext = theta_ext
         self.ao        = aoSystem(self.path_ini,path_root=path_root)
         self.tag       = 'PSF-R'
+        
+        # CHECK THE PUPIL
+        if self.ao.tel.path_pupil == '' and np.any(trs.tel.pupil):
+            self.ao.tel.pupil = self.trs.tel.pupil
+        
+        if self.ao.tel.path_static_on and hasattr(trs.tel,'map_ncpa')and np.any(trs.tel.map_ncpa):
+            self.ao.tel.opdMap_on = trs.tel.map_ncpa
+        
         if self.ao.error == False:
             
             # DEFINING THE FREQUENCY DOMAIN
@@ -68,9 +76,11 @@ class psfR:
 
             # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
             if (self.ao.lgs==None) or (self.ao.lgs.height == 0):
-                self.dphi_ani = anisoplanatismStructureFunction(\
-                self.ao.tel,self.ao.atm,self.ao.src,self.ao.ngs,self.ao.ngs,\
-                self.freq.nOtf,self.freq.sampRef,self.ao.dms.nActu1D,Hfilter=1)#self.trs.mat.Hdm)        
+                #self.dphi_ani = anisoplanatismStructureFunction(\
+                #self.ao.tel,self.ao.atm,self.ao.src,self.ao.ngs,self.ao.ngs,\
+                #self.freq.nOtf,self.freq.sampRef,self.ao.dms.nActu1D,Hfilter=1)#self.trs.mat.Hdm)  
+                if self.freq.isAniso:
+                    self.dphi_ani = self.freq.dani_ang
             else:
                 self.dani_focang, self.dani_ang, self.dani_tt = anisoplanatismStructureFunction(\
                 self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,\
@@ -78,7 +88,7 @@ class psfR:
                 self.dphi_ani = self.dani_focang + self.dani_tt
             
             # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION
-            if self.trs.tel.name != 'simulation':
+            if self.trs.tel.name != 'KASP':
                 self.otfPixel = self.pixelOpticalTransferFunction()
             else:
                 self.otfPixel = 1.0
@@ -155,20 +165,22 @@ class psfR:
         """
         """
         # computing the empirical covariance matrix of the residual tip-tilt in meter
-        self.Ctt = np.matmul(self.trs.tipTilt.slopes.T,self.trs.tipTilt.slopes)/self.trs.tipTilt.nExp
+        self.Ctt = np.dot(self.trs.tipTilt.slopes.T,self.trs.tipTilt.slopes)/self.trs.tipTilt.nExp
         
         # computing the coefficients of the Gaussian Kernel in rad^2
         Guu = (2*np.pi/self.freq.wvlRef)**2 *(self.Ctt - self.trs.tipTilt.Cn_tt) 
         
         # rotating the axes
         ang = self.trs.tel.pupilAngle * np.pi/180
-        Ur  = self.freq.U_*np.cos(ang) + self.freq.V_*np.sin(ang)
-        Vr  =-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang)  
+        # freq.U_ ranges within [-1,1]; factor 2 to account for the TT normalization
+        Ur  = 2*(self.freq.U_*np.cos(ang) + self.freq.V_*np.sin(ang))
+        Vr  = 2*(-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang))
         
         # computing the Gaussian-Kernel
         dphi_tt = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 + Guu[0,1]*Ur*Vr.T + Guu[1,0]*Vr*Ur.T
         
-        return dphi_tt * (self.ao.tel.D/2)**2
+        return dphi_tt
+        
     
     def pixelOpticalTransferFunction(self):
         """
@@ -178,13 +190,16 @@ class psfR:
         return otfPixel
 
     def TotalPhaseStructureFunction(self,r0,gho,gtt,Cn2=[]):
+        
         # On-axis phase structure function
         SF   = gho*self.dphi_ao + gtt*self.dphi_tt + r0**(-5/3) * (self.dphi_fit + self.dphi_alias)
+        
         # Anisoplanatism phase structure function
         if self.freq.isAniso and (len(Cn2) == self.freq.dani_ang.shape[1]):
-            SF = SF[:,:,np.newaxis] + (self.dphi_ani * Cn2).sum(axis=2)
+            SF = SF[:,:,np.newaxis] + (self.dphi_ani.transpose(2,3,1,0) * Cn2[:,np.newaxis]).sum(axis=2)
         else:
             SF = np.repeat(SF[:,:,np.newaxis],self.ao.src.nSrc,axis=2)
+            
         return SF/(2*np.pi*1e-9/self.freq.wvlRef)**2
     
     def __call__(self,x0,nPix=None):
@@ -237,7 +252,7 @@ class psfR:
             - an instance of the psfr object
         OUTPUTS
         '''
-        sr2fwe = lambda x: np.sqrt(-np.log(x))* self.trs.atm.wvl*1e9/2/np.pi
+        sr2fwe = lambda x: np.sqrt(-np.log(x))* self.freq.wvlRef*1e9/2/np.pi
         otf_dl = self.freq.otfDL
         S      = otf_dl.sum()
         self.wfe = dict()
@@ -250,7 +265,7 @@ class psfR:
             
         #2. DM FITTING ERROR
         if not r0:
-            r0 = self.trs.atm.r0
+            r0 = self.ao.atm.r0 * (self.freq.wvlRef/self.ao.atm.wvl)**1.2
         otf_fit = np.exp(-0.5 * r0**(-5/3) * self.dphi_fit)
         sr_fit  = np.sum(otf_dl * otf_fit)/S
         self.wfe['FITTING'] = sr2fwe(sr_fit)
@@ -274,19 +289,24 @@ class psfR:
         #6. RESIDUAL TIP-TILT
         C = np.diag(self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt)
         self.wfe['TIP-TILT'] = np.sqrt(np.sum(C))*1e9
-        
+        #sr_tt                = np.sum( otf_dl * np.exp(-0.5*self.dphi_tt))/S
+        #self.wfe['TIP-TILT'] = sr2fwe(sr_tt)
+    
         #7. PIXEL TF
         sr_pixel = np.sum(otf_dl * self.otfPixel)/S
         self.wfe['PIXEL TF'] = np.sqrt(-np.log(sr_pixel))* self.freq.wvlRef*1e9/2/np.pi
       
         #8. ANISOPLANATISM
-        Cn2     = self.ao.atm.weights * self.ao.atm.r0**(-5/3) * (self.ao.atm.wvl/self.ao.src.wvl[0])**2
-        dani    = (self.dphi_ani[0].transpose(1,2,0) * Cn2).sum(axis=2)
-        otf_ani = np.exp(-0.5 * dani)
-        sr_ani  = np.sum(otf_dl * otf_ani)/S
-        self.wfe['TOTAL ANISOPLANATISM'] = sr2fwe(sr_ani)
+        if self.freq.isAniso:
+            Cn2     = self.ao.atm.weights * self.ao.atm.r0**(-5/3) * (self.ao.atm.wvl/self.ao.src.wvl[0])**2
+            dani    = (self.dphi_ani[0].transpose(1,2,0) * Cn2).sum(axis=2)
+            otf_ani = np.exp(-0.5 * dani)
+            sr_ani  = np.sum(otf_dl * otf_ani)/S
+            self.wfe['TOTAL ANISOPLANATISM'] = sr2fwe(sr_ani)
+        else:
+            self.wfe['TOTAL ANISOPLANATISM'] = 0
             
-        if self.trs.aoMode == 'LGS':
+        if self.trs.aoMode == 'LGS' and self.freq.isAniso:
             # Angular
             dani    = (self.dani_ang[0].transpose(1,2,0) * Cn2).sum(axis=2)
             otf_ani = np.exp(-0.5 * dani)
@@ -302,6 +322,10 @@ class psfR:
             otf_ani = np.exp(-0.5 * dani)
             sr_ani  = np.sum(otf_dl * otf_ani)/S
             self.wfe['FOCAL ANISOPLANATISM'] = np.sqrt(sr2fwe(sr_ani) **2 - self.wfe['ANGULAR ANISOPLANATISM']**2)
+        else:
+            self.wfe['ANGULAR ANISOPLANATISM'] = 0
+            self.wfe['ANISOKINETISM']          = 0
+            self.wfe['FOCAL ANISOPLANATISM']   = 0
             
         #9. TOTAL WFE
         self.wfe['TOTAL WFE'] =  np.sqrt(self.wfe['NCPA']**2 +  self.wfe['FITTING']**2
