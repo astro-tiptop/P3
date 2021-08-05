@@ -120,9 +120,11 @@ class telemetryKeck:
         self.tipTilt.pixel_scale = 800
         self.tipTilt.fov         = 3200
         self.tipTilt.nph         = None
+        self.tipTilt.binning     = 1
         self.tipTilt.bw          = 0.0
         self.tipTilt.tr          = [1.0]
         self.tipTilt.disp        = [[0.0],[0.0]]
+        self.tipTilt.spot_fwhm   = [[0.0,0.0,0.0]]
         self.tipTilt.ron         = 3.0
         self.tipTilt.dark        = 0.0
         self.tipTilt.sky         = 0.0
@@ -275,6 +277,8 @@ class telemetryKeck:
         self.atm.Cn2_mass    = [-1]
         self.atm.seeing_dimm = -1
         self.atm.seeing_mass = -1
+        
+       
         if status == 0:
             # default atmosphere : median conditions
             self.atm.seeing     = 3600*180/np.pi * 0.98*500e-9/0.16
@@ -283,7 +287,7 @@ class telemetryKeck:
             def AcqTime2hhmmss(acqtime):
                 StrTime = (acqtime.split('_')) 
                 return float(StrTime[0]) + float(StrTime[1])/60 + float(StrTime[2])/3600
-               
+                       
             hhmmss = AcqTime2hhmmss(self.acqtime)
             # read the DIMM data to get the seeing
             dimm = DIMM(self.path_massdimm + '/' + self.obsdate + '.dimm.dat')
@@ -294,7 +298,7 @@ class telemetryKeck:
             SeeingAlt   = mass.indexTime([hhmmss])[0][0]
             massprof    = MASSPROF(self.path_massdimm + '/' + self.obsdate + '.masspro.dat')
             Cn2Alt      = massprof.indexTime([hhmmss])[0].reshape(-1)
-            if np.all(Cn2Alt == -1):
+            if np.all(Cn2Alt == -1) or len(np.nonzero(Cn2Alt != Cn2Alt)[0]):
                 self.atm.seeing     = 3600*180/np.pi * 0.98*500e-9/0.16
                 self.atm.Cn2Weights = [0.517, 0.119, 0.063, 0.061, 0.105, 0.081, 0.054]
             else:

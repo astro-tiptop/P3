@@ -1043,7 +1043,14 @@ def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
        
     return Cn2eq,altEq
 
-
+def toeplitz(matrix):
+    n , m = matrix.shape
+    #diags = [matrix[::-1,:].diagonal(i) for i in range(-n+1,m)]
+    diags = [matrix.diagonal(i).sum() for i in range(0,m)]
+    
+    return diags
+    #print( [j.tolist() for j in diags] )
+            
 #%% Analytical models and fitting facilities
 def gaussian(x,xdata):                     
     # ------- Grabbing parameters ---------%

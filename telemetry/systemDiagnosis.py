@@ -29,7 +29,7 @@ arc2rad = 1/rad2arc
 class systemDiagnosis:
 
     def __init__(self,trs,noiseMethod='autocorrelation',nshift=1,nfit=2,\
-                 noise=1,quantile=0.95,nWin=10,nZer=None,j0=4,Dout=None,Din=None):
+                 noise=0,quantile=0.95,nWin=10,nZer=None,j0=4,Dout=None,Din=None):
         
         self.trs = trs
         
@@ -315,7 +315,7 @@ class systemDiagnosis:
         return Cz_ho, Cz_tt
     
     def get_atmosphere_statistics(self,ftol=1e-5,xtol=1e-5,gtol=1e-5,max_nfev=100,\
-                                noise=1,quantile=0.95,nWin=10,verbose=-1,Dout=None):
+                                noise=0,quantile=0.95,nWin=10,verbose=-1,Dout=None):
         
         # ---- DEFINING THE COST FUNCTIONS
         z = self.z
@@ -369,7 +369,7 @@ class systemDiagnosis:
         
         return r0, L0, tau0, v0 , dr0, dL0, dtau0, dv0
     
-    def get_wind_speed(self,thres = 1/np.exp(1),coeff=1.15,noise=1,nWin=10,quantile=0.95):
+    def get_wind_speed(self,thres = 1/np.exp(1),coeff=1.15,noise=0,nWin=10,quantile=0.95):
         
         def get_quantiles_student(quantile=0.95,nWin=10):
             # quantiles

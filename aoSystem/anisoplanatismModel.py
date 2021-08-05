@@ -42,10 +42,15 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,nA
     nSrc    = len(ax)
     
     #2\ SF Calculation
+    
+    # !!!!! #HACKING FOR TESTING !!!
+    #gs.height = 0 
+    # !!!!
+    
     nOtf_hr = nOtf
     if gs.height:
         # Must reduce nOtf to decrease the computationnal power and memory; causes Python crash otherwise
-        nOtf    = int(nActu * samp/2)
+        nOtf    = int(nActu * 2+1)#samp/2)
         
     Dani_l = np.zeros((nSrc,nLayer,nOtf_hr,nOtf_hr))
 
@@ -90,6 +95,8 @@ def AngularFocalAnisoplanatismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp,nA
                         tmp   = (2*I0 - I1 - I2 + I3 - I4 - I5 + I6)
                     else:
                         tmp   = Hfilter*(2*I0 - I1 - I2 + I3 - I4 - I5 + I6)*Hfilter.T
+                    
+                    # need to compute the covariance map
                     
                     # interpolating
                     if nOtf != nOtf_hr:
@@ -144,5 +151,5 @@ def AnisokinetismPhaseStructureFunction(tel,atm,src,gs,nOtf,samp):
                     # get the 2x2 anisokinetism covariance matrix
                     covAniso = zern.anisokinetism(tel,atm_l,src,gs)
                     # defining the Gaussian kernel
-                    Dani_l[iSrc,l] = (covAniso[0,0] * X2 + covAniso[1,1]*Y2 + covAniso[0,1]*XY + covAniso[1,0]*YX)/fr0
+                    Dani_l[iSrc,l] = 0.1*(covAniso[0,0] * X2 + covAniso[1,1]*Y2 + covAniso[0,1]*XY + covAniso[1,0]*YX)/fr0
     return Dani_l

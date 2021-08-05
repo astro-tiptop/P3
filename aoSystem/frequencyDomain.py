@@ -234,9 +234,9 @@ class frequencyDomain():
                 self.dani_focang,self.dani_ang,self.dani_tt = \
                 anisoplanatismStructureFunction(self.ao.tel,self.ao.atm,self.ao.src,
                                                 self.ao.lgs,self.ao.ngs,self.nOtf,
-                                                self.sampRef,self.ao.dms.nActu1D,
-                                                Hfilter=self.trs.mat.Hdm)
-                return ( (self.dani_focang.T + self.dani_tt.T) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
+                                                self.sampRef,self.ao.dms.nActu1D)#self.trs.mat.Hdm)
+                
+                return ( (self.dani_focang + self.dani_tt) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         else:
             self.isAniso = False
             return None

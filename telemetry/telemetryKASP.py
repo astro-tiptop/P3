@@ -38,7 +38,7 @@ class telemetryKASP:
         self.instantiating_fields()
         
         # reading the mat file
-        self.data_struct = loadmat(path_mat)['data_struct']
+        self.data_struct = loadmat(path_mat,struct_as_record=True)['data_struct']
         
         # populating fields
         self.populating_fields()
@@ -112,7 +112,9 @@ class telemetryKASP:
         self.tipTilt.dsub        = [None]
         self.tipTilt.algo        = 'cog'
         self.tipTilt.tilt2meter  = 1
+        self.tipTilt.binning     = 1
         self.tipTilt.nph         = None
+        self.tipTilt.spot_fwhm   = [[0.0,0.0,0.0]]
         self.tipTilt.bw          = 0.0
         self.tipTilt.tr          = [1.0]
         self.tipTilt.disp        = [[0.0],[0.0]]
@@ -266,12 +268,13 @@ class telemetryKASP:
         self.rec.wfe            = 1e9*np.sqrt(np.sum(np.std(self.rec.res,axis=0)**2)/self.dm.nCom)
         
         # TIP-TILT
-        if 'tt_psInMas' in self.data_struct:
+        if len(self.data_struct['lgs_azimuth'][0,0]) > 0:
+            self.tipTilt.wvl         = float(self.data_struct['ngs_wvl'])
             self.tipTilt.pixel_scale = float(self.data_struct['tt_psInMas'])
-            self.tipTilt.fov         = [int(self.data_struct['tt_fov'])]
+            self.tipTilt.fov         = int(self.data_struct['tt_fov'])
             self.tipTilt.ron         = float(self.data_struct['tt_ron'])
             self.tipTilt.nExp        = int(self.data_struct['tt_nexp'][0])
-            self.wfs.slopes          = np.dot(self.mat.SlopeTTRem,self.wfs.slopes)
+            self.wfs.slopes          = np.dot(self.mat.SlopeTTRem,self.wfs.slopes.T).T
             self.tipTilt.tilt2meter  = self.tipTilt.pixel_scale * self.tel.D/1e3/206264.8
             self.tipTilt.slopes      = self.tipTilt.tilt2meter*np.array(np.squeeze(self.data_struct['tt_slopes'][0,0] )).T
         else:
