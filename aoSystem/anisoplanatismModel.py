@@ -20,7 +20,7 @@ def focal_anisoplanatism_variance(tel,atm,lgs):
     '''
     
     var = 0
-    zLgs = float(lgs.height)
+    zLgs = float(lgs.height[0])
     for k in range(atm.nL):
         if atm.heights[k] > 0:
             var1 = 0.5*(atm.heights[k]/zLgs)**(5/3)
