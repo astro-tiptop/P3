@@ -6,7 +6,7 @@ Created on Wed Mar  3 17:43:20 2021
 @author: omartin
 """
 import argparse
-from dataGenerator import generatePSF
+from dataGenerator import generate_psf
 import sys
 
 # grab the path
@@ -34,9 +34,14 @@ def commandLine():
                         default=3500, type=int) 
     parser.add_argument('--savePath', help='Path to the saving folder',
                         default='', type=str) 
-    # MODEL
+    parser.add_argument('--ntest', help='Number of test data',
+                        default=0, type=float) 
+    # STATIC
     parser.add_argument('--addStatic', help='If true, add static aberrations to the model',
                         default=0, type=int) 
+    parser.add_argument('--nmodes', help='Number of modes to describe the static aberrations',
+                        default=9, type=int) 
+    # DETECTOR
     parser.add_argument('--mag', help='If not none, add Shot noise from sky/star and read-out noise',
                         default=0, type=int) 
     parser.add_argument('--zP', help='Zero point in mag/s',
@@ -52,7 +57,8 @@ def commandLine():
     parser.add_argument('--normType', help='Normalization strategy, 1:sum, 2:min-max, 3:sum inner circle, 4: sum positive, otherwise:normType',
                         default=1, type=int)  
     parser.add_argument('--bounds', help='Lower and upper bounds for r0 (500mn), C, A (nm), ax, p, beta and static aberrations (in wave ratio)',
-                        default=[[0.05,1e-3,80,1e-3,0.5,1.1,-0.1],[0.3,5e-2,390,5e-2,2,3.0,0.1]], type=list) 
+                        default=[[0.05,1e-3,80,1e-3,0.5,1.1,-0.1],
+                                 [0.3,5e-2,390,5e-2,2,3.0,0.1]], type=list) 
     args = parser.parse_args()
     return (args)
     
@@ -61,6 +67,8 @@ def commandLine():
 if __name__=='__main__':
     
     args = commandLine()
-    generatePSF(args.ini,nIntervals=args.nIntervals,nPSFperFolder=args.nPSFperFolder,addStatic=args.addStatic,\
-                mag=args.mag,zP=args.zP,DIT=args.DIT,nDIT=args.nDIT,skyMag=args.skyMag,ron=args.ron,\
-                normType=args.normType,savePath=args.savePath,bounds=args.bounds)
+    generate_psf(args.ini, n_inter=args.nIntervals, n_psf_folder=args.nPSFperFolder,
+                 add_static=args.addStatic, nmodes=args.nmodes, mag=args.mag, 
+                 zp=args.zP, dit=args.DIT, ndit=args.nDIT, sky_mag=args.skyMag, 
+                 ron=args.ron, norm=args.normType, save_path=args.savePath,
+                 bounds=args.bounds, n_test=args.ntest)
