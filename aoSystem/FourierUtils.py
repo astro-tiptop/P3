@@ -307,29 +307,33 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             otfTurb = np.exp(-0.5*sf*(2*np.pi*1e-9/freq.wvl[jWvl])**2)
             otfTot  = fft.fftshift(otfTurb * otfStat * fftPhasor[:,:,:,jWvl],axes=(0,1))
                         
-            # GET THE FINAL PSF
+            # GET THE FINAL PSF - PIXEL SCALE IS NYQUIST - FOV DIFFERENT PER WVL
             psf_ = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
             
             # managing the undersampling
             psf = np.copy(psf_)
             
-            if freq.k_[jWvl] >2: # binning the PSF
+            if freq.k_[jWvl] >= 1: # binning the PSF
                 psf = np.zeros((ao.cam.fovInPix,ao.cam.fovInPix,ao.src.nSrc))
+                nC = freq.k_[jWvl]#psf_.shape[0]/ao.cam.fovInPix
                 for iSrc in range(ao.src.nSrc):
-                    tmp           = binning(psf_[:,:,iSrc],int(freq.kRef_))
-                    psf[:,:,iSrc] = tmp
+                    if nC > 1:
+                        tmp = binning(psf_[:,:,iSrc],int(nC))
+                    else:
+                        tmp = psf_[:,:,iSrc]
+                        
+                    psf[:,:,iSrc] = cropSupport(tmp,tmp.shape[0]/ao.cam.fovInPix)
                 psf_ = psf
-                
+             
             # managing the field of view
             if nPix < ao.cam.fovInPix:
                 psf = np.zeros((nPix,nPix,ao.src.nSrc))
+                nC  = psf_.shape[0]/nPix
+                print(nC)
                 for iSrc in range(ao.src.nSrc):
-                    nC  = psf_[:,:,iSrc].shape[0]/nPix
-                    tmp = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)   
-                    psf[:,:,iSrc] = tmp #no nornalization here to account for the loss of photons
-                
+                    psf[:,:,iSrc] = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)                   
+
             # SCALING
-            
             PSF[:,:,:,jWvl] = psf * F[:,jWvl]
             
             # STREHL-RATIO COMPUTATION

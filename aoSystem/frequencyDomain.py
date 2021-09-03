@@ -60,7 +60,7 @@ class frequencyDomain():
         self.k_      = np.ceil(2.0/val).astype('int') # works for oversampling
         self.__samp  = self.k_ * val     
         if np.any(self.k_ > 2):
-            self.PSDstep= np.min(1/self.ao.tel.D/2)      
+            self.PSDstep= np.min(1/self.ao.tel.D/self.__samp)      
         else:
             self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)      
             

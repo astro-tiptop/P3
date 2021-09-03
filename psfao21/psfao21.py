@@ -23,22 +23,6 @@ from aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
 rad2mas = 3600 * 180 * 1000 / np.pi
 rad2arc = rad2mas / 1000
 
-def parse_input_param (x0):
-    """
-    Parsing the input param into a dictionary.
-
-    Args:
-        x0 ([type]): [description]
-    """
-    parameter = {
-        'r0': 0.,
-
-
-
-    }
-    pass 
-
-
 class psfao21:
     # INIT
     def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False,otfPixel=1,coo_stars=None,filter_tt=False):
@@ -156,36 +140,6 @@ class psfao21:
             SF = np.repeat(SF[:,:,np.newaxis],self.ao.src.nSrc,axis=2)
         return SF /(2*np.pi*1e-9/self.freq.wvlRef)**2
      
-    def get_PsfGrad (self, x0): 
-        """
-            Getting an analytical gradient expression for PSFAO21 model.
-
-            Work in progress  
-            
-        Args:
-            x0 ([type]): input parameters
-
-            First of all, need to parse the input ... 
-
-            Then, find out and test again what are the equivalent parts of the input parameters
-        """
-        parameter = parse_input_param(x0)
-
-        freq = self.freq # fXY equivalent
-
-        n_psfparam = len(x0) # TODO - Find out the length of the PSF parameter
-
-        grad = np.zeros((n_psfparam,self.N_padded[0],self.N_padded[0]))
-
-        # Parameter needed to be parsed into a dictionary in here but need to find out what elements you have in here
-        #axay = parameter["ax"]*parameter["ay"]
-        #F = 1. / (1. - (1. + (self.ao_cutoff_freq**2/axay))**(1.-parameter["beta"])) #(4.8e-8)
-        #E = (parameter["beta"] - 1.) /  (np.pi* axay) # Checked (-5.2e-7)
-
-        #grad[0] = (freq >=(self.ao_cutoff_freq**2)) * (-5/3)* 0.0229 * parameter['r0'] **((-8./3.)) * ((1./Lext**2.)+freq)**((-11./6.)) # grad_r0
-        #grad[1] = freq < (self.ao_cutoff_freq**2) # grad_bck
-        
-        return grad
         
     def __call__(self,x0,nPix=None):
         
