@@ -329,7 +329,6 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
             if nPix < ao.cam.fovInPix:
                 psf = np.zeros((nPix,nPix,ao.src.nSrc))
                 nC  = psf_.shape[0]/nPix
-                print(nC)
                 for iSrc in range(ao.src.nSrc):
                     psf[:,:,iSrc] = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)                   
 
