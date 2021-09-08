@@ -117,6 +117,33 @@ def mcDonald(x):
 def Ialpha(x,y):
     return mcDonald(np.hypot(x,y))
 
+def _rfft2_to_fft2(im_shape, rfft):
+    '''
+        Returns the fft2 from the rfft2 array
+    '''
+    fcols = im_shape[-1]
+    fft_cols = rfft.shape[-1]
+
+    result = np.zeros(im_shape, dtype=rfft.dtype)
+
+    result[:, :fft_cols] = rfft
+
+    top = rfft[0, 1:]
+
+    if fcols%2 == 0:
+        result[0, fft_cols-1:] = top[::-1].conj()
+        mid = rfft[1:, 1:]
+        mid = np.hstack((mid, mid[::-1, ::-1][:, 1:].conj()))
+    else:
+        result[0, fft_cols:] = top[::-1].conj()
+        mid = rfft[1:, 1:]
+        mid = np.hstack((mid, mid[::-1, ::-1].conj()))
+
+    result[1:, 1:] = mid
+
+    return result
+
+
 def otf2psf(otf):        
     nX,nY   = otf.shape
     u1d     = fft.fftshift(fft.fftfreq(nX))
@@ -227,6 +254,89 @@ def sombrero(n,x):
         idx = x!=0
         out[idx] = ssp.j1(x[idx])/x[idx]
         return out
+
+def sort_params_from_labels(psfModelInst, x0):
+    '''
+        Returns lists of parameters for the PSF model, static aberrations and the object
+        wrt psfModelInst.param_labels and x0
+    '''
+    
+    xall = x0       
+     
+    # ---------- MANAGING THE CN2 PROFILE
+    if psfModelInst.n_param_atm > 0:
+        # atmospheric parameters are included into the model
+        nL   = psfModelInst.ao.atm.nL
+        if nL > 1 and psfModelInst.ao.dms.nRecLayers > 1: 
+            # N-LAYERS CASE : FIT OF CN2 in METERS**(-5/3)
+            Cn2  = np.asarray(x0[:nL])
+            r0   = np.sum(Cn2)**(-3/5)
+        else:
+            # 1-LAYER CASE : FIT OF r0 in METERS
+            Cn2= []
+            r0 = x0[0]
+            nL = 1
+    else:
+        nL = 0
+        r0 = []
+        Cn2 = []
+            
+    # ---------- MANAGING THE PARAMETERS FOR DPHI
+    n_dphi = nL + psfModelInst.n_param_dphi
+    if n_dphi > 0:
+        x0_dphi = list(xall[nL:n_dphi])
+    else:
+        x0_dphi = []
+    
+    # ---------- MANAGING THE JITTER
+    if "jitterX" in psfModelInst.param_labels:
+        if len(x0) > n_dphi:
+            x0_jitter = list(xall[n_dphi:n_dphi+3])
+        else:
+            x0_jitter = psfModelInst.ao.cam.spotFWHM[0]
+        n_tt = n_dphi+3
+    else:
+        x0_jitter = []
+        n_tt = n_dphi
+    
+    # Astrometry/Photometry/Background
+    n_star = psfModelInst.ao.src.nSource
+    n_wvl = psfModelInst.freq.nWvl
+    n_src = n_star*n_wvl
+    n_stellar = n_tt + n_src*3 + 1
+        
+    if len(x0) > n_tt:
+        x0_stellar = np.array(xall[n_tt:n_stellar])
+        
+        # unpacking values
+        if psfModelInst.freq.nWvl == 1:
+            F = x0_stellar[:n_star][:,np.newaxis] * np.array(psfModelInst.ao.cam.transmittance)[np.newaxis,:]
+            dx = x0_stellar[n_star:2*n_star][:,np.newaxis] + np.array(psfModelInst.ao.cam.dispersion[0])[np.newaxis,:]
+            dy = x0_stellar[2*n_star:3*n_star][:,np.newaxis] + np.array(psfModelInst.ao.cam.dispersion[1])[np.newaxis,:]
+        else:
+            F = x0_stellar[0:n_src].reshape((n_star, n_wvl))
+            dx = x0_stellar[n_src:2*n_src].reshape((n_star, n_wvl))
+            dy = x0_stellar[2*n_src:3*n_src].reshape((n_star, n_wvl))
+        bkg = x0_stellar[3*n_src:]
+            
+    else:
+        # intantiating objects properties : flux, 2D positions and image background
+        vect_ones = np.ones(n_wvl)
+        F = np.repeat(np.array(psfModelInst.ao.cam.transmittance)[np.newaxis,:]*vect_ones , n_star, axis=0)
+        dx = np.repeat(np.array(psfModelInst.ao.cam.dispersion[0])[np.newaxis,:]*vect_ones, n_star, axis=0)
+        dy = np.repeat(np.array(psfModelInst.ao.cam.dispersion[1])[np.newaxis,:]*vect_ones, n_star, axis=0)
+        bkg = 0.0
+
+    x0_stellar = [F, dx, dy, bkg]
+            
+    # Static aberrations
+    if len(x0) > n_stellar:
+        x0_stat = list(x0[n_stellar:])
+    else:
+        x0_stat = [] 
+    
+    return (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat)
+
                  
 def telescopeOtf(pupil,samp):    
     pup_pad  = enlargeSupport(pupil,samp)
@@ -244,13 +354,21 @@ def telescopePsf(pupil,samp,kind='spline'):
         return interpolateSupport(otf2psf(otf),nSize,kind=kind)
 
 
-def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0.]],bkg=0,xStat=[],
-           theta_ext=0,nPix=None,otfPixel=1,spatialFilter=1):
+def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[], 
+                    x_stellar = [[1.0], [0.],[0.],[0]],
+                    theta_ext = 0, nPix = None, otfPixel = 1):
         """
-          Computation of the PSF and the Strehl-ratio (from the OTF integral). The Phase structure function
-          must be expressed in nm^2 and of the size nPx x nPx x nSrc
+          Computation of the PSF and the Strehl-ratio (from the OTF integral).
+          The Phase structure function must be expressed in nm^2 and of the 
+          size nPx x nPx x nSrc
         """
         
+        # GETTING THE OBJECT PARAMETERS
+        F = x_stellar[0]
+        dx = x_stellar[1]
+        dy = x_stellar[2]
+        bkg = x_stellar[3]
+ 
         # INSTANTIATING THE OUTPUTS
         if nPix == None:
             nPix = int(freq.nOtf /freq.kRef_)
@@ -259,31 +377,34 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         SR  = np.zeros((ao.src.nSrc,freq.nWvl))
 
         # DEFINING THE RESIDUAL JITTER KERNEL
-        if jitterX!=0 or jitterY!=0:        
-            # Gaussian kernel
-            # note 1 : Umax = self.samp*self.tel.D/self.wvlRef/(3600*180*1e3/np.pi) = 1/(2*psInMas)
-            # note 2 : the 1.16 factor is needed to get FWHM=jitter for jitter-limited PSF; needed to be figured out
-            Umax     = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
-            ff_jitter= 1.16
-            normFact = ff_jitter*np.max(Umax)**2 *(2 * np.sqrt(2*np.log(2)))**2 #1.16
-            Djitter  = normFact * (jitterX**2 * freq.U2_  + jitterY**2 * freq.V2_ + 2*jitterXY *freq.UV_)
-            Kjitter  = np.exp(-0.5 * Djitter)
-        else:
-            Kjitter = 1
+        Kjitter = 1
+        if np.any(x_jitter[0:2]): 
+            u_max = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
+            norm_fact = np.max(u_max)**2 *(2 * np.sqrt(2*np.log(2)))**2
+            Djitter = norm_fact * (x_jitter[0]**2 * freq.U2_  
+                                   + x_jitter[1]**2 * freq.V2_ 
+                                   + 2*x_jitter[2] *freq.UV_)
+            Kjitter = np.exp(-0.5 * Djitter)            
             
         # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
         if np.any(dx!=0) or np.any(dy!=0):
-            # shift by half a pixel
-            fftPhasor = np.zeros((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
-            if freq.kRef_ > 2: #[jWvl] >2:
-                fact = freq.kRef_#[jWvl]
+            # accounting for the binning
+            bin_fact = 1
+            if freq.kRef_ > 2: 
+                bin_fact = freq.kRef_
+            
+            # computing the phasor
+            if freq.nWvl > 1:
+                # instantiating the phasor
+                fftPhasor = np.zeros((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
+                for iSrc in range(ao.src.nSource):
+                    for jWvl in range(freq.nWvl):
+                        # account for the binning
+                        dr = bin_fact*(dx[iSrc, jWvl]*freq.U_ + dy[iSrc, jWvl]*freq.V_)
+                        fftPhasor[:, :, iSrc, jWvl] = np.exp(-np.pi*complex(0, 1)*dr)
             else:
-                fact = 1
-            for iSrc in range(ao.src.nSrc):
-                for jWvl in range(freq.nWvl):
-                    # account for the binning
-                    fftPhasor[:,:,iSrc,jWvl] = np.exp(-np.pi*complex(0,1)*fact*\
-                             (dx[iSrc,jWvl]*freq.U_ + dy[iSrc,jWvl]*freq.V_))
+                dr = bin_fact*(freq.U_[:,:,np.newaxis]*dx + freq.V_[:,:,np.newaxis]*dy)
+                fftPhasor = np.exp(-np.pi*complex(0, 1)*dr)[:,:,:,np.newaxis] 
         else:
             fftPhasor = np.ones((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
 
@@ -291,15 +412,16 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         for jWvl in range(freq.nWvl):
             
             # UPDATE THE INSTRUMENTAL OTF
-            if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(xStat)>0:
+            if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(x_stat)>0:
                 freq.otfNCPA, freq.otfDL, freq.phaseMap = \
                 getStaticOTF(ao.tel,int(freq.nOtf),freq.samp[jWvl],freq.wvl[jWvl],
-                             xStat=xStat,theta_ext=theta_ext,spatialFilter=spatialFilter)
+                             xStat=x_stat,theta_ext=theta_ext)
                 
             # UPDATE THE RESIDUAL JITTER
-            if freq.nyquistSampling == True and freq.nWvl > 1 and (jitterX!=0 or jitterY!=0):
-                normFact2    = ff_jitter*(freq.samp[jWvl]*ao.tel.D/freq.wvl[jWvl]/(3600*180*1e3/np.pi))**2  * (2 * np.sqrt(2*np.log(2)))**2
-                Kjitter = np.exp(-0.5 * Djitter * normFact2/normFact)    
+            if freq.nyquistSampling == True and freq.nWvl > 1 and np.any(x_jitter[0:2]):
+                norm_fact2 = (freq.samp[jWvl]*ao.tel.D/freq.wvl[jWvl]/(3600*180*1e3/np.pi))**2
+                norm_fact2 *= (2 * np.sqrt(2*np.log(2)))**2
+                Kjitter = np.exp(-0.5 * Djitter * norm_fact2/norm_fact)    
                           
             # OTF MULTIPLICATION
             otfStat = freq.otfNCPA * Kjitter * otfPixel    

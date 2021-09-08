@@ -7,13 +7,15 @@ Created on Thu Apr 29 18:17:49 2021
 """
 
 #%% IMPORTING LIBRARIES
+import os
+import sys
+import time
+
 import numpy as np
 from astropy.io import fits
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
-import os
-import sys
 
 from aoSystem.fourierModel import fourierModel
 import aoSystem.FourierUtils as FourierUtils
@@ -70,18 +72,20 @@ filename   = 'n0004_fullNGS_trs.sav'
 
 def test_Fourier_fitting():
     '''
-       Test the fitting of the Fourier model 
+       Test the fitting of object parameters on a NIRC2 frame with a PSF model
+       derived from the Fourier model.
     '''
       
     #instantiating the model
-    fao = fourierModel(path_ini,path_root=path_p3,calcPSF=False,display=False)    
+    fao = fourierModel(path_ini, path_root=path_p3, calcPSF=False, display=False)    
     
     # fitting the residual jitter + astrometry/photometry
-    x0  = [fao.ao.cam.spotFWHM[0][0],fao.ao.cam.spotFWHM[0][1],fao.ao.cam.spotFWHM[0][2],1,0,0,0]
-    res_Fourier = psfFitting(im_nirc2,fao,x0,verbose=2,fixed=(True,True,True,False,False,False,False))
+    x0 = fao.ao.cam.spotFWHM[0] + [1,0,0,0]
+    fixed = (True,)*3 + (False,)*4
+    res_Fourier = psfFitting(im_nirc2, fao, x0, verbose=2, fixed=fixed)
     
     # display
-    displayResults(fao,res_Fourier,nBox=90,scale='log10abs')
+    displayResults(fao, res_Fourier, nBox=90, scale='log10abs')
     
     return res_Fourier, fao
 
@@ -91,8 +95,10 @@ def test_psfao21_instantiation():
     '''
         Test the instantiation of the PSFAO21 model
     '''
+    
+    t0 = time.time()
     # instantiating the model
-    psfao    = psfao21(path_ini,path_root=path_p3)
+    psfao = psfao21(path_ini,path_root=path_p3)
     plt.close('all')
     kx  = psfao.freq.kx_[psfao.freq.nOtf//2+1:,psfao.freq.nOtf//2]/psfao.freq.kc_
     nCases = 5
@@ -216,49 +222,50 @@ def test_psfao21_instantiation():
         axs[1].semilogy(kx,psf[psfao.freq.nOtf//2+1:,psfao.freq.nOtf//2],label=idlab)
         
     axs[1].legend()
-    
+    print('%d psf computations done in %.2f s'%(nCases*4, time.time() - t0))
     return psfao
     
-def test_psfao21_fitting():
+def test_psfao21_fitting(tol=1e-5):
     '''
         Test the fitting of a NIRC2 image with the PSFAO21 model with two strategies:
             - joint fitting of PSD parameters and static aberrations
             - split fitting : PSD parameters first, redefinition of the bounds as xf+-5/3xerr and fit of the static aberrations
     '''
     # instantiating the model
-    psfao    = psfao21(path_ini,path_root=path_p3)
+    psfao = psfao21(path_ini, path_root=path_p3)
     
     # -------- Joint fitting the 7 PSD parameters + static aberrations
-    x0    = [0.7,4e-2,0.5,1e-2,1,0,1.8,0,0,0,1.0,0,0,0] + list(np.zeros((psfao.ao.tel.nModes)))
-    fixed = (False, False, False, False, False, False, False) +(True,)*3 + (False,False,False,False) + (False,)*36
-    res_psfao21_joint  = psfFitting(im_nirc2,psfao,x0,verbose=2,fixed=fixed,ftol=1e-5,gtol=1e-5,xtol=1e-5)
-    displayResults(psfao,res_psfao21_joint,nBox=90,scale='log10abs')
+    n_modes = psfao.ao.tel.nModes
+    x0 = [0.7, 4e-2, 0.5, 1e-2, 1, 0, 1.8, 0, 0, 0, 1.0, 0, 0, 0] + [0,]*n_modes
+    fixed = (False,)*7 +(True,)*3 + (False,)*4 + (False,)*n_modes
+    res_psfao21_joint = psfFitting(im_nirc2, psfao, x0, verbose=2,fixed=fixed,
+                                   ftol=tol, gtol=tol, xtol=tol)
+    
+    displayResults(psfao, res_psfao21_joint, nBox=90, scale='log10abs')
     psd_stat = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
     
     # -------- Split fitting
     # fitting - 7 PSD parameters + no static aberrations
-    x0    = [0.7,4e-2,0.5,1e-2,1,0,1.8,0,0,0,1.0,0,0,0]
-    fixed = (False, False, False, False, False, False, False) + (True,)*3 + (False,False,False,False) + (True,)*36
-    res_psfao21  = psfFitting(im_nirc2,psfao,x0+list(np.zeros((psfao.ao.tel.nModes))),verbose=2,fixed=fixed,ftol=1e-5,gtol=1e-5,xtol=1e-5)
-    displayResults(psfao,res_psfao21,nBox=90,scale='log10abs')
+    fixed = (False,)*7 +(True,)*3 + (False,)*4 + (True,)*n_modes
+    res_psfao21 = psfFitting(im_nirc2, psfao, x0, verbose=2, fixed=fixed, 
+                             ftol=tol, gtol=tol, xtol=tol)
+    displayResults(psfao, res_psfao21, nBox=90, scale='log10abs')
     psd_nostat = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
     
     # fitting - no PSD parameters + static aberrations
-    x0    = list(res_psfao21.x[0:7]) + [0,0,0,1.0,0,0,0] + list(np.zeros((psfao.ao.tel.nModes))) #[0.7,4e-2,0.5,1e-3,1,0,1.8,0,0,0,1.0,0,0,0]
-    fixed = (False, False, False, False, False, False, False) +(True,)*3 + (False,False,False,False) + (False,)*36
+    x0 = list(res_psfao21.x[:7]) + [0,]*3 + [1.0,0,0,0] + [0,]*n_modes
+    fixed = (False, )*7 +(True,)*3 + (False,)*4 + (False,)*n_modes
     # redefining bounds
     bounds= psfao.updateBounds(res_psfao21.x,res_psfao21.xerr,sig=5)
-    res_psfao21_split  = psfFitting(im_nirc2,psfao,x0,verbose=2,\
-                        fixed=fixed,ftol=1e-5,gtol=1e-5,xtol=1e-5,bounds=bounds)
+    res_psfao21_split = psfFitting(im_nirc2, psfao, x0, verbose=2, fixed=fixed,
+                                   ftol=tol, gtol=tol, xtol=tol, bounds=bounds)
     
-    displayResults(psfao,res_psfao21_split,nBox=90,scale='log10abs')
+    displayResults(psfao, res_psfao21_split, nBox=90, scale='log10abs')
     psd_stat2 = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
     
     # PSD static aberrations
-    #opd = FourierUtils.enlargeSupport(res_psfao21_stat.opd,2)
     psd = np.abs(np.fft.fftshift(np.fft.fft2(res_psfao21_joint.opd)))**2 
-    psd = FourierUtils.interpolateSupport(psd,psfao.freq.nOtf)/np.size(res_psfao21_joint.opd)/(psfao.ao.tel.D * psfao.freq.sampRef)
-    
+    psd = FourierUtils.interpolateSupport(psd,psfao.freq.nOtf)/np.size(res_psfao21_joint.opd)/(psfao.ao.tel.D * psfao.freq.sampRef)    
     psd2 = np.abs(np.fft.fftshift(np.fft.fft2(res_psfao21_split.opd)))**2 
     psd2 = FourierUtils.interpolateSupport(psd2,psfao.freq.nOtf)/np.size(res_psfao21_split.opd)/(psfao.ao.tel.D * psfao.freq.sampRef)
     
@@ -295,8 +302,6 @@ def test_psfao21_fitting():
     imm = axs[2].imshow(res_psfao21_split.opd - res_psfao21_joint.opd,vmin=vmin,vmax=vmax)
     axs[2].set_title('Diff')
     axs[2].axis('off')
-    #cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    #fig.colorbar(imm, cax=cbar_ax)
     fig.colorbar(imm, ax=axs.ravel().tolist(), shrink=0.6)
     return res_psfao21, res_psfao21_split, res_psfao21_joint
 
@@ -348,20 +353,26 @@ def test_psfr(path_trs):
     
     # Get the PSF
     psfr = psfR(sd.trs)
-    x0   = [0.7,1.0,1.0,1.0,0.0,0.0,0.0]
-    psf  = np.squeeze(psfr(x0))
+    x0 = [0.7, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+    psf = np.squeeze(psfr(x0))
    
     plt.figure()
     plt.imshow(np.log10(psf))
     
     return psfr
 
-def test_prime(psfr):
+def test_prime(psfr, fixed_stat = True, tol=1e-5):
     ''' Test the PRIME approach
     '''
-    # Do the fitting of photometri/astrometri/background
-    x0   = [0.7,1.0,1.0,1.0,0.0,0.0,0.0]
-    res = psfFitting(psfr.trs.cam.image,psfr,x0,verbose=2,fixed=(False,False,True,False,False,False,False))
+    # defining the initial guess and fixed parameters
+    n_modes = psfr.ao.tel.nModes
+    x0 = [0.7, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0] + [0,]*n_modes
+    fixed = (False,)*2 + (True,) + (False,)*4 + (fixed_stat,)*n_modes
+    
+    # fitting
+    res = psfFitting(psfr.trs.cam.image, psfr, x0, verbose=2,
+                     fixed=fixed, xtol=tol, ftol=tol, gtol=tol)
+    
     # Display
     displayResults(psfr,res,nBox=90,scale='log10abs')
     

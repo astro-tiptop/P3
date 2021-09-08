@@ -25,8 +25,11 @@ class psfR:
     """
     """
     # INIT
-    def __init__(self,trs,path_root='',nLayer=None,theta_ext=0):
+    def __init__(self, trs, path_root='', nLayer=None, theta_ext=0,
+                 param_labels = ['Cn2', 'gho', 'gtt', 'F', 'dx', 'dy',
+                                 'bkg', 'stat']):
         """
+        Instantiating the psf-reconstruction model from a telemetry object
         """
         # READ PARFILE        
         tstart = time.time()
@@ -35,12 +38,17 @@ class psfR:
         if hasattr(trs,'path_ini') == False:
             print('ERROR : no .ini file attached with the telemetry object')
             return
-        self.path_ini  = trs.path_ini
-        self.trs       = trs
+        self.path_ini = trs.path_ini
+        self.trs = trs
         self.theta_ext = theta_ext
-        self.ao        = aoSystem(self.path_ini,path_root=path_root)
-        self.tag       = 'PSF-R'
+        self.ao = aoSystem(self.path_ini,path_root=path_root)
+        self.tag = 'PSF-R'
         
+        # DEFINING THE NUMBER OF PARAMETERS
+        self.param_labels = param_labels
+        self.n_param_atm = min(self.ao.atm.nL, self.ao.dms.nRecLayers)
+        self.n_param_dphi = 2
+            
         # CHECK THE PUPIL
         if self.ao.tel.path_pupil == '' and np.any(trs.tel.pupil):
             self.ao.tel.pupil = self.trs.tel.pupil
@@ -54,7 +62,7 @@ class psfR:
             self.freq = frequencyDomain(self.ao)
             
             # DEFINING BOUNDS
-            self.bounds = self.defineBounds()
+            self.bounds = self.define_bounds()
         
             # INSTANTIATING THE FOURIER MODEL
             self.fao = fourierModel(self.path_ini,calcPSF=False,display=False)
@@ -75,16 +83,9 @@ class psfR:
 
             # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
             if (self.ao.lgs==None) or (self.ao.lgs.height == 0):
-                #self.dphi_ani = anisoplanatismStructureFunction(\
-                #self.ao.tel,self.ao.atm,self.ao.src,self.ao.ngs,self.ao.ngs,\
-                #self.freq.nOtf,self.freq.sampRef,self.ao.dms.nActu1D,Hfilter=1)#self.trs.mat.Hdm)  
                 if self.freq.isAniso:
                     self.dphi_ani = self.freq.dani_ang
             else:
-                #self.dani_focang, self.dani_ang, self.dani_tt = anisoplanatism_structure_function(\
-                #self.ao.tel,self.ao.atm,self.ao.src,self.ao.lgs,self.ao.ngs,\
-                #self.freq.nOtf,self.freq.sampRef,self.ao.dms.nActu1D,Hfilter=1)#self.trs.mat.Hdm)  
-                
                 self.dani_focang = self.freq.dani_focang
                 self.dani_ang = self.freq.dani_ang
                 self.dani_tt  = self.freq.dani_tt
@@ -104,29 +105,32 @@ class psfR:
     def _repr__(self):
         return 'PSF-Reconstruction model'
    
-    def defineBounds(self):
-          #r0, gao, gtt, F , dx , dy , bg , stat
-          _EPSILON = np.sqrt(sys.float_info.epsilon)
+    def define_bounds(self):
+        '''
+            Defines the bounds for the PSF model parameters : 
+                Cn2/r0, gho, gtt, F, dx, dy, bg, stat
+        '''
+        _EPSILON = np.sqrt(sys.float_info.epsilon)
           
-          # Bounds on r0
-          bounds_down = list(np.ones(self.ao.atm.nL)*_EPSILON)
-          bounds_up   = list(np.inf * np.ones(self.ao.atm.nL))            
-          # optical gains 
-          bounds_down += [0,0]
-          bounds_up   += [np.inf,np.inf]         
-          # Photometry
-          bounds_down += list(np.zeros(self.ao.src.nSrc))
-          bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
-          # Astrometry
-          bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
-          bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
-          # Background
-          bounds_down += [-np.inf]
-          bounds_up   += [np.inf]
-          # Static aberrations
-          bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
-          bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
-          return (bounds_down,bounds_up)
+        # Bounds on r0
+        bounds_down = list(np.ones(self.ao.atm.nL)*_EPSILON)
+        bounds_up   = list(np.inf * np.ones(self.ao.atm.nL))            
+        # optical gains 
+        bounds_down += [0,0]
+        bounds_up   += [np.inf,np.inf]         
+        # Photometry
+        bounds_down += list(np.zeros(self.ao.src.nSrc))
+        bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
+        # Astrometry
+        bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+        bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+        # Background
+        bounds_down += [-np.inf]
+        bounds_up   += [np.inf]
+        # Static aberrations
+        bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
+        bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
+        return (bounds_down,bounds_up)
       
     def fittingPhaseStructureFunction(self,r0):
         return r0**(-5/3) * np.real(fft.fftshift(FourierUtils.cov2sf(FourierUtils.psd2cov(self.freq.psdKolmo_,2*self.freq.kc_/self.freq.resAO))))
@@ -180,7 +184,8 @@ class psfR:
         Vr  = 2*(-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang))
         
         # computing the Gaussian-Kernel
-        dphi_tt = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 + Guu[0,1]*Ur*Vr.T + Guu[1,0]*Vr*Ur.T
+        dphi_tt = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 \
+                + Guu[0,1]*Ur*Vr.T + Guu[1,0]*Vr*Ur.T
         
         return dphi_tt
         
@@ -192,68 +197,50 @@ class psfR:
         otfPixel = np.sinc(self.freq.U_)* np.sinc(self.freq.V_)
         return otfPixel
 
-    def TotalPhaseStructureFunction(self,r0,gho,gtt,Cn2=[]):
+    def phase_structure_function(self,r0,x0_dphi,Cn2=[]):
         
         # On-axis phase structure function
-        SF   = gho*self.dphi_ao + gtt*self.dphi_tt + r0**(-5/3) * (self.dphi_fit + self.dphi_alias)
+        SF = x0_dphi[0]*self.dphi_ao + x0_dphi[1]*self.dphi_tt \
+            + r0**(-5/3) * (self.dphi_fit + self.dphi_alias)
         
         # Anisoplanatism phase structure function
         if self.freq.isAniso and (len(Cn2) == self.freq.dani_ang.shape[1]):
-            SF = SF[:,:,np.newaxis] + (self.dphi_ani.transpose(2,3,1,0) * Cn2[:,np.newaxis]).sum(axis=2)
+            SF = SF[:,:,np.newaxis] + \
+            (self.dphi_ani.transpose(2,3,1,0) * Cn2[:,np.newaxis]).sum(axis=2)
         else:
             SF = np.repeat(SF[:,:,np.newaxis],self.ao.src.nSrc,axis=2)
             
         return SF/(2*np.pi*1e-9/self.freq.wvlRef)**2
     
-    def __call__(self,x0,nPix=None):
-                
+    def __call__(self, x0, nPix=None):
+                           
         # ----------------- GETTING THE PARAMETERS
-        # Cn2 profile
-        nL   = self.ao.atm.nL
-        if nL > 1: # fit the Cn2 profile
-            Cn2  = np.asarray(x0[0:nL])
-            r0   = np.sum(Cn2)**(-3/5)
-        else: #fit the r0
-            Cn2= []
-            r0 = x0[0]
-            
-        # PSD
-        gho = x0[nL]
-        gtt = x0[nL+1]
+        (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat) = FourierUtils.sort_params_from_labels(self,x0)
         
-        # Astrometry/Photometry/Background
-        x0_stellar = np.array(x0[nL+2:nL+4+3*self.ao.src.nSrc])
-        if len(x0_stellar):
-            F  = x0_stellar[0:self.ao.src.nSrc][:,np.newaxis] * np.array(self.ao.cam.transmittance)[np.newaxis,:]
-            dx = x0_stellar[self.ao.src.nSrc:2*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
-            dy = x0_stellar[2*self.ao.src.nSrc:3*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
-            bkg= x0_stellar[3*self.ao.src.nSrc]
-        else:
-            F  = np.repeat(np.array(self.ao.cam.transmittance)[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
-            dx = np.repeat(np.array(self.ao.cam.dispersion[0])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
-            dy = np.repeat(np.array(self.ao.cam.dispersion[1])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
-            bkg= 0.0
-            
-        # Static aberrations
-        if len(x0) > nL + 2 + 3*self.ao.src.nSrc + 1:
-            x0_stat = list(x0[nL+3+3*self.ao.src.nSrc:])
-        else:
-            x0_stat = []   
-         
         # ----------------- GETTING THE PHASE STRUCTURE FUNCTION    
-        self.SF = self.TotalPhaseStructureFunction(r0,gho,gtt,Cn2=Cn2)
+        self.SF = self.phase_structure_function(r0,x0_dphi,Cn2=Cn2)
         
         # ----------------- COMPUTING THE PSF
-        PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
-                        F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel)
+        PSF, SR = FourierUtils.sf_3D_to_psf_4D(self.SF, 
+                                               self.freq, 
+                                               self.ao,
+                                               x_jitter = x0_jitter, 
+                                               x_stat = x0_stat,
+                                               x_stellar = x0_stellar, 
+                                               nPix = nPix,
+                                               otfPixel = self.otfPixel)
+        
         return PSF
     
-    def get_error_breakdown(self,r0=None,gho=1,gtt=1):
+    def get_error_breakdown(self, r0=None, gho=1, gtt=1):
         '''
-        Computing the AO error breakdown from the variance of each individual covariance terms.
+        Computing the AO error breakdown from the variance of 
+        each individual covariance terms.
         INPUTS:
             - an instance of the psfr object
-        OUTPUTS
+            - the specific r0 to which the fitting error must be computed. If
+            None, takes the value in the ao.atm object
+            - gho and gtt, set to 1 by default
         '''
         sr2fwe = lambda x: np.sqrt(-np.log(x))* self.freq.wvlRef*1e9/2/np.pi
         otf_dl = self.freq.otfDL

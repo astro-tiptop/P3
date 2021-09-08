@@ -52,25 +52,33 @@ class fourierModel:
     """
     
     # CONTRUCTOR
-    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,path_root='',\
-                 normalizePSD=False,displayContour=False,getPSDatNGSpositions=False,\
-                 getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,\
-                 getEncircledEnergy=False,fftphasor=False,MV=0,nyquistSampling=False,addOtfPixel=False):
+    def __init__(self, path_ini, calcPSF=True, verbose=False, display=True, path_root='',
+                 normalizePSD=False, displayContour=False, getPSDatNGSpositions=False,
+                 getErrorBreakDown=False, getFWHM=False, getEnsquaredEnergy=False,
+                 getEncircledEnergy=False, fftphasor=False, MV=0, 
+                 nyquistSampling=False, addOtfPixel=False,
+                 param_labels = ['jitterX', 'jitterY', 'jitterXY',
+                                 'F', 'dx', 'dy', 'bkg', 'stat']):
         
         tstart = time.time()
         
         # PARSING INPUTS
-        self.verbose           = verbose
-        self.path_ini          = path_ini  
-        self.display           = display
+        self.verbose = verbose
+        self.path_ini = path_ini  
+        self.display = display
         self.getErrorBreakDown = getErrorBreakDown
-        self.getPSFmetrics     = getFWHM or getEnsquaredEnergy or getEncircledEnergy
-        self.calcPSF           = calcPSF
-        self.tag               = 'TIPTOP'
-        self.addOtfPixel       = addOtfPixel
-
+        self.getPSFmetrics = getFWHM or getEnsquaredEnergy or getEncircledEnergy
+        self.calcPSF = calcPSF
+        self.tag = 'TIPTOP'
+        self.addOtfPixel = addOtfPixel
+        
+        # DEFINING THE NUMBER OF PSF PARAMETERS
+        self.param_labels = param_labels
+        self.n_param_atm = 0
+        self.n_param_dphi = 0
+        
         # GRAB PARAMETERS
-        self.ao = aoSystem(path_ini,path_root=path_root,getPSDatNGSpositions=getPSDatNGSpositions)
+        self.ao = aoSystem(path_ini, path_root=path_root, getPSDatNGSpositions=getPSDatNGSpositions)
         self.t_initAO = 1000*(time.time() - tstart)
         
         if self.ao.error==False:
@@ -155,7 +163,7 @@ class fourierModel:
                 self.errorBreakDown(verbose=self.verbose)
                     
         # DEFINING BOUNDS
-        self.bounds = self.defineBounds()
+        self.bounds = self.define_bounds()
                 
         self.t_init = 1000*(time.time()  - tstart)
         
@@ -173,8 +181,12 @@ class fourierModel:
         return s
 
 #%% BOUNDS FOR PSF-FITTING
-    def defineBounds(self):
-          
+    def define_bounds(self):
+        '''
+            Defines the bounds for the PSF model parameters : 
+                Cn2/r0, jitterX, jitterY, jitterXY, dx, dy, bg, stat
+        '''
+        
         # Photometry
         bounds_down  = [-np.inf,-np.inf,-np.inf]
         bounds_up    = [np.inf,np.inf,np.inf]
@@ -830,53 +842,44 @@ class fourierModel:
         self.t_errorBreakDown = 1000*(time.time() - tstart)
     
   #%% PSF COMPUTATION  
-    def pointSpreadFunction(self,x0=None,nPix=None,verbose=False,fftphasor=False,addOtfPixel=False):
+    def point_spread_function(self, x0=[], nPix=None, verbose=False,
+                            fftphasor=False, addOtfPixel=False):
         """
-          Computation of the PSF
+          Computation of the 4D PSF from the 3D cube of phase structure function
+          If x0 kept empty, the residual jitter is included from the values given
+          in the .ini file.
         """
         
         tstart  = time.time()
         
-        # ---------- GETTING THE PARAMETERS
-        if self.ao.error:
-            print("The fourier Model class must be instantiated first\n")
-            return 0,0
+        # ----------------- GETTING THE PARAMETERS
+        (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat) = FourierUtils.sort_params_from_labels(self,x0)
         
-        if np.any(x0 == None):
-            jitterX = self.ao.cam.spotFWHM[0][0]
-            jitterY = self.ao.cam.spotFWHM[0][1]
-            jitterXY= self.ao.cam.spotFWHM[0][2]
-            F  = np.repeat(np.array(self.ao.cam.transmittance)[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
-            dx = np.repeat(np.array(self.ao.cam.dispersion[0])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
-            dy = np.repeat(np.array(self.ao.cam.dispersion[1])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
-            bkg= 0.0
-            xStat = []
-        else:
-            jitterX = x0[0]
-            jitterY = x0[1]
-            jitterXY= x0[2] * np.sqrt(x0[0]*x0[1])
-            F       = x0[3:3+self.ao.src.nSrc] * np.array(self.ao.cam.transmittance)[np.newaxis,:]
-            dx      = x0[3+self.ao.src.nSrc:3+2*self.ao.src.nSrc] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
-            dy      = x0[3+2*self.ao.src.nSrc:3+3*self.ao.src.nSrc] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
-            bkg     = x0[3+3*self.ao.src.nSrc]
-            xStat   = x0[4+3*self.ao.src.nSrc:]
-        
-        # ---------- GETTING THE PSF
+        # ----------------- MANAGING THE PIXEL OTF
         otfPixel=1
         if addOtfPixel:
             otfPixel = np.sinc(self.freq.U_)* np.sinc(self.freq.V_)
-            
-        PSF, SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
-                                      jitterX=jitterX,jitterY=jitterY,jitterXY=jitterXY,\
-                                      F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,otfPixel=otfPixel,xStat=xStat)
-
+        
+        # ----------------- COMPUTING THE PSF
+        PSF, SR = FourierUtils.sf_3D_to_psf_4D(self.SF, 
+                                               self.freq, 
+                                               self.ao,
+                                               x_jitter = x0_jitter, 
+                                               x_stat = x0_stat,
+                                               x_stellar = x0_stellar, 
+                                               nPix = nPix,
+                                               otfPixel = otfPixel)
+        
         self.t_getPSF = 1000*(time.time() - tstart)
         
         return PSF, SR
 
     def __call__(self,x0,nPix=None):
         
-        psf,_ = self.pointSpreadFunction(x0=x0,nPix=nPix,verbose=False,fftphasor=True,addOtfPixel = self.addOtfPixel)
+        psf,_ = self.point_spread_function(x0 = x0, nPix = nPix, 
+                                           verbose = False,
+                                           fftphasor = True,
+                                           addOtfPixel = self.addOtfPixel)
         return psf 
     
     

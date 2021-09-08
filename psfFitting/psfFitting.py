@@ -185,7 +185,7 @@ def evaluateFittingQuality(result,psfModelInst):
         fvu = 1e2*np.sum((sky-fit)**2)/np.sum((sky-sky.mean())**2)
         return mse,mae,fvu
         
-    if len(result.im_sky) == 2:
+    if np.ndim(result.im_sky) == 2:
         # case fit of a 2D image
         result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.ao.tel.pupil,psfModelInst.freq.sampRef)
         result.SR_fit   = FourierUtils.getStrehl(result.im_fit,psfModelInst.ao.tel.pupil,psfModelInst.freq.sampRef)
@@ -193,7 +193,7 @@ def evaluateFittingQuality(result,psfModelInst):
         result.FWHMx_fit , result.FWHMy_fit = FourierUtils.getFWHM(result.im_fit,psfModelInst.ao.cam.psInMas,nargout=2)
         result.mse, result.mae , result.fvu = meanErrors(result.im_sky,result.im_fit)
         
-    elif (len(result.im_sky) == 3) and (psfModelInst.freq.nWvl>1):
+    elif (np.ndim(result.im_sky) == 3) and (psfModelInst.freq.nWvl>1):
         # case fit of an hyperspectral data cube 
         nWvl = psfModelInst.freq.nWvl
         result.SR_sky = result.SR_fit = np.zeros(nWvl)
