@@ -301,7 +301,7 @@ def sort_params_from_labels(psfModelInst, x0):
     
     # Astrometry/Photometry/Background
     n_star = psfModelInst.ao.src.nSource
-    n_wvl = psfModelInst.freq.nWvl
+    n_wvl = psfModelInst.nWvl
     n_src = n_star*n_wvl
     n_stellar = n_tt + n_src*3 + 1
         
@@ -309,7 +309,7 @@ def sort_params_from_labels(psfModelInst, x0):
         x0_stellar = np.array(xall[n_tt:n_stellar])
         
         # unpacking values
-        if psfModelInst.freq.nWvl == 1:
+        if n_wvl == 1:
             F = x0_stellar[:n_star][:,np.newaxis] * np.array(psfModelInst.ao.cam.transmittance)[np.newaxis,:]
             dx = x0_stellar[n_star:2*n_star][:,np.newaxis] + np.array(psfModelInst.ao.cam.dispersion[0])[np.newaxis,:]
             dy = x0_stellar[2*n_star:3*n_star][:,np.newaxis] + np.array(psfModelInst.ao.cam.dispersion[1])[np.newaxis,:]
@@ -353,7 +353,87 @@ def telescopePsf(pupil,samp,kind='spline'):
         otf = interpolateSupport(telescopeOtf(pupil,2),nSize//samp,kind=kind)
         return interpolateSupport(otf2psf(otf),nSize,kind=kind)
 
+def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[], 
+                    x_stellar = [[1.0], [0.],[0.],[0]],
+                    theta_ext = 0, nPix = None, otfPixel = 1):
+        """
+          Computation of the PSF and the Strehl-ratio (from the OTF integral).
+          The Phase structure function must be expressed in nm^2 and of the 
+          size nPx x nPx x nSrc
+        """
+        
+        # GETTING THE OBJECT PARAMETERS
+        F = x_stellar[0]
+        dx = x_stellar[1]
+        dy = x_stellar[2]
+        bkg = x_stellar[3]
+ 
+        # INSTANTIATING THE OUTPUTS
+        if nPix == None:
+            nPix = int(freq.nOtf /freq.kRef_)
+        
+        PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
+        SR  = np.zeros((ao.src.nSrc,freq.nWvl))
+        
+        
+        # DEFINING THE RESIDUAL JITTER KERNEL
+        Kjitter = 1
+        if np.any(x_jitter[0:2]): 
+            u_max = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
+            norm_fact = u_max**2 *(2 * np.sqrt(2*np.log(2)))**2
+            Djitter = norm_fact * (x_jitter[0]**2 * freq.U2_  
+                                   + x_jitter[1]**2 * freq.V2_ 
+                                   + 2*x_jitter[2] *freq.UV_)
+            Kjitter = np.exp(-0.5 * Djitter)   
+            
+        # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
+        if np.any(dx!=0) or np.any(dy!=0):
+            # accounting for the binning
+            bin_fact = 1
+            if freq.kRef_ > 1: 
+                bin_fact = freq.kRef_
+            # computing the phasor
+            dr = bin_fact*(freq.U_[:,:,np.newaxis]*dx + freq.V_[:,:,np.newaxis]*dy)
+            fftPhasor = np.exp(-np.pi*complex(0, 1)*dr)
+        else:
+            fftPhasor = np.ones((freq.nOtf, freq.nOtf, ao.src.nSrc), dtype=complex)
 
+        # OTF MULTIPLICATION
+        otfStat = freq.otfNCPA * Kjitter * otfPixel    
+        otfStat = np.repeat(otfStat[:,:,np.newaxis],ao.src.nSrc,axis=2)      
+        otfTurb = np.exp(-0.5*sf)
+        otfTot  = fft.fftshift(otfTurb * otfStat * fftPhasor,axes=(0,1))
+                    
+        # GET THE FINAL PSF - PIXEL SCALE IS NYQUIST - FOV DIFFERENT PER WVL
+        psf_ = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
+        
+        # managing the undersampling
+        psf = np.copy(psf_)
+        
+        if freq.kRef_ >= 1: # binning the PSF
+            psf = np.zeros((ao.cam.fovInPix,ao.cam.fovInPix,ao.src.nSrc))
+            nC = freq.kRef_
+            for iSrc in range(ao.src.nSrc):
+                if nC > 1:
+                    tmp = binning(psf_[:,:,iSrc],int(nC))
+                else:
+                    tmp = psf_[:,:,iSrc]
+                    
+                psf[:,:,iSrc] = cropSupport(tmp,tmp.shape[0]/ao.cam.fovInPix)
+            psf_ = psf
+         
+        # managing the field of view
+        if nPix < ao.cam.fovInPix:
+            psf = np.zeros((nPix,nPix,ao.src.nSrc))
+            nC  = psf_.shape[0]/nPix
+            for iSrc in range(ao.src.nSrc):
+                psf[:,:,iSrc] = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)                   
+
+        # SCALING
+        PSF = psf/psf.sum(axis=(0,1)) * F
+            
+        return PSF + bkg, SR
+    
 def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[], 
                     x_stellar = [[1.0], [0.],[0.],[0]],
                     theta_ext = 0, nPix = None, otfPixel = 1):
@@ -412,10 +492,12 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
         for jWvl in range(freq.nWvl):
             
             # UPDATE THE INSTRUMENTAL OTF
-            if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(x_stat)>0:
-                freq.otfNCPA, freq.otfDL, freq.phaseMap = \
-                getStaticOTF(ao.tel,int(freq.nOtf),freq.samp[jWvl],freq.wvl[jWvl],
-                             xStat=x_stat,theta_ext=theta_ext)
+            if freq.nWvl>1 or len(x_stat)>0:
+                freq.otfNCPA, _, _ =  getStaticOTF(ao.tel, freq.nOtf,
+                                                   freq.samp[jWvl],
+                                                   freq.wvl[jWvl],
+                                                   xStat=x_stat,
+                                                   theta_ext=theta_ext)
                 
             # UPDATE THE RESIDUAL JITTER
             if freq.nyquistSampling == True and freq.nWvl > 1 and np.any(x_jitter[0:2]):
@@ -437,13 +519,13 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
             
             if freq.k_[jWvl] >= 1: # binning the PSF
                 psf = np.zeros((ao.cam.fovInPix,ao.cam.fovInPix,ao.src.nSrc))
-                nC = freq.k_[jWvl]#psf_.shape[0]/ao.cam.fovInPix
+                nC = freq.k_[jWvl]
                 for iSrc in range(ao.src.nSrc):
                     if nC > 1:
                         tmp = binning(psf_[:,:,iSrc],int(nC))
                     else:
                         tmp = psf_[:,:,iSrc]
-                        
+                     
                     psf[:,:,iSrc] = cropSupport(tmp,tmp.shape[0]/ao.cam.fovInPix)
                 psf_ = psf
              
@@ -455,7 +537,7 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
                     psf[:,:,iSrc] = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)                   
 
             # SCALING
-            PSF[:,:,:,jWvl] = psf * F[:,jWvl]
+            PSF[:,:,:,jWvl] = psf/psf.sum(axis=(0,1))  * F[:,jWvl]
             
             # STREHL-RATIO COMPUTATION
             SR[:,jWvl] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())

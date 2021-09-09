@@ -7,7 +7,7 @@ Created on Wed Apr 21 09:56:54 2021
 """
 import numpy as np
 
-def imageModel(psf4D, spectralStacking = True, spatialStacking = True, saturation=np.inf):
+def imageModel(psf_in, spectralStacking = True, spatialStacking = True, saturation=np.inf):
     """
     Function to model an image of a stellar population fields from the psfModelInst class
     The model is: 
@@ -21,7 +21,7 @@ def imageModel(psf4D, spectralStacking = True, spatialStacking = True, saturatio
         - F[x] is the 2D Fourier transform of x.
         
     INPUTS:
-        - psf4D: -  REQUIRED -  4D numpy array delivered by the P3 models: 
+        - psf_in: -  REQUIRED -  3D or 4D numpy array delivered by the P3 models: 
             - fourierModel
             - psfao21
             - psfR
@@ -31,26 +31,22 @@ def imageModel(psf4D, spectralStacking = True, spatialStacking = True, saturatio
         - nPix: - OPTIONAL - size of the image if different from the OTF
         - antiAliasing: - OPTIONAL - if true, the OTF is zero-padded to mitigate FFT aliasing issues.
     """
-    
-    # MANAGE THE IMAGE SIZE
-    #if nPix == None:
-    #    nPix = psfModelInst.freq.nPix
-    #    mode = 'psf-like'
-    #else:
-    #    if nPix > psfModelInst.freq.nPix:
-    #        mode = 'wide-field'
-    #    else:
-    #        mode = 'cropping'
-    
+
     # MANAGE THE DATA MODEL : 4D ARRAYS, CUBE OR IMAGE
+    n_dim = np.ndim(psf_in)
+    is_4d = n_dim > 3
     if (spectralStacking == False) and (spatialStacking == False):
-        im = np.squeeze(psf4D)
-    elif (spectralStacking == True) and (spatialStacking == False):
-        im = np.squeeze(psf4D.sum(axis=3))
+        im = np.squeeze(psf_in)
+    elif (spectralStacking == True) and (spatialStacking == False) and is_4d:
+        im = np.squeeze(psf_in.sum(axis=3))
+    elif (spectralStacking == True) and (spatialStacking == False) and (not is_4d):
+        im = np.squeeze(psf_in)
     elif (spectralStacking == False) and (spatialStacking == True):
-        im = np.squeeze(psf4D.sum(axis=2))
+        im = np.squeeze(psf_in.sum(axis=2))
+    elif (spectralStacking == True) and (spatialStacking == True) and (not is_4d):
+        im = np.squeeze(psf_in.sum(axis=2))
     else:
-        im = np.squeeze(psf4D.sum(axis=(2,3)))
+        im = np.squeeze(psf_in.sum(axis=(2,3)))
         
     if saturation < np.inf:
         im[np.where(im>=saturation)] = saturation

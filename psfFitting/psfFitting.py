@@ -158,7 +158,9 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
     idF = nparam+1
     xpsf[idF]  = 1.0 # flux=1
     xpsf[idF+1:idF+3*psfModelInst.ao.src.nSrc+1]   = 0.0 # dx,dy,bkcg=0
-    result.psf    = np.squeeze(psfModelInst(xpsf,nPix=nPix)[:,:,0,:].sum(axis=2))
+    result.psf    = np.squeeze(psfModelInst(xpsf,nPix=nPix)[:,:,0])
+    if np.ndim(result.psf) > 2:
+        result.psf = result.psf.sum(axis=2)
     result        = evaluateFittingQuality(result,psfModelInst)
     
     # static map
