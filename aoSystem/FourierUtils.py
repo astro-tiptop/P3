@@ -300,19 +300,18 @@ def sort_params_from_labels(psfModelInst, x0):
         n_tt = n_dphi
     
     # Astrometry/Photometry/Background
-    n_star = psfModelInst.ao.src.nSource
+    n_star = psfModelInst.ao.src.nSrc
     n_wvl = psfModelInst.nWvl
     n_src = n_star*n_wvl
-    n_stellar = n_tt + n_src*3 + 1
+    n_stellar = n_tt + n_src*3 + n_wvl
         
     if len(x0) > n_tt:
         x0_stellar = np.array(xall[n_tt:n_stellar])
-        
         # unpacking values
         if n_wvl == 1:
-            F = x0_stellar[:n_star][:,np.newaxis] * np.array(psfModelInst.ao.cam.transmittance)[np.newaxis,:]
-            dx = x0_stellar[n_star:2*n_star][:,np.newaxis] + np.array(psfModelInst.ao.cam.dispersion[0])[np.newaxis,:]
-            dy = x0_stellar[2*n_star:3*n_star][:,np.newaxis] + np.array(psfModelInst.ao.cam.dispersion[1])[np.newaxis,:]
+            F = x0_stellar[:n_star][:,np.newaxis] * np.array(psfModelInst.ao.cam.transmittance)
+            dx = x0_stellar[n_star:2*n_star][:,np.newaxis] + np.array(psfModelInst.ao.cam.dispersion[0])
+            dy = x0_stellar[2*n_star:3*n_star][:,np.newaxis] + np.array(psfModelInst.ao.cam.dispersion[1])
         else:
             F = x0_stellar[0:n_src].reshape((n_star, n_wvl))
             dx = x0_stellar[n_src:2*n_src].reshape((n_star, n_wvl))
@@ -325,7 +324,7 @@ def sort_params_from_labels(psfModelInst, x0):
         F = np.repeat(np.array(psfModelInst.ao.cam.transmittance)[np.newaxis,:]*vect_ones , n_star, axis=0)
         dx = np.repeat(np.array(psfModelInst.ao.cam.dispersion[0])[np.newaxis,:]*vect_ones, n_star, axis=0)
         dy = np.repeat(np.array(psfModelInst.ao.cam.dispersion[1])[np.newaxis,:]*vect_ones, n_star, axis=0)
-        bkg = 0.0
+        bkg = np.array(np.zeros(1)*vect_ones)
 
     x0_stellar = [F, dx, dy, bkg]
             
@@ -357,9 +356,9 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
                     x_stellar = [[1.0], [0.],[0.],[0]],
                     theta_ext = 0, nPix = None, otfPixel = 1):
         """
-          Computation of the PSF and the Strehl-ratio (from the OTF integral).
-          The Phase structure function must be expressed in nm^2 and of the 
-          size nPx x nPx x nSrc
+          Computation of the 3D PSF and the Strehl-ratio (from the OTF integral).
+          The Phase structure function must be a nPx x nPx x nSrc array
+          given in rad^2
         """
         
         # GETTING THE OBJECT PARAMETERS
@@ -387,7 +386,8 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
             Kjitter = np.exp(-0.5 * Djitter)   
             
         # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
-        if np.any(dx!=0) or np.any(dy!=0):
+        fftPhasor = np.ones((freq.nOtf, freq.nOtf, ao.src.nSrc), dtype=complex)
+        if np.any(dx) or np.any(dy):
             # accounting for the binning
             bin_fact = 1
             if freq.kRef_ > 1: 
@@ -395,14 +395,12 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
             # computing the phasor
             dr = bin_fact*(freq.U_[:,:,np.newaxis]*dx + freq.V_[:,:,np.newaxis]*dy)
             fftPhasor = np.exp(-np.pi*complex(0, 1)*dr)
-        else:
-            fftPhasor = np.ones((freq.nOtf, freq.nOtf, ao.src.nSrc), dtype=complex)
 
         # OTF MULTIPLICATION
         otfStat = freq.otfNCPA * Kjitter * otfPixel    
-        otfStat = np.repeat(otfStat[:,:,np.newaxis],ao.src.nSrc,axis=2)      
+        otfStat = np.repeat(otfStat[:, :, np.newaxis], ao.src.nSrc, axis=2)      
         otfTurb = np.exp(-0.5*sf)
-        otfTot  = fft.fftshift(otfTurb * otfStat * fftPhasor,axes=(0,1))
+        otfTot = fft.fftshift(otfTurb * otfStat * fftPhasor, axes=(0, 1))
                     
         # GET THE FINAL PSF - PIXEL SCALE IS NYQUIST - FOV DIFFERENT PER WVL
         psf_ = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
@@ -438,9 +436,9 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
                     x_stellar = [[1.0], [0.],[0.],[0]],
                     theta_ext = 0, nPix = None, otfPixel = 1):
         """
-          Computation of the PSF and the Strehl-ratio (from the OTF integral).
-          The Phase structure function must be expressed in nm^2 and of the 
-          size nPx x nPx x nSrc
+          Computation of the 4D PSF and the Strehl-ratio (from the OTF integral).
+          The Phase structure function must be a nPx x nPx x nSrc array
+          given in rad^2
         """
         
         # GETTING THE OBJECT PARAMETERS

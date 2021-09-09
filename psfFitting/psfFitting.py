@@ -195,9 +195,9 @@ def evaluateFittingQuality(result,psfModelInst):
         result.FWHMx_fit , result.FWHMy_fit = FourierUtils.getFWHM(result.im_fit,psfModelInst.ao.cam.psInMas,nargout=2)
         result.mse, result.mae , result.fvu = meanErrors(result.im_sky,result.im_fit)
         
-    elif (np.ndim(result.im_sky) == 3) and (psfModelInst.freq.nWvl>1):
+    elif (np.ndim(result.im_sky) == 3) and (psfModelInst.nWvl>1):
         # case fit of an hyperspectral data cube 
-        nWvl = psfModelInst.freq.nWvl
+        nWvl = psfModelInst.nWvl
         result.SR_sky = result.SR_fit = np.zeros(nWvl)
         result.FWHMx_sky = result.FWHMy_sky = np.zeros(nWvl)
         result.FWHMx_fit = result.FWHMy_fit = np.zeros(nWvl)
@@ -206,10 +206,10 @@ def evaluateFittingQuality(result,psfModelInst):
         for j in range(nWvl):
             ims_j = result.im_sky[:,:,j]
             imf_j = result.im_fit[:,:,j]
-            result.SR_sky[j] = FourierUtils.getStrehl(ims_j,psfModelInst.ao.tel.pupil,psfModelInst.freq.samp[j])
-            result.SR_fit[j] = FourierUtils.getStrehl(imf_j,psfModelInst.ao.tel.pupil,psfModelInst.freq.samp[j])
-            result.FWHMx_sky[j] , result.FWHMy_sky[j] = FourierUtils.getFWHM(ims_j,psfModelInst.freq.psInMas[j],nargout=2)
-            result.FWHMx_fit[j] , result.FWHMy_fit[j] = FourierUtils.getFWHM(imf_j,psfModelInst.freq.psInMas[j],nargout=2)
+            result.SR_sky[j] = FourierUtils.getStrehl(ims_j,psfModelInst.ao.tel.pupil,psfModelInst.freq[j].samp[0])
+            result.SR_fit[j] = FourierUtils.getStrehl(imf_j,psfModelInst.ao.tel.pupil,psfModelInst.freq[j].samp[0])
+            result.FWHMx_sky[j] , result.FWHMy_sky[j] = FourierUtils.getFWHM(ims_j,psfModelInst.freq[j].psInMas[0],nargout=2)
+            result.FWHMx_fit[j] , result.FWHMy_fit[j] = FourierUtils.getFWHM(imf_j,psfModelInst.freq[j].psInMas[0],nargout=2)
             result.mse[j], result.mae[j] , result.fvu[j] = meanErrors(ims_j,imf_j)
     return result
 

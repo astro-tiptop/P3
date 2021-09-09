@@ -32,9 +32,12 @@ def imageModel(psf_in, spectralStacking = True, spatialStacking = True, saturati
         - antiAliasing: - OPTIONAL - if true, the OTF is zero-padded to mitigate FFT aliasing issues.
     """
 
+
+
     # MANAGE THE DATA MODEL : 4D ARRAYS, CUBE OR IMAGE
     n_dim = np.ndim(psf_in)
     is_4d = n_dim > 3
+    
     if (spectralStacking == False) and (spatialStacking == False):
         im = np.squeeze(psf_in)
     elif (spectralStacking == True) and (spatialStacking == False) and is_4d:

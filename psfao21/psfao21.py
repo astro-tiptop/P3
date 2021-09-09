@@ -216,42 +216,53 @@ class psfao21:
         
         if self.nWvl == 1:
             
+            # ----------------- SELECTING THE OBJECT PARAMETERS
+            x0_stellar_1D = [x0_stellar[0][:,0].reshape(-1),
+                             x0_stellar[1][:,0].reshape(-1),
+                             x0_stellar[2][:,0].reshape(-1),
+                             x0_stellar[3][0]]
+            
             # ----------------- GETTING THE PHASE STRUCTURE FUNCTION
             self.psd = self.get_power_spectrum_density([r0]+ x0_dphi,
                                                        self.psfao_19,
                                                        self.freq)
             self.SF = self.get_opd_structure_function(self.freq, Cn2=Cn2)
-            
+
             # ----------------- COMPUTING THE PSF
             PSF, self.SR = FourierUtils.sf_3D_to_psf_3D(self.SF, 
                                                         self.freq, 
                                                         self.ao,
                                                         x_jitter = x0_jitter, 
                                                         x_stat = x0_stat,
-                                                        x_stellar = x0_stellar, 
+                                                        x_stellar = x0_stellar_1D, 
                                                         nPix = nPix,
                                                         otfPixel = self.otfPixel)
         else:
             PSF = []
             for n in range(self.nWvl):
+                # ----------------- SCALING FACTOR
+                wvl_ratio = (self.wvl[0]/self.wvl[n])**2
+                
+                # ----------------- SELECTING THE OBJECT PARAMETERS
+                x0_stellar_n = [x0_stellar[0][:,n], x0_stellar[1][:,n],
+                x0_stellar[2][:,n], x0_stellar[3][n]]
+                
                 # ----------------- GETTING THE PHASE STRUCTURE FUNCTION
                 self.psd = self.get_power_spectrum_density([r0]+ x0_dphi,
                                                            self.psfao_19[n],
                                                            self.freq[n])
                 self.SF = self.get_opd_structure_function(self.freq[n], Cn2=Cn2)
             
-                # ----------------- COMPUTING THE PSF
-                psf, self.SR = FourierUtils.sf_3D_to_psf_3D(self.SF, 
+                # ----------------- COMPUTING THE PSF                
+                psf, self.SR = FourierUtils.sf_3D_to_psf_3D(self.SF * wvl_ratio, 
                                                             self.freq[n], 
                                                             self.ao,
                                                             x_jitter = x0_jitter, 
                                                             x_stat = x0_stat,
-                                                            x_stellar = x0_stellar, 
+                                                            x_stellar = x0_stellar_n, 
                                                             nPix = nPix,
                                                             otfPixel = self.otfPixel)
-
                 PSF.append(psf)
             PSF = np.array(PSF).transpose((1,2,3,0))
-            
         return PSF
     
