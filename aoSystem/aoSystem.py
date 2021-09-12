@@ -25,7 +25,8 @@ import aoSystem.anisoplanatismModel as anisoplanatismModel
 #%%
 class aoSystem():
     
-    def __init__(self,path_ini,path_root='',nLayer=None,getPSDatNGSpositions=False,coo_stars=None):
+    def __init__(self, path_ini, path_root='', nLayer=None,
+                 getPSDatNGSpositions=False, coo_stars=None):
                             
         self.error = False
         # verify if the file exists
@@ -270,7 +271,7 @@ class aoSystem():
             
             
         #----- class definition
-        self.src  = source(wvlSrc,zenithSrc,azimuthSrc,tag="SCIENCE",verbose=True)   
+        self.src  = source(wvlSrc,zenithSrc,azimuthSrc,tag="SCIENCE",verbose=False)   
  
        
 #%% HIGH-ORDER WAVEFRONT SENSOR

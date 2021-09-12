@@ -190,10 +190,6 @@ def pistonFilter(D,f,fm=0,fn=0):
         F     = np.pi*D*np.hypot(FX,FY)    
     else:
         F     = np.pi*D*f
-        
-    #out         = np.zeros_like(F)
-    #idx         = F!=0
-    #out[idx]    = spc.j1(F[idx])/F[idx]
     R         = sombrero(1,F)        
     return 1 - 4 * R**2
              
@@ -301,7 +297,7 @@ def sort_params_from_labels(psfModelInst, x0):
     
     # Astrometry/Photometry/Background
     n_star = psfModelInst.ao.src.nSrc
-    n_wvl = psfModelInst.nWvl
+    n_wvl = psfModelInst.nwvl
     n_src = n_star*n_wvl
     n_stellar = n_tt + n_src*3 + n_wvl
         
@@ -562,6 +558,39 @@ def binning(image, k):
         for j in range(k):
             out += image[i:k*S0:k, j:k*S1:k]
     return out
+
+def create_wavelength_vector(ao):
+    '''
+        Returns the the vector containing all wavelengths from the  aoSystem
+        object setup. The function accounts for the wavelength of the ao.src 
+        object as well as the science dector bandwidth.
+        INPUTS: 
+            - ao, an aoSystem object
+        OUTPUTS:
+            - wvl, the vector of wavelengths. If wvl_cen is the vector of
+            central wavelengths (sources) and bw the detector bandwidth, we have
+            wvl = [wvl_cen[0]-bw/2, ... wvl_cen[0]+bw/2 ... wvl_cen[1]-bw/2 ---]
+            - nwvl, the number of wavelengths
+    '''
+    # grabbing information about the detector
+    n_bin = ao.cam.nWvl
+    wvl_cen = np.unique(ao.src.wvl)
+    n_cen = len(wvl_cen)
+    
+    # grabbing information about the wavelength of the point-sources
+    cam_bw = ao.cam.bandwidth
+    
+    # getting the range of wavelengths
+    w_min = wvl_cen - cam_bw/2
+    w_max = wvl_cen + cam_bw/2
+        
+    # creating the vector of wavelengths
+    nwvl = n_bin * n_cen 
+    wvl = np.zeros(nwvl)
+    for j in range(n_cen):
+        wvl[j:(j+1)*n_bin] = np.linspace(w_min[j], w_max[j], num=n_bin)
+         
+    return wvl, nwvl
 
 def cropSupport(im,n):    
     nx,ny = im.shape
