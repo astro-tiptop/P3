@@ -33,10 +33,18 @@ class configFile():
         parser.set('telescope','ZenithAngle', str(sysdiag.trs.tel.zenith_angle))
         parser.set('telescope','Resolution', str(sysdiag.trs.tel.resolution))
         parser.set('telescope','PupilAngle', str(sysdiag.trs.tel.pupilAngle))
-        parser.set('telescope','PathPupil','\'' + sysdiag.trs.tel.path_pupil + '\'')
-        parser.set('telescope','PathStaticOn','\'' + sysdiag.trs.cam.path_ncpa + '\'')
-        parser.set('telescope','PathStatModes','\'' + sysdiag.trs.tel.path_telstat + '\'')
-        
+        if sysdiag.trs.tel.path_pupil is not None:
+            parser.set('telescope','PathPupil','\'' + sysdiag.trs.tel.path_pupil + '\'')
+        else:
+            parser.remove_option('telescope','PathPupil')
+        if sysdiag.trs.cam.path_ncpa is not None:
+            parser.set('telescope','PathStaticOn','\'' + sysdiag.trs.cam.path_ncpa + '\'')
+        else:
+            parser.remove_option('telescope','PathStaticOn')
+        if sysdiag.trs.tel.path_telstat is not None:
+            parser.set('telescope','PathStatModes','\'' + sysdiag.trs.tel.path_telstat + '\'')
+        else:
+            parser.remove_option('telescope','PathStatModes')
         #%% ATMOSPHERE         
         if not parser.has_section('atmosphere'):
             parser.add_section('atmosphere')

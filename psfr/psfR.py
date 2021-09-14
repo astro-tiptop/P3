@@ -6,9 +6,10 @@ Created on Sat Aug 18 22:20:28 2018
 @author: omartin
 """
 #%% MANAGE PYTHON LIBRAIRIES
-import numpy as np
 import time
 import sys as sys
+
+import numpy as np
 import numpy.fft as fft
 
 from aoSystem.aoSystem import aoSystem
@@ -25,99 +26,97 @@ class psfR:
     """
     """
     # INIT
-    def __init__(self, trs, path_root='', nLayer=None, theta_ext=0,
-                 param_labels = ['Cn2', 'gho', 'gtt', 'F', 'dx', 'dy',
-                                 'bkg', 'stat']):
+    def __init__(self, trs, path_root='', nLayer=None, theta_ext=0):
         """
         Instantiating the psf-reconstruction model from a telemetry object
         """
         # READ PARFILE        
         tstart = time.time()
-        
+
         # PARSING INPUTS
-        if hasattr(trs,'path_ini') == False:
-            print('ERROR : no .ini file attached with the telemetry object')
-            return
+        if not hasattr(trs,'path_ini'):
+            raise ValueError("no .ini file attached with the telemetry object")
+
         self.path_ini = trs.path_ini
         self.trs = trs
         self.theta_ext = theta_ext
-        self.ao = aoSystem(self.path_ini,path_root=path_root)
-        self.tag = 'PSF-R'
+        self.ao = aoSystem(self.path_ini, path_root=path_root)
         
         # DEFINING THE NUMBER OF PARAMETERS
-        self.param_labels = param_labels
+        self.tag = 'PSF-R'
+        self.param_labels = ['Cn2', 'gho', 'gtt', 'F', 'dx', 'dy', 'bkg', 'stat']
         self.n_param_atm = min(self.ao.atm.nL, self.ao.dms.nRecLayers)
         self.n_param_dphi = 2
-            
+        
+        self.wvl, self.nwvl = FourierUtils.create_wavelength_vector(self.ao)
+        
         # CHECK THE PUPIL
-        if self.ao.tel.path_pupil == '' and np.any(trs.tel.pupil):
+        if self.ao.tel.path_pupil is None and np.any(trs.tel.pupil):
             self.ao.tel.pupil = self.trs.tel.pupil
         
         if self.ao.tel.path_static_on and hasattr(trs.tel,'map_ncpa')and np.any(trs.tel.map_ncpa):
             self.ao.tel.opdMap_on = trs.tel.map_ncpa
-        
-        if self.ao.error == False:
-            
-            # DEFINING THE FREQUENCY DOMAIN
-            self.freq = frequencyDomain(self.ao)
-            
-            # DEFINING BOUNDS
-            self.bounds = self.define_bounds()
-        
-            # INSTANTIATING THE FOURIER MODEL
-            self.fao = fourierModel(self.path_ini,calcPSF=False,display=False)
-            
-            # INSTANTIATING THE FITTING PHASE STRUCTURE FUNCTION FOR r0=1m
-            self.dphi_fit = self.fittingPhaseStructureFunction(1)
-            
-            # INSTANTIATING THE ALIASING PHASE STRUCTURE FUNCTION FOR r0=1m
-            self.dphi_alias = self.aliasingPhaseStructureFunction(1)
-            
-            # INSTANTIATING THE AO RESIDUAL PHASE STRUCTURE FUNCTION 
-            self.dphi_ao = self.aoResidualStructureFunction()
-                
-            # INSTANTIATING THE TT RESIDUAL PHASE STRUCTURE FUNCTION IN LGS MODE
-            # IN NGS MODE, THE TIP-TILT CONTRIBUTION SHOULD BE ADDED TO THE RESIDUAL WAVEFRONT
-            # TO ACCOUNT FOR THE CROSS-TERMS
-            self.dphi_tt = self.tipTiltPhaseStructureFunction()
 
-            # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
-            if (self.ao.lgs==None) or (self.ao.lgs.height == 0):
-                if self.freq.isAniso:
-                    self.dphi_ani = self.freq.dani_ang
-            else:
-                self.dani_focang = self.freq.dani_focang
-                self.dani_ang = self.freq.dani_ang
-                self.dani_tt  = self.freq.dani_tt
-                self.dphi_ani = self.dani_focang + self.dani_tt
-            
-            # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION
-            if self.trs.tel.name != 'KASP':
-                self.otfPixel = self.pixelOpticalTransferFunction()
-            else:
-                self.otfPixel = 1.0
-            
-            # COMPUTING THE ERROR BREAKDOWN:
-            self.get_error_breakdown()
-            
+        # DEFINING THE FREQUENCY DOMAIN
+        self.freq = frequencyDomain(self.ao)
+
+        # DEFINING BOUNDS
+        self.bounds = self.define_bounds()
+
+        # INSTANTIATING THE FOURIER MODEL
+        self.fao = fourierModel(self.path_ini,calcPSF=False,display=False)
+
+        # INSTANTIATING THE FITTING PHASE STRUCTURE FUNCTION FOR r0=1m
+        self.dphi_fit = self.fittingPhaseStructureFunction(1)
+
+        # INSTANTIATING THE ALIASING PHASE STRUCTURE FUNCTION FOR r0=1m
+        self.dphi_alias = self.aliasingPhaseStructureFunction(1)
+
+        # INSTANTIATING THE AO RESIDUAL PHASE STRUCTURE FUNCTION 
+        self.dphi_ao = self.aoResidualStructureFunction()
+
+        # INSTANTIATING THE TT RESIDUAL PHASE STRUCTURE FUNCTION IN LGS MODE
+        # IN NGS MODE, THE TIP-TILT CONTRIBUTION SHOULD BE ADDED TO THE RESIDUAL WAVEFRONT
+        # TO ACCOUNT FOR THE CROSS-TERMS
+        self.dphi_tt = self.tipTiltPhaseStructureFunction()
+
+        # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
+        if (self.ao.lgs==None) or (self.ao.lgs.height == 0):
+            if self.freq.isAniso:
+                self.dphi_ani = self.freq.dani_ang
+        else:
+            self.dani_focang = self.freq.dani_focang
+            self.dani_ang = self.freq.dani_ang
+            self.dani_tt  = self.freq.dani_tt
+            self.dphi_ani = self.dani_focang + self.dani_tt
+
+        # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION
+        if self.trs.tel.name != 'KASP':
+            self.otfPixel = self.pixelOpticalTransferFunction()
+        else:
+            self.otfPixel = 1.0
+
+        # COMPUTING THE ERROR BREAKDOWN:
+        self.get_error_breakdown()
+
         self.t_init = 1000*(time.time()  - tstart)
-    
+
     def _repr__(self):
         return 'PSF-Reconstruction model'
-   
+
     def define_bounds(self):
-        '''
+        """
             Defines the bounds for the PSF model parameters : 
                 Cn2/r0, gho, gtt, F, dx, dy, bg, stat
-        '''
+        """
         _EPSILON = np.sqrt(sys.float_info.epsilon)
-          
+
         # Bounds on r0
         bounds_down = list(np.ones(self.ao.atm.nL)*_EPSILON)
         bounds_up   = list(np.inf * np.ones(self.ao.atm.nL))            
         # optical gains 
         bounds_down += [0,0]
-        bounds_up   += [np.inf,np.inf]         
+        bounds_up   += [np.inf, np.inf]         
         # Photometry
         bounds_down += list(np.zeros(self.ao.src.nSrc))
         bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
@@ -133,8 +132,11 @@ class psfR:
         return (bounds_down,bounds_up)
       
     def fittingPhaseStructureFunction(self,r0):
-        return r0**(-5/3) * np.real(fft.fftshift(FourierUtils.cov2sf(FourierUtils.psd2cov(self.freq.psdKolmo_,2*self.freq.kc_/self.freq.resAO))))
-    
+        psd = r0**(-5/3) * self.freq.psdKolmo_
+        pix2freq = 2*self.freq.kc_/self.freq.resAO
+        cov = FourierUtils.psd2cov(psd, pix2freq)
+        return np.real(fft.fftshift(FourierUtils.cov2sf(cov)))
+
     def aliasingPhaseStructureFunction(self,r0):
         # computing the aliasing PSD over the AO-corrected area
         self.psdAlias_ = self.fao.aliasingPSD()/self.fao.ao.atm.r0**(-5/3)

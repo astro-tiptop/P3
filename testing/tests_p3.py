@@ -225,7 +225,7 @@ def test_psfao21_instantiation():
     print('%d psf computations done in %.2f s'%(nCases*4, time.time() - t0))
     return psfao
     
-def test_psfao21_fitting(tol=1e-5):
+def test_psfao21_fitting(tol=1e-8):
     '''
         Test the fitting of a NIRC2 image with the PSFAO21 model with two strategies:
             - joint fitting of PSD parameters and static aberrations
@@ -234,94 +234,39 @@ def test_psfao21_fitting(tol=1e-5):
     # instantiating the model
     psfao = psfao21(path_ini, path_root=path_p3)
     
-    # -------- Joint fitting the 7 PSD parameters + static aberrations
+    # initial guess
     n_modes = psfao.ao.tel.nModes
     x0 = [0.7, 4e-2, 0.5, 1e-2, 1, 0, 1.8, 0, 0, 0, 1.0, 0, 0, 0] + [0,]*n_modes
-    fixed = (False,)*7 +(True,)*3 + (False,)*4 + (False,)*n_modes
-    res_psfao21_joint = psfFitting(im_nirc2, psfao, x0, verbose=2,fixed=fixed,
-                                   ftol=tol, gtol=tol, xtol=tol)
-    
-    displayResults(psfao, res_psfao21_joint, nBox=90, scale='log10abs')
-    psd_stat = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
-    
-    # -------- Split fitting
-    # fitting - 7 PSD parameters + no static aberrations
     fixed = (False,)*7 +(True,)*3 + (False,)*4 + (True,)*n_modes
-    res_psfao21 = psfFitting(im_nirc2, psfao, x0, verbose=2, fixed=fixed, 
-                             ftol=tol, gtol=tol, xtol=tol)
-    displayResults(psfao, res_psfao21, nBox=90, scale='log10abs')
-    psd_nostat = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
+
+    # fit
+    res = psfFitting(im_nirc2, psfao, x0, verbose=2,fixed=fixed,
+                                   ftol=tol, gtol=tol, xtol=tol,
+                                   weights=None, normType=1)
     
-    # fitting - no PSD parameters + static aberrations
-    x0 = list(res_psfao21.x[:7]) + [0,]*3 + [1.0,0,0,0] + [0,]*n_modes
-    fixed = (False, )*7 +(True,)*3 + (False,)*4 + (False,)*n_modes
-    # redefining bounds
-    bounds= psfao.updateBounds(res_psfao21.x,res_psfao21.xerr,sig=5)
-    res_psfao21_split = psfFitting(im_nirc2, psfao, x0, verbose=2, fixed=fixed,
-                                   ftol=tol, gtol=tol, xtol=tol, bounds=bounds)
-    
-    displayResults(psfao, res_psfao21_split, nBox=90, scale='log10abs')
-    psd_stat2 = psfao.psd * (psfao.freq.wvlRef*1e9/2/np.pi)**2
-    
-    # PSD static aberrations
-    psd = np.abs(np.fft.fftshift(np.fft.fft2(res_psfao21_joint.opd)))**2 
-    psd = FourierUtils.interpolateSupport(psd,psfao.freq.nOtf)/np.size(res_psfao21_joint.opd)/(psfao.ao.tel.D * psfao.freq.sampRef)    
-    psd2 = np.abs(np.fft.fftshift(np.fft.fft2(res_psfao21_split.opd)))**2 
-    psd2 = FourierUtils.interpolateSupport(psd2,psfao.freq.nOtf)/np.size(res_psfao21_split.opd)/(psfao.ao.tel.D * psfao.freq.sampRef)
-    
-    
-    plt.figure()
-    kx,_  = FourierUtils.radial_profile(psd_nostat) 
-    kx *= np.mean(np.diff(psfao.freq.kx_[:,0]))/psfao.freq.kc_[0]
-    plt.semilogy(kx,FourierUtils.radial_profile(psd_nostat,nargout=1),label='No static aberrations')        
-    plt.semilogy(kx,FourierUtils.radial_profile(psd_stat,nargout=1),label='Joint fit')
-    plt.semilogy(kx,FourierUtils.radial_profile(psd_stat2,nargout=1),label='Split fit')
-    plt.semilogy(kx,FourierUtils.radial_profile(psd,nargout=1),label='Static aberrations - Joint fit')
-    plt.semilogy(kx,FourierUtils.radial_profile(psd2,nargout=1),label='Static aberrations  - Split fit')
-    plt.legend()        
-    plt.xlabel('Spatial frequency [$k_c$ units]')
-    plt.ylabel('PSD azimuthal profile [$nm^2.m$]')    
-    
-    plt.figure()
-    plt.semilogy(kx,FourierUtils.radial_profile(res_psfao21.psf,nargout=1),label='No static aberrations')        
-    plt.semilogy(kx,FourierUtils.radial_profile(res_psfao21_joint.psf,nargout=1),label='Joint fit')
-    plt.semilogy(kx,FourierUtils.radial_profile(res_psfao21_split.psf,nargout=1),label='Split fit')
-    plt.legend()        
-    plt.xlabel('Angular separation [$\lambda k_c$ units]')
-    plt.ylabel('PSF azimuthal profile')    
-    
-    fig, axs = plt.subplots(1,3,constrained_layout=True)
-    vmin = np.min([res_psfao21_joint.opd.min(), res_psfao21_split.opd.min()])
-    vmax = np.max([res_psfao21_joint.opd.max(), res_psfao21_split.opd.max()])
-    axs[0].imshow(res_psfao21_joint.opd,vmin=vmin,vmax=vmax)
-    axs[0].set_title('Joint fit')
-    axs[0].axis('off')
-    axs[1].imshow(res_psfao21_split.opd,vmin=vmin,vmax=vmax)
-    axs[1].set_title('Split fit')
-    axs[1].axis('off')
-    imm = axs[2].imshow(res_psfao21_split.opd - res_psfao21_joint.opd,vmin=vmin,vmax=vmax)
-    axs[2].set_title('Diff')
-    axs[2].axis('off')
-    fig.colorbar(imm, ax=axs.ravel().tolist(), shrink=0.6)
-    return res_psfao21, res_psfao21_split, res_psfao21_joint
+    # display
+    displayResults(psfao, res, nBox=90, scale='log10abs')
+
+    return res
 
 
 #%% PSF RECONSTRUCTION
 
-def test_kasp_psfr(path_mat,path_save,true_r0 = True,tol=1e-5):
-    ''' Test the interface with the KASP .mat output file.
-    '''
+def test_kasp_psfr(path_mat, path_save, true_r0 = True, tol=1e-5):
+    """
+    Test the interface with the KASP .mat output file.
+    """
     
     # instantiating/processing the telemetry and creating the .ini file
-    trs = telemetryKASP(path_mat,path_save=path_save)
+    trs = telemetryKASP(path_mat, path_save=path_save)
     r0_true = trs.atm.r0
     L0_true = trs.atm.L0
-    sd  = systemDiagnosis(trs,noiseMethod='nonoise')        
+    sd = systemDiagnosis(trs, noiseMethod='nonoise')        
     if true_r0:
         trs.atm.r0_tel = r0_true
-        trs.atm.r0     = r0_true
+        trs.atm.r0 = r0_true
         trs.atm.L0_tel = L0_true
-        trs.atm.L0     = L0_true
+        trs.atm.L0 = L0_true
         trs.atm.seeing = 3600*180/np.pi*0.98*trs.atm.wvl/r0_true
     configFile(sd)
     
@@ -331,20 +276,22 @@ def test_kasp_psfr(path_mat,path_save,true_r0 = True,tol=1e-5):
         Cn2 = list(np.array(trs.atm.Cn2) * (trs.atm.wvl/trs.cam.wvl[0])**2)
     else:
         Cn2 = [trs.atm.r0 * (trs.cam.wvl/trs.atm.wvl)**1.2]
-    x0  = Cn2 + [1,1] + [1,0,0,0]
+    x0  = Cn2 + [1, 1] + [1, 0, 0, 0]
     
     fixed = (True,)*(psfr.ao.atm.nL + 2)+(False,)*3 + (True,)
     
     #adjust the flux and the position
-    res   = psfFitting(psfr.trs.cam.image,psfr,x0,verbose=2,fixed=fixed,\
-                       ftol=tol,xtol=tol,gtol=tol)
-    displayResults(psfr,res,scale='log10abs')
+    res = psfFitting(psfr.trs.cam.image, psfr, x0, verbose=2, fixed=fixed,
+                     ftol=tol, xtol=tol, gtol=tol)
+
+    displayResults(psfr, res, scale='log10abs')
     
-    return psfr , res
+    return psfr, res
     
 def test_psfr(path_trs):
-    ''' Test the PSF reconstruction
-    '''
+    """
+    Test the PSF reconstruction
+    """
     
     # Get the telemetry
     trs = test_telemetry(path_trs)
@@ -362,25 +309,28 @@ def test_psfr(path_trs):
     return psfr
 
 def test_prime(psfr, fixed_stat = True, tol=1e-5):
-    ''' Test the PRIME approach
-    '''
+    """
+    Test the PRIME approach, i.e. fit a few parameters of the reconstructed
+    PSF model, namely the r0 and the optical gain
+    """
     # defining the initial guess and fixed parameters
     n_modes = psfr.ao.tel.nModes
     x0 = [0.7, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0] + [0,]*n_modes
     fixed = (False,)*2 + (True,) + (False,)*4 + (fixed_stat,)*n_modes
     
     # fitting
-    res = psfFitting(psfr.trs.cam.image, psfr, x0, verbose=2,
+    res = psfFitting(im_nirc2, psfr, x0, verbose=2,
                      fixed=fixed, xtol=tol, ftol=tol, gtol=tol)
     
     # Display
-    displayResults(psfr,res,nBox=90,scale='log10abs')
+    displayResults(psfr, res, nBox=90, scale='log10abs')
     
     return res
        
 def test_telemetry(path_trs):
-    ''' Test the instantiation of the telemetryKeck object
-    '''
+    """
+    Test the instantiation of the telemetryKeck object
+    """
     
     #load the telemetry
     if sys.platform[0:3] == 'win':
@@ -392,21 +342,23 @@ def test_telemetry(path_trs):
         psfrUtils.get_data_file(path_trs,filename)
         
     # path image/calibration
-    trs = telemetryKeck(path_sav,path_img,path_calib,path_save=path_trs,nLayer=1)
+    trs = telemetryKeck(path_sav, path_img, path_calib, path_save=path_trs, nLayer=1)
     
     return trs
 
 def test_systemDiagnosis(trs):
-    ''' Test the instantiation of the telemetryKeck and systemDiagnosis objects
-    '''
+    """
+    Test the instantiation of the telemetryKeck and systemDiagnosis objects
+    """
     
     sd  = systemDiagnosis(trs)
     
     return sd
 
 def test_configFile(sd):
-    ''' Test the instantiation of the telemetryKeck, systemDiagnosis and configFile objects
-    '''
+    """
+    Test the instantiation of the telemetryKeck, systemDiagnosis and configFile objects
+    """
 
     cfg = configFile(sd)
     

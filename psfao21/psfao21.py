@@ -44,46 +44,44 @@ class psfao21:
         self.isStatic = self.ao.tel.nModes > 0
         self.otfPixel = otfPixel
 
-        if not self.ao.error:
+        # INSTANTIATING THE MAOPPY MODEL
+        self.npix = self.ao.cam.fovInPix
+        system = Instrument(D=self.ao.tel.D,
+                            occ=self.ao.tel.obsRatio,
+                            res=self.ao.tel.resolution,
+                            Nact=self.ao.dms.nActu1D,
+                            gain=self.ao.cam.gain,
+                            ron=self.ao.cam.ron)
 
-            # INSTANTIATING THE MAOPPY MODEL
-            self.npix = self.ao.cam.fovInPix
-            system = Instrument(D=self.ao.tel.D,
-                                occ=self.ao.tel.obsRatio,
-                                res=self.ao.tel.resolution,
-                                Nact=self.ao.dms.nActu1D,
-                                gain=self.ao.cam.gain,
-                                ron=self.ao.cam.ron)
+        self.wvl, self.nwvl = FourierUtils.create_wavelength_vector(self.ao)
+        samp = RAD2MAS * self.wvl/(self.ao.cam.psInMas*self.ao.tel.D)
 
-            self.wvl, self.nwvl = FourierUtils.create_wavelength_vector(self.ao)
-            samp = RAD2MAS * self.wvl/(self.ao.cam.psInMas*self.ao.tel.D)
+        if self.nwvl > 1:
+            self.psfao_19 = []
+            self.freq = []
+            src_wvl = self.ao.src.wvl
+            for n in range(self.nwvl):
+                # CREATING INSTANCES OF THE MAOPPY MODEL
+                self.psfao_19.append(Psfao((self.npix, self.npix),
+                                    system=system, samp=samp[n]))
+                                
+                # DEFINING THE FREQUENCY DOMAIN
+                self.ao.cam.nWvl = 1
+                self.ao.src.wvl = [src_wvl[n]]
+                self.ao.src.nWvl = 1
+                self.ao.cam.bandwidth = 0
+                self.freq.append(frequencyDomain(self.ao))
+        else:
+            self.psfao_19 = Psfao((self.npix, self.npix),
+                                  system=system, samp=samp)
+            self.freq = frequencyDomain(self.ao)
 
-            if self.nwvl > 1:
-                self.psfao_19 = []
-                self.freq = []
-                src_wvl = self.ao.src.wvl
-                for n in range(self.nwvl):
-                    # CREATING INSTANCES OF THE MAOPPY MODEL
-                    self.psfao_19.append(Psfao((self.npix, self.npix),
-                                               system=system, samp=samp[n]))
+        # DEFINING THE NUMBER OF PSF PARAMETERS
+        self.n_param_atm = min(self.ao.atm.nL, self.ao.dms.nRecLayers)
+        self.n_param_dphi = 6
 
-                    # DEFINING THE FREQUENCY DOMAIN
-                    self.ao.cam.nWvl = 1
-                    self.ao.src.wvl = [src_wvl[n]]
-                    self.ao.src.nWvl = 1
-                    self.ao.cam.bandwidth = 0
-                    self.freq.append(frequencyDomain(self.ao))
-            else:
-                self.psfao_19 = Psfao((self.npix, self.npix),
-                                      system=system, samp=samp)
-                self.freq = frequencyDomain(self.ao)
-
-            # DEFINING THE NUMBER OF PSF PARAMETERS
-            self.n_param_atm = min(self.ao.atm.nL, self.ao.dms.nRecLayers)
-            self.n_param_dphi = 6
-
-            # DEFINING BOUNDS
-            self.bounds = self.define_bounds()
+        # DEFINING BOUNDS
+        self.bounds = self.define_bounds()
 
         self.t_init = 1000*(time.time()  - tstart)
 
@@ -99,14 +97,12 @@ class psfao21:
         Defining bounds on the PSFAO21 parameters based physics-based a priori
         """
         #Cn2/r0 , C , A , ax , p , theta , beta , sx , sy , sxy , F , dx , dy , bg , stat
-        _EPSILON = np.sqrt(sys.float_info.epsilon)
-
         # Bounds on r0
-        bounds_down = list(np.ones(self.ao.atm.nL)*_EPSILON)
+        bounds_down = list(np.ones(self.ao.atm.nL)*1e-3)
         bounds_up = list(np.inf * np.ones(self.ao.atm.nL))
         # PSD Parameters
-        bounds_down += [0, 0, _EPSILON, _EPSILON, -np.pi, 1+_EPSILON]
-        bounds_up += [5e-2, np.inf, np.inf, np.inf, np.pi, 10]
+        bounds_down += [0, 0, 1e-3, 1e-2, -np.pi, 1.01]
+        bounds_up += [np.inf, np.inf, np.inf, 1e2, np.pi, 5]
         # Jitter
         bounds_down += [0, 0, -1]
         bounds_up += [np.inf, np.inf, 1]

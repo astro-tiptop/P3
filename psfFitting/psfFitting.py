@@ -133,11 +133,20 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
             
     # PERFORMING MINIMIZATION WITH CONSTRAINS AND BOUNDS
     if method == 'trf':
-        result = least_squares(cost,input2mini(x0),method='trf',bounds=get_bounds(psfModelInst),\
-                               ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0))
+        result = least_squares(cost,input2mini(x0),
+                               method='trf',
+                               bounds=get_bounds(psfModelInst),
+                               ftol=ftol, xtol=xtol, gtol=gtol,
+                               max_nfev=max_nfev,
+                               verbose=max(verbose, 0),
+                               loss="linear")
     else:
-        result = least_squares(cost,input2mini(x0),method='lm',\
-                               ftol=ftol, xtol=xtol, gtol=gtol,max_nfev=max_nfev,verbose=max(verbose,0))
+        result = least_squares(cost,input2mini(x0),
+                               method='lm',
+                               ftol=ftol,
+                               xtol=xtol, gtol=gtol,
+                               max_nfev=max_nfev,
+                               verbose=max(verbose, 0))
 
     # update parameters
     result.x      = mini2input(result.x)
@@ -170,7 +179,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
     
     # 95% confidence interval
     try:
-        result.xerr = mini2input(confidence_interval(result.fun,result.jac),forceZero=True)
+        result.xerr = mini2input(confidence_interval(result.fun, result.jac), forceZero=True)
     except:
         print('Identification of the confidence interval failed ')
         result.xerr = list(-1 * np.ones_like(result.x))
