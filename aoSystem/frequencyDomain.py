@@ -53,7 +53,7 @@ class frequencyDomain():
         if self.nyquistSampling == True:
             self.sampRef  = 2.0
         else:
-            self.sampRef  = val* rad2mas/(self.psInMas[0]*self.ao.tel.D)    
+            self.sampRef  = val* rad2mas/(self.psInMas[0]*self.ao.tel.D)
     # SAMPLING
     @property
     def samp(self):
@@ -61,11 +61,11 @@ class frequencyDomain():
     @samp.setter
     def samp(self,val):
         self.k_ = np.ceil(2.0/val).astype('int') # works for oversampling
-        self.__samp = self.k_ * val     
+        self.__samp = self.k_ * val
         if np.any(self.k_ > 2):
-            self.PSDstep = np.min(1/self.ao.tel.D/self.__samp)      
+            self.PSDstep = np.min(1/self.ao.tel.D/self.__samp)
         else:
-            self.PSDstep = np.min(self.psInMas/self.wvl_/rad2mas)      
+            self.PSDstep = np.min(self.psInMas/self.wvl_/rad2mas)
 
     @property
     def sampCen(self):
@@ -73,7 +73,7 @@ class frequencyDomain():
     @sampCen.setter
     def sampCen(self,val):
         self.kCen_ = np.ceil(2.0/val).astype(int)# works for oversampling
-        self.__sampCen = self.kCen_ * val  
+        self.__sampCen = self.kCen_ * val
     @property
     def sampRef(self):
         return self.__sampRef
@@ -84,15 +84,15 @@ class frequencyDomain():
         self.nOtf = self.nPix * self.kRef_
         #  ---- FULL DOMAIN OF FREQUENCY
         self.kx_,self.ky_ = FourierUtils.freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
-        self.k2_ = self.kx_**2 + self.ky_**2       
-        #piston filtering        
+        self.k2_ = self.kx_**2 + self.ky_**2
+        #piston filtering
         self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
         self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
-    
+
     # CUT-OFF FREQUENCY
     @property
     def pitch(self):
-        return self.__pitch    
+        return self.__pitch
     @pitch.setter
     def pitch(self,val):
         self.__pitch = val
@@ -108,7 +108,7 @@ class frequencyDomain():
         self.kxAO_, self.kyAO_ = FourierUtils.freq_array(self.resAO,
                                                          offset=1e-10,
                                                          L=self.PSDstep)
-        self.k2AO_ = self.kxAO_**2 + self.kyAO_**2   
+        self.k2AO_ = self.kxAO_**2 + self.kyAO_**2
         self.pistonFilterAO_ = FourierUtils.pistonFilter(self.ao.tel.D, np.sqrt(self.k2AO_))
         self.pistonFilterAO_[self.resAO//2, self.resAO//2] = 0
 
@@ -117,7 +117,7 @@ class frequencyDomain():
             self.mskOut_ = (self.k2_ >= self.kcMin_**2)
             self.mskIn_ = (self.k2_ < self.kcMin_**2)
             self.mskOutAO_= self.k2AO_ >= self.kcMin_**2
-            self.mskInAO_ = self.k2AO_ < self.kcMin_**2      
+            self.mskInAO_ = self.k2AO_ < self.kcMin_**2
         else:
             self.mskIn_ = np.logical_and(abs(self.kx_) < self.kcMin_, abs(self.ky_) < self.kcMin_)
             self.mskOut_ = np.logical_or(abs(self.kx_) >= self.kcMin_, abs(self.ky_) >= self.kcMin_)
@@ -137,12 +137,12 @@ class frequencyDomain():
     def nTimes(self):
         """"""
         return min(4,max(2,int(np.ceil(self.nOtf/self.resAO/2))))
-    
+
     def __init__(self,aoSys,kcExt=None,nyquistSampling=False):
-        
+
         # PARSING INPUTS TO GET THE SAMPLING VALUES
         self.ao     = aoSys
-        
+
         # MANAGING THE WAVELENGTH
         self.nBin = self.ao.cam.nWvl # number of spectral bins for polychromatic PSFs
         self.nWvlCen = len(np.unique(self.ao.src.wvl))
@@ -172,16 +172,16 @@ class frequencyDomain():
         self.pitch = self.ao.dms.pitch
 
         self.tfreq = 1000*(time.time()-t0)
-                
+
         # DEFINING THE DOMAIN ANGULAR FREQUENCIES
         t0 = time.time()
         self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf,fact=2)
-              
+
         # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
         self.otfNCPA, self.otfDL, self.phaseMap =\
         FourierUtils.getStaticOTF(self.ao.tel, self.nOtf, self.sampRef, self.wvlRef)
         self.totf = 1000*(time.time()-t0)
-        
+
         # ANISOPLANATISM PHASE STRUCTURE FUNCTION
         t0 = time.time()
         if (self.ao.aoMode == 'SCAO') or (self.ao.aoMode == 'SLAO'):
@@ -192,7 +192,7 @@ class frequencyDomain():
         self.tani = 1000*(time.time()-t0)
 
     def __repr__(self):
-        
+
         s = '__ FREQUENCY DOMAIN __\n' + '--------------------------------------------- \n'
         s += '. Reference wavelength : %.2f µm\n'%(self.wvlRef*1e6)
         s += '. Oversampling factor at the reference wavelength : %.2f\n'%(self.sampRef)
@@ -202,8 +202,8 @@ class frequencyDomain():
         s += '. Include a static aberrations map : %s\n'%(str(np.any(self.otfNCPA != self.otfDL)))
         s += '---------------------------------------------\n'
         return s
-        
-        
+
+
     def anisoplanatismPhaseStructureFunction(self):
 
         # compute th Cn2 profile in m^(-5/3)
@@ -216,20 +216,25 @@ class frequencyDomain():
                 return None
             else:
                 self.isAniso = True
-                self.dani_ang = \
-                anisoplanatism_structure_function(self.ao.tel,self.ao.atm,self.ao.src,
-                                                self.ao.ngs,self.ao.ngs,self.nOtf,
-                                                self.sampRef,self.ao.dms.nActu1D)
+                self.dani_ang = anisoplanatism_structure_function(self.ao.tel,
+                                                                  self.ao.atm,
+                                                                  self.ao.src,
+                                                                  self.ao.lgs,
+                                                                  self.ao.ngs,
+                                                                  self.nOtf,
+                                                                  self.sampRef,
+                                                                  self.ao.dms.nActu1D)
+
                 return (self.dani_ang *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
-        
+
         elif self.ao.aoMode == 'SLAO':
             # LGS case : focal-angular  + anisokinetism
             self.isAniso = True
-            self.dani_focang,self.dani_ang,self.dani_tt = \
-            anisoplanatism_structure_function(self.ao.tel,self.ao.atm,self.ao.src,
-                                            self.ao.lgs,self.ao.ngs,self.nOtf,
-                                            self.sampRef,self.ao.dms.nActu1D)#self.trs.mat.Hdm)
-                
+            self.dani_focang, self.dani_ang, self.dani_tt = \
+            anisoplanatism_structure_function(self.ao.tel, self.ao.atm, self.ao.src,
+                                              self.ao.lgs, self.ao.ngs, self.nOtf,
+                                              self.sampRef, self.ao.dms.nActu1D)
+
             return ( (self.dani_focang + self.dani_tt) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         else:
             self.isAniso = False

@@ -697,13 +697,13 @@ class aoSystem():
 
         # ------------ SERVO-LAG ERROR
          # factor to account for the loss of valid actuator outside the pupil
-        square_areq_to_pupil = np.sqrt(np.pi*0.5**2)
+        square_areq_to_pupil = np.pi*0.5**2
         n_max = int(square_areq_to_pupil*(self.dms.nControlledRadialOrder[0]+1))
         n_min = 1
         if hasattr(self.rtc, 'ttloop') and self.tts is not None :
             n_min = 3
 
-        nrad = np.array(range(n_max, n_min))
+        nrad = np.array(range(n_min, n_max))
         f_bw = (self.atm.meanWind/self.tel.D/self.rtc.holoop['bandwidth'])
         var_bw = 0.04 * f_bw * Dr053 * np.sum((nrad+1)**(-2/3))
         self.wfe['HO Servo-lag'] = rad2nm(var_bw)
@@ -730,15 +730,26 @@ class aoSystem():
             self.wfe['TT Servo-lag'] = 0
             self.wfe['TT Noise'] = 0
 
-        # Focal anisoplanatism
-        if self.lgs:
-            wfe = anisoplanatismModel.focal_anisoplanatism_variance(self.tel,
-                                                                    self.atm,
-                                                                    self.lgs)
+        # Focal anisoplanatism and anisokinetism
+        if self.lgs is not None:
+            wfe = anisoplanatismModel.focal_anisoplanatism_wfe(self.tel,
+                                                               self.atm,
+                                                               self.lgs)
             self.wfe['Focal anisoplanatism'] = wfe
+
+            wfe = anisoplanatismModel.anisokinetism_wfe(self.tel, self.atm,
+                                                        self.src, self.ngs)
+            self.wfe['Anisokinetism'] = wfe
+
+            wfe = anisoplanatismModel.anisoplanatism_wfe(self.tel, self.atm,
+                                                     self.src, self.lgs)
+            self.wfe['Angular anisoplanatism'] = wfe
         else:
             self.wfe['Focal anisoplanatism'] = 0.0
-
+            self.wfe['Anisokinetism'] = 0.0
+            wfe = anisoplanatismModel.anisoplanatism_wfe(self.tel, self.atm,
+                                                     self.src, self.ngs)
+            self.wfe['Angular anisoplanatism'] = wfe
         # TO be added : angular anisoplanatisms
         self.wfe['Total'] = np.sqrt(self.wfe['DM fitting']**2\
                                     + self.wfe['WFS aliasing']**2\
@@ -746,8 +757,9 @@ class aoSystem():
                                     + self.wfe['HO Noise']**2\
                                     + self.wfe['TT Servo-lag']**2\
                                     + self.wfe['TT Noise']**2\
-                                    + self.wfe['Focal anisoplanatism']**2)
+                                    + self.wfe['Angular anisoplanatism']**2\
+                                    + self.wfe['Focal anisoplanatism']**2\
+                                    + self.wfe['Anisokinetism']**2)
 
         nm2rad = (2*np.pi*1e-9/self.src.wvl[0])
         self.wfe['Strehl'] = np.exp(-self.wfe['Total']**2 *nm2rad**2)
-        
