@@ -668,7 +668,7 @@ def inpolygon(xq, yq, xv, yv):
         p = Path([(xv[i], yv[i]) for i in range(xv.shape[0])])
         return p.contains_points(q).reshape(shape)
 
-def interpolateSupport(image,nRes,kind='spline'):
+def interpolateSupport(image, nRes, kind='spline'):
 
     nx,ny = image.shape
     # Define angular frequencies vectors
@@ -1298,35 +1298,49 @@ def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
 
     return Cn2eq,altEq
 
-def matrix_to_map(mat,nx, ny):
+def matrix_to_map(mat, sep_x=None, sep_y=None):
+    """
+    Compute the NxN covariance map from a N**2 x N**2 covariance matrix by
+    averaging the values of the spatial covariance corresponding to same baseline.
+    INPUTS:
+        - mat, the spatial covariance matrix of size n_src x n_layer x N**2 x N**2
+        - sep_x and sep_y, the 2D arrays of zisze N**2 x N**2 containing the separations
+        along x and y axes.
+    OUTPUTS:
+        map, the covariance map of size n_src x n_layer x N x N
+    """
+    # defining the geometry
+    n_ph = int(np.sqrt(mat.shape[-1]))
 
-    maskx = np.ones((nx, nx), dtype=bool)
-    masky = np.ones((ny, ny), dtype=bool)
-    n = nx + ny - 1
-    #T = np.zeros((n, n2, n1))
+    if sep_x is None or sep_y is None:
+        x = np.array(range(n_ph))
+        x1, y1 = np.meshgrid(x, x)
+        X1 = np.ones((n_ph**2, 1))*x1.T.reshape(-1)
+        Y1 = np.tile(y1,[n_ph,n_ph])
+        sep_x = np.transpose(X1.T - x1.T.reshape(-1))
+        sep_y = Y1 - y1.T.reshape(-1)
 
-    #for k in range(n):
-     #   T[k] = toeplitz(np.arange(n2,0,-1), np.arange(n2,n+1)) + n*k
+    # ----- allocating memory
+    if np.ndim(mat)!=2:
+        raise ValueError("The mat dimension is not supported")
 
-    #T = toeplitz(T(np.arange(n2,0,- 1)),T[n2:n])
-    T = np.zeros((ny**2, nx**2))
-    for ky in range(ny):
-        for kx in range(nx):
-            tmp = toeplitz(np.arange(ny**2//2,0,- 1), np.arange(nx,n+1))
-            T[kx*nx:(kx+1)*nx, ky*ny:(ky+1)*ny] = tmp
+    cmap = np.zeros((n_ph, n_ph))
+    cmap_full = np.zeros((2*n_ph-1, 2*n_ph-1))
 
-    T[not np.ravel(masky), :] = []
-    T[:, not np.ravel(maskx)] =[]
-    cmap = np.zeros((n,n))
-    num = np.zeros((n,n))
-    for k in range(len(T)):
-        cmap[T[k]] += mat(k)
-        num[T[k]] += 1
+    # ----- loops on baselines
+    y_ind = sep_y == (np.array(range(n_ph)) - n_ph+1)[:,np.newaxis,np.newaxis]
+    x_ind = sep_x == (np.array(range(n_ph)) - n_ph+1)[:,np.newaxis,np.newaxis]
+    id_x_y = np.logical_and(y_ind[:,np.newaxis,:,:], x_ind[np.newaxis,:,:,:])
+    cmap = [mat[id_x_y[jy, jx]].mean() for jy in range(n_ph) for jx in range(n_ph)]
+    cmap = np.array(cmap).reshape(n_ph, n_ph)
 
-    num[num == 0]=1
-    cmap = cmap / num
-    return cmap, num
+    # ----- creating the full map
+    cmap_full[:n_ph, :n_ph] = cmap
+    tmp = cmap[:, :-1]
+    cmap_full[:n_ph, n_ph:] = np.fliplr(tmp)
+    cmap_full[n_ph:, :] = np.flipud(cmap_full[:n_ph-1, :])
 
+    return np.squeeze(cmap_full)
 
 def get_diags(matrix):
     n , m = matrix.shape

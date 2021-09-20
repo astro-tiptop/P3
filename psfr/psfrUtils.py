@@ -151,12 +151,14 @@ def modes2Otf(Cmm,modes,pupil,nOtf,samp=2,basis='Vii'):
     otf = otf/otf.max()
     return otf,dphi
 
-def pointWiseLocation(D,dp,idxValid):
+def pointWiseLocation(D, dp, idxValid=None):
     # Defining the point-wise locations
-    xloc                 = np.arange(-D/2,D/2+dp,dp)
-    actuLocY, actuLocX   = np.meshgrid(xloc,xloc)
-    actuLocX             = actuLocX[idxValid]
-    actuLocY             = actuLocY[idxValid]
+    xloc = np.arange(-D/2,D/2+dp,dp)
+    actuLocY, actuLocX = np.meshgrid(xloc,xloc)
+    if idxValid is not None:
+        actuLocX = actuLocX[idxValid]
+        actuLocY = actuLocY[idxValid]
+
     return np.array([actuLocX,actuLocY])
 
 def sr2wfe(Strehl,wvl):
@@ -165,9 +167,9 @@ def sr2wfe(Strehl,wvl):
 def wfe2sr(wfe,wvl):
     return np.exp(-(2*np.pi*wfe*1e-9/wvl)**2)
 
-def zonalCovarianceToOtf(Cphi,npsf,D,dp,idxValid):
+def zonalCovarianceToOtf(Cphi, npsf, D, dp, idxValid=None):
     # Grabbing the valid actuators positions in meters
-    loc  = pointWiseLocation(D,dp,idxValid)
+    loc  = pointWiseLocation(D, dp, idxValid=idxValid)
     #OTF sampling
     nPh  = round(D/dp+1)
     #nU1d = 2*nPh;
@@ -176,6 +178,8 @@ def zonalCovarianceToOtf(Cphi,npsf,D,dp,idxValid):
     # Determining couples of point with the same separation
     shiftX,shiftY = mkotf_indpts(nU1d,nPh,u1D,loc,dp)
     # WF Amplitude
+    if idxValid is None:
+        idxValid = np.ones(Cphi.shape[0])
     amp0 = np.ones((np.count_nonzero(idxValid),1))
     # Long-exposure OTF
     otf = mkotf(shiftX,shiftY,nU1d,amp0,dp,-0.5*Cphi)

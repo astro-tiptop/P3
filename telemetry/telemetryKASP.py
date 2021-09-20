@@ -259,8 +259,8 @@ class telemetryKASP:
         self.dm.mechCoupling = [float(self.data_struct['dm_coupling'])]
         self.dm.heights = [float(self.data_struct['dm_height'])]
 
-        self.dm.pitch = [self.tel.D/(self.dm.nActuators[0]-1)]#[float(self.data_struct['dm_pitch'])]
-        self.wfs.dsub = [float(self.data_struct['wfs_dsub'])] #!!!!!!
+        self.dm.pitch = [0.42]#[float(self.data_struct['dm_pitch'])]
+        self.wfs.dsub = [0.42]#[float(self.data_struct['wfs_dsub'])] #!!!!!!
 
         # RESIDUAL WAVEFRONT
         self.mat.R = np.array(np.dot(self.mat.DMTTRem,np.dot(self.mat.M,self.mat.SlopeTTRem))).T
@@ -270,23 +270,25 @@ class telemetryKASP:
 
         # TIP-TILT
         if len(self.data_struct['lgs_azimuth'][0,0]) > 0:
+            # LGS CASE : the tip-tilt is measured from the NGS WFS and multiplied
+            # by the reconstructor Rtt = lambda_ngs/8
             self.tipTilt.wvl = float(self.data_struct['ngs_wvl'])
             self.tipTilt.pixel_scale = float(self.data_struct['tt_psInMas'])
             self.tipTilt.fov = int(self.data_struct['tt_fov'])
             self.tipTilt.ron = float(self.data_struct['tt_ron'])
             self.tipTilt.nExp = int(self.data_struct['tt_nexp'][0])
-            self.wfs.slopes = np.dot(self.mat.SlopeTTRem,self.wfs.slopes.T).T
-            self.tipTilt.tilt2meter = 1#self.tipTilt.pixel_scale * self.tel.D/1e3/206264.8
-            self.tipTilt.slopes = self.tipTilt.tilt2meter*np.array(np.squeeze(self.data_struct['tt_slopes'][0, 0] )).T
+            self.tipTilt.slopes = np.array(np.squeeze(self.data_struct['tt_slopes'][0, 0] )).T
+            self.tipTilt.tilt2meter = self.tipTilt.pixel_scale * self.tel.D/1e3/206264.8
+            self.tipTilt.slopes *= self.tipTilt.tilt2meter /(self.ngs.wvl/8)
         else:
+            # NGS CASE : the tip-tilt is extracted from the WFS slopes
             self.tipTilt.nExp = self.wfs.nExp
-            self.tipTilt.tilt2meter = mech2opt*self.wfs.pixel_scale * self.tel.D/1e3/206264.8
-            #self.tipTilt.tilt2meter = self.tel.D/206264.8/4
+            self.tipTilt.tilt2meter = self.wfs.pixel_scale * self.tel.D/1e3/206264.8
             self.tipTilt.slopes = self.tipTilt.tilt2meter * self.data_struct['tt_slopes'][0, 0].T
             self.tipTilt.slopes -= self.tipTilt.slopes.mean(axis=0)
 
         self.tipTilt.com = np.array(np.squeeze(self.data_struct['tt_com'][0, 0] )).T
-        self.tipTilt.com -= np.mean(self.tipTilt.com,axis=0)
+        self.tipTilt.com -= np.mean(self.tipTilt.com, axis=0)
 
         # TRANSFER FUNCTION
         self.holoop.lat = float(self.data_struct['lat_ho'])

@@ -183,7 +183,7 @@ class psfR:
     def tipTiltPhaseStructureFunction(self):
         """
         """
-        # computing the empirical covariance matrix of the residual tip-tilt in meter
+        # computing the empirical covariance matrix
         s = self.trs.tipTilt.slopes
         self.Ctt = np.dot(s.T, s)/self.trs.tipTilt.nExp
 
@@ -193,14 +193,16 @@ class psfR:
         # rotating the axes
         ang = self.trs.tel.pupilAngle * np.pi/180
         # freq.U_ ranges within [-1,1];
-        Ur  = (self.freq.U_*np.cos(ang) + self.freq.V_*np.sin(ang))
-        Vr  = (-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang))
+        # at Nyquist, angular frequencies range within [-D/lambda, D/lambda]
+        unit = self.freq.sampRef/2
+        Ur  = unit * (self.freq.U_*np.cos(ang) + self.freq.V_*np.sin(ang))
+        Vr  = unit * (-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang))
 
         # computing the Gaussian-Kernel
         dphi_tt = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 \
                 + Guu[0,1]*Ur*Vr.T + Guu[1,0]*Vr*Ur.T
 
-        return 16*dphi_tt
+        return dphi_tt
 
     def pixelOpticalTransferFunction(self):
         """
