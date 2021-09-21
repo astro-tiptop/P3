@@ -58,7 +58,7 @@ class fourierModel:
                  path_root=None, normalizePSD=False, displayContour=False,
                  getPSDatNGSpositions=False, getErrorBreakDown=False, getFWHM=False,
                  getEnsquaredEnergy=False, getEncircledEnergy=False, fftphasor=False,
-                 MV=0, nyquistSampling=False, addOtfPixel=False, freq=None):
+                 MV=0, nyquistSampling=False, addOtfPixel=False, freq=None, ao=None):
 
         tstart = time.time()
 
@@ -79,10 +79,11 @@ class fourierModel:
         self.n_param_dphi = 0
 
         # GRAB PARAMETERS
-        self.ao = aoSystem(path_ini,
-                           path_root=path_root,
-                           getPSDatNGSpositions=getPSDatNGSpositions)
-
+        if ao is None:
+            self.ao = aoSystem(path_ini, path_root=path_root,
+                               getPSDatNGSpositions=getPSDatNGSpositions)
+        else:
+            self.ao = ao
         self.t_initAO = 1000*(time.time() - tstart)
 
         # DEFINING THE FREQUENCY DOMAIN

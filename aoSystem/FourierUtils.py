@@ -111,15 +111,15 @@ def instantiateAngularFrequencies(nOtf,fact=2):
 
 def mcDonald(x):
         out = 3/5 * np.ones_like(x)
-        idx  = x!=0
-        if np.any(idx==False):
-            out[idx] = x[idx] ** (5/6) * ssp.kv(5/6,x[idx])/(2**(5/6) * ssp.gamma(11/6))
+        idx = x!=0
+        if not np.all(idx):
+            out[idx] = x[idx]**(5/6) * ssp.kv(5/6, x[idx])/(2**(5/6)*ssp.gamma(11/6))
         else:
-            out = x ** (5/6) * ssp.kv(5/6,x)/(2**(5/6) * ssp.gamma(11/6))
+            out = x**(5/6)*ssp.kv(5/6, x)/(2**(5/6) * ssp.gamma(11/6))
         return out
 
-def Ialpha(x,y):
-    return mcDonald(np.hypot(x,y))
+def Ialpha(x, y):
+    return mcDonald(np.hypot(x, y))
 
 def _rfft2_to_fft2(im_shape, rfft):
     '''
@@ -446,6 +446,7 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
 
         # SCALING
         PSF = psf/psf.sum(axis=(0,1)) * F
+        SR = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
 
         return PSF + bkg, SR
 
@@ -668,49 +669,55 @@ def inpolygon(xq, yq, xv, yv):
         p = Path([(xv[i], yv[i]) for i in range(xv.shape[0])])
         return p.contains_points(q).reshape(shape)
 
-def interpolateSupport(image, nRes, kind='spline'):
+def interpolateSupport(image, n_out, kind='spline'):
+    """
+    Returns the interpolated image over a n_out x n_out cartesian grid
+    """
 
-    nx,ny = image.shape
+    # ---- checking the size
+    n_x, n_y = image.shape
     # Define angular frequencies vectors
-    if np.isscalar(nRes):
-        mx = my = nRes
+    if np.isscalar(n_out):
+        m_x = m_y = n_out
     else:
-        mx = nRes[0]
-        my = nRes[1]
+        m_x = n_out[0]
+        m_y = n_out[1]
 
+    if n_x==m_x and n_y==m_y:
+        return image
 
-    if kind == 'nearest':
-        tmpReal = scnd.zoom(np.real(image),min([mx/nx,my/ny]),order=0)
+    if kind=="nearest":
+        tmpReal = scnd.zoom(np.real(image),min([m_x/n_x,m_y/m_y]),order=0)
         if np.any(np.iscomplex(image)):
-            tmpImag = scnd.zoom(np.imag(image),min([mx/nx,my/ny]),order=0)
+            tmpImag = scnd.zoom(np.imag(image),min([m_x/n_x,m_y/m_y]),order=0)
             return tmpReal + complex(0,1)*tmpImag
         else:
             return tmpReal
     else:
 
         # Initial frequencies grid
-        if nx%2 == 0:
-            uinit = np.linspace(-nx/2,nx/2-1,nx)*2/nx
+        if n_x%2 == 0:
+            uinit = np.linspace(-n_x/2,n_x/2-1,n_x)*2/n_x
         else:
-            uinit = np.linspace(-np.floor(nx/2),np.floor(nx/2),nx)*2/nx
-        if ny%2 == 0:
-            vinit = np.linspace(-ny/2,ny/2-1,ny)*2/ny
+            uinit = np.linspace(-np.floor(n_x/2),np.floor(n_x/2),n_x)*2/n_x
+        if n_y%2 == 0:
+            vinit = np.linspace(-n_y/2,n_y/2-1,n_y)*2/n_y
         else:
-            vinit = np.linspace(-np.floor(ny/2),np.floor(ny/2),ny)*2/ny
+            vinit = np.linspace(-np.floor(n_y/2),np.floor(n_y/2),n_y)*2/n_y
 
         # Interpolated frequencies grid
-        if mx%2 == 0:
-            unew = np.linspace(-mx/2,mx/2-1,mx)*2/mx
+        if m_x%2 == 0:
+            unew = np.linspace(-m_x/2,m_x/2-1,m_x)*2/m_x
         else:
-            unew = np.linspace(-np.floor(mx/2),np.floor(mx/2),mx)*2/mx
-        if my%2 == 0:
-            vnew = np.linspace(-my/2,my/2-1,my)*2/my
+            unew = np.linspace(-np.floor(m_x/2),np.floor(m_x/2),m_x)*2/m_x
+        if m_y%2 == 0:
+            vnew = np.linspace(-m_y/2,m_y/2-1,m_y)*2/m_y
         else:
-            vnew = np.linspace(-np.floor(my/2),np.floor(my/2),my)*2/my
+            vnew = np.linspace(-np.floor(m_y/2),np.floor(m_y/2),m_y)*2/m_y
 
         # Interpolation
 
-        if kind == 'spline':
+        if kind=="spline":
             # Surprinsingly v and u vectors must be shifted when using
             # RectBivariateSpline. See:https://github.com/scipy/scipy/issues/3164
             fun_real = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.real(image))
@@ -1234,7 +1241,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     elif nargout == 4:
         return FWHMx,FWHMy,aRatio,theta
 
-def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf'):
+def getStrehl(psf0, pupil, samp, recentering=False, nR=5, method='otf'):
     if recentering:
         psf = centerPsf(psf0,2)
     else:
@@ -1324,23 +1331,22 @@ def matrix_to_map(mat, sep_x=None, sep_y=None):
     if np.ndim(mat)!=2:
         raise ValueError("The mat dimension is not supported")
 
-    cmap = np.zeros((n_ph, n_ph))
-    cmap_full = np.zeros((2*n_ph-1, 2*n_ph-1))
 
-    # ----- loops on baselines
+    # ----- get the indexes for baselines
     y_ind = sep_y == (np.array(range(n_ph)) - n_ph+1)[:,np.newaxis,np.newaxis]
     x_ind = sep_x == (np.array(range(n_ph)) - n_ph+1)[:,np.newaxis,np.newaxis]
     id_x_y = np.logical_and(y_ind[:,np.newaxis,:,:], x_ind[np.newaxis,:,:,:])
+    # ----- get one quadrant of the map
     cmap = [mat[id_x_y[jy, jx]].mean() for jy in range(n_ph) for jx in range(n_ph)]
     cmap = np.array(cmap).reshape(n_ph, n_ph)
-
-    # ----- creating the full map
+    # ----- duplicating the quadrant to get the full map
+    cmap_full = np.zeros((2*n_ph-1, 2*n_ph-1))
     cmap_full[:n_ph, :n_ph] = cmap
     tmp = cmap[:, :-1]
     cmap_full[:n_ph, n_ph:] = np.fliplr(tmp)
     cmap_full[n_ph:, :] = np.flipud(cmap_full[:n_ph-1, :])
 
-    return np.squeeze(cmap_full)
+    return cmap_full
 
 def get_diags(matrix):
     n , m = matrix.shape

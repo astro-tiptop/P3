@@ -25,13 +25,13 @@ class telescope:
         - resolution: pupil pixels resolution
     """
 
-    # DEPENDANT VARIABLES DEFINITION   
+    # DEPENDANT VARIABLES DEFINITION
     def get_pupil(self):
         return self.p_pupil
     def set_pupil(self,val):
         self.p_pupil = val
         self.resolution = val.shape[0]
-    pupil = property(get_pupil,set_pupil)        
+    pupil = property(get_pupil,set_pupil)
 
     @property
     def R(self):
@@ -84,7 +84,7 @@ class telescope:
                 data = FourierUtils.interpolateSupport(data, resolution, kind='linear')
             return data
 
-        #----- PUPIL DEFINITION           
+        #----- PUPIL DEFINITION
         if check_path(path_pupil):
             self.verb = True
             self.pupil = load_and_process_data(path_pupil)
@@ -104,14 +104,14 @@ class telescope:
         self.apodizer = 1.0
         if check_path(path_apodizer):
             self.apodizer = load_and_process_data(path_apodizer)
-            
+
         #----- NCPA
         self.opdMap_on = None
         if check_path(path_static_on):
             self.opdMap_on = load_and_process_data(path_static_on)
 
         #----- FIELD-DEPENDANT STATIC ABERRATIONS
-        self.opdMap_off = None 
+        self.opdMap_off = None
         self.opdMap_pos = None
         if check_path(path_static_off):
             if check_path(path_static_pos):
@@ -126,7 +126,7 @@ class telescope:
                 raise ValueError(("Positions (zenith in arcsec, azimuth in radian)"
                                   "of the field-dependent aberrations must be"
                                   "provided as well as the maps"))
-            
+
         #----- MODAL BASIS FOR TELESCOPE ABERRATIONS
         self.statModes = None
         self.nModes = 0
@@ -134,7 +134,7 @@ class telescope:
             statModes = fits.getdata(path_statModes)
             s1, s2, s3 = statModes.shape
             if s1 != s2: # mode on first dimension
-                tmp = np.transpose(statModes, (1, 2, 0))  
+                tmp = np.transpose(statModes, (1, 2, 0))
             else:
                 tmp = statModes
 

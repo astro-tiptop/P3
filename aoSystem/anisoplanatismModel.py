@@ -47,9 +47,10 @@ def anisoplanatism_wfe(tel, atm, src, ngs):
 
     return wfe
 
-def focal_anisoplanatism_wfe(tel, atm, lgs, method="Sasiela"):
+def focal_anisoplanatism_wfe(tel, atm, lgs):
     """
-        Computes the wavefront error of the focal anisoplanatism due to the finite altitude of the LGS in SLAO mode
+        Computes the wavefront error of the focal anisoplanatism due to the finite altitude
+        of the LGS in SLAO mode by using Parenti and Sassiela+04
         INPUTS:
             - tel, atm and lgs objects
             - method : Sasiela or Tyler (this latter not validated yet)
@@ -60,61 +61,12 @@ def focal_anisoplanatism_wfe(tel, atm, lgs, method="Sasiela"):
     var = 0
     zLgs = float(lgs.height[0])
 
-    if method == "Sasiela":
-        for k in range(atm.nL):
-            if atm.heights[k] > 0:
-                var1 = 0.5*(atm.heights[k]/zLgs)**(5/3)
-                var2 = 0.452*(atm.heights[k]/zLgs)**2
-                var += atm.weights[k] * (var1 - var2)/0.423
-        wfe = np.sqrt(var * (tel.D/atm.r0)**(5/3)) * (atm.wvl*1e9/2/np.pi)
-
-    elif method == "Tyler":
-        alpha_factor = 54 * spc.gamma(14/3)/(391 * spc.gamma(17/6)**2)
-        beta_factor = 2**(1/3) * spc.gamma(1/6)**2/(55 * 4**(5/6) * spc.gamma(1/3))
-
-        for k in range(atm.nL):
-            if atm.heights[k] > 0:
-                z_ratio = atm.heights[k]/zLgs
-                aa =-11/6
-                bb = -5/6
-                cc = 2
-                z = (1- z_ratio)**(5/3)
-                f1 =0
-                tmp = 0
-                ss = 0
-                ee = 1
-                while ee <= 1e-6:
-                    tmp = np.copy(f1)
-                    f1 += spc.gamma(aa+ss) * spc.gamma(bb+ss)/\
-                          (spc.gamma(cc+ss) * spc.factorial(ss))*z**ss
-                    ss += 1
-                    ee = abs((f1-tmp)/f1)
-                f1 *= spc.gamma(cc)/spc.gamma(aa)/spc.gamma(bb)
-
-                aa = -11/6
-                bb = 1/6
-                cc = 3
-                z = (1 - z_ratio)**2
-                f2 = 0
-                tmp = 0
-                ss = 0
-                ee = 1
-                while ee<1e-6:
-                    tmp=np.copy(f2)
-                    f2 += spc.gamma(aa+ss) * spc.gamma(bb+ss)/\
-                         (spc.gamma(cc+ss) * spc.factorial(ss))*z**ss
-                    ss+= 1
-                    ee = abs((f2-tmp)/f2)
-                f2 *= spc.gamma(cc)/spc.gamma(aa)/spc.gamma(bb)
-
-                tmp = atm.weights[k]*(alpha_factor*(1 + (1-z_ratio)**(5/3))\
-                                     -6*(f1-z_ratio**(5/3))\
-                                     +10*(1-z_ratio)*f2)
-
-                var += beta_factor*tmp
-        wfe = np.sqrt(var * (tel.D/atm.r0)**(5/3)) * (atm.wvl*1e9/2/np.pi)
-    else:
-        raise ValueError("The method " + method + "is not supported." )
+    for k in range(atm.nL):
+        if atm.heights[k] > 0:
+            var1 = 0.5*(atm.heights[k]/zLgs)**(5/3)
+            var2 = 0.452*(atm.heights[k]/zLgs)**2
+            var += atm.weights[k] * (var1 - var2)/0.423
+    wfe = np.sqrt(var * (tel.D/atm.r0)**(5/3)) * (atm.wvl*1e9/2/np.pi)
 
     return wfe
 
@@ -165,7 +117,7 @@ def anisokinetism_wfe(tel, atm, src, ngs, method="Sasiela"):
 
 #%% PHASE STRUCTURE FUNCTION
 def anisoplanatism_structure_function(tel, atm, src, lgs, ngs,
-                                      nOtf, samp, nActu, Hfilter=1):
+                                      nOtf, samp, nActu, msk_in=1):
     """
     Computes the anisoplanatic phase structure functions
     INPUTS:
@@ -186,24 +138,24 @@ def anisoplanatism_structure_function(tel, atm, src, lgs, ngs,
 
     if lgs is None or lgs.height==0:
         # NGS mode, angular anisoplanatism
-        dani_ang = angular_function(tel, atm, src, ngs, nOtf, samp)
+        dani_ang = angular_function(tel, atm, src, ngs,
+                                    nOtf, samp, msk_in=msk_in)
         return dani_ang
 
     else:
-        # LGS mode, focal-angular anisoplanatism + anisokinetism
-
         # angular + focal anisoplanatism
         dani_focang = focal_angular_function(tel, atm, src, lgs,
-                                             nActu, nOtf, samp, Hfilter=Hfilter)
+                                             nActu, nOtf, samp)
         # angular anisoplanatism only
-        dani_ang = angular_function(tel, atm, src, lgs, nOtf, samp)
+        dani_ang = angular_function(tel, atm, src, lgs,
+                                    nOtf, samp, msk_in=msk_in)
 
         # anisokinetism
         dani_tt = anisokinetism_function(tel, atm, src, ngs, nOtf, samp)
 
         return dani_focang, dani_ang, dani_tt
 
-def angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier"):
+def angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier", msk_in=1):
     """
     Returns the nOtf x nOtf phase structure function for the angular anisoplanatism
     by following Flicker's 2008 report or the Fourier approach (Rigaut+98)
@@ -220,10 +172,7 @@ def angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier"):
         umax = tel.D * samp
         f0 = 2*np.pi/atm.L0
         # Angular frequencies
-        if not np.mod(nOtf, 2):
-            x = np.linspace(-umax/2, umax/2-umax/nOtf, num=nOtf)
-        else:
-            x = np.linspace(-umax/2, umax/2, num=nOtf)
+        x = umax/nOtf * (np.array(range(nOtf)) - nOtf//2)
         rhoX, rhoY = np.meshgrid(x, x)
 
         # Instantiation
@@ -264,7 +213,7 @@ def angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier"):
             for l in range(nLayer):
                 zl = Hs[l]
                 if zl and (thx or thy):
-                    psd = 2*(1 - np.cos(2*np.pi*zl*(kx*thx + ky*thy))) * Watm
+                    psd = 2*(1 - np.cos(2*np.pi*zl*(kx*thx + ky*thy))) * Watm * msk_in
                     Bphi = np.fft.fft2(np.fft.fftshift(psd)) * PSDstep**2
                     Dani_l[iSrc, l] = np.fft.fftshift(np.real(2*(Bphi.max() - Bphi)))
 
@@ -273,7 +222,7 @@ def angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier"):
 
     return Dani_l
 
-def focal_angular_function(tel, atm, src, gs, nActu, nOtf, samp, Hfilter=1):
+def focal_angular_function(tel, atm, src, gs, nActu, nOtf, samp):
     """
     Returns the nActu**2 x nActu**2 point wise phase structure function
     for the focal-angular anisoplanatism  by following Flicker's 2008 report.
@@ -282,26 +231,23 @@ def focal_angular_function(tel, atm, src, gs, nActu, nOtf, samp, Hfilter=1):
     if gs.height == 0 or gs.height==np.inf:
         return angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier")
 
-    #1\ Defining the spatial filters
-    umax = tel.D * max([1,samp])
+    #1\ Grabbing inputs
+    umax = tel.D/2 * max([1,samp])/2
     f0 = 2*np.pi/atm.L0
-    nLayer = atm.nL
-    Hs = atm.heights * tel.airmass
-    ax = src.direction[0] - gs.direction[0]
-    ay = src.direction[1] - gs.direction[1]
-    nSrc = len(ax)
+    dist = [ src.direction[0] - gs.direction[0],
+              src.direction[1] - gs.direction[1]]
 
     def vector_to_separation(u):
-        y, x = np.meshgrid(u, u)
-        Y = np.ones((n_ph**2, 1))*x.T.reshape(-1)
-        X = np.tile(y,[n_ph, n_ph])
+        x, y = np.meshgrid(u, u)
+        X = np.ones((n_ph**2, 1))*x.T.reshape(-1)
+        Y = np.tile(y,[n_ph, n_ph])
         # Samples separation in the pupil
         rho_x = np.transpose(X.T - x.T.reshape(-1))
         rho_y = Y - y.T.reshape(-1)
         return X, Y, rho_x, rho_y
 
     #2\ SF Calculation
-    Dani_l = np.zeros((nSrc, nLayer, nOtf, nOtf))
+    Dani_l = np.zeros((src.nSrc, atm.nL, nOtf, nOtf))
     n_ph = int(nActu*2 + 1)
 
     # Angular frequencies
@@ -309,39 +255,35 @@ def focal_angular_function(tel, atm, src, gs, nActu, nOtf, samp, Hfilter=1):
     _, _, sep_x, sep_y = vector_to_separation(np.array(range(n_ph)))
 
     # Instantiation
-    I0 = 3/5
+    I0 = 3.0/5.0
     I1 = FourierUtils.Ialpha(f0*rhoX, f0*rhoY)
-    cte = 0.12184*0.06*(2*np.pi)**2*atm.L0**(5/3)
+    cte = 0.12184*0.06*(2*np.pi)**2 * atm.L0**(5/3)
 
     # Anisoplanatism Structure Function
-    for iSrc in range(nSrc):
-        thx = ax[iSrc]
-        thy = ay[iSrc]
-        for l in range(nLayer):
-            zl = Hs[l]
+    for iSrc in range(src.nSrc):
+        thx = dist[0][iSrc]
+        thy = dist[1][iSrc]
+        for l, zl in enumerate(atm.heights):
             if zl:
                 g = zl/gs.height
-                I2 = FourierUtils.Ialpha(f0*(rhoX*(1-g)), f0*(rhoY*(1-g)) )
-                I3 = FourierUtils.Ialpha(f0*(rhoX -g*X1 + zl*thx), f0*(rhoY - g*Y1 + zl*thy) )
-                I4 = FourierUtils.Ialpha(f0*( g*X1 - zl*thx), f0*(g*Y1 - zl*thy))
-                I5 = FourierUtils.Ialpha(f0*(g*(rhoX-X1) -zl*thx), f0*(g*(rhoY-Y1) - zl*thy) )
-                I6 = FourierUtils.Ialpha(f0*((1-g)*rhoX + g*X1 - zl*thx), f0*((1-g)*rhoY + g*Y1 - zl*thy))
-                if np.isscalar(Hfilter):
-                    tmp = (2*I0 - I1 - I2 + I3 - I4 - I5 + I6)
-                else:
-                    tmp = Hfilter*(2*I0 - I1 - I2 + I3 - I4 - I5 + I6)*Hfilter.T
+                I2 = FourierUtils.Ialpha(f0*(rhoX*(1-g)),
+                                         f0*(rhoY*(1-g)))
+                I3 = FourierUtils.Ialpha(f0*(rhoX - g*X1 + zl*thx),
+                                         f0*(rhoY - g*Y1 + zl*thy))
+                I4 = FourierUtils.Ialpha(f0*(g*X1 - zl*thx),
+                                         f0*(g*Y1 - zl*thy))
+                I5 = FourierUtils.Ialpha(f0*(g*(rhoX-X1) - zl*thx),
+                                         f0*(g*(rhoY-Y1) - zl*thy))
+                I6 = FourierUtils.Ialpha(f0*((1-g)*rhoX + g*X1 - zl*thx),
+                                         f0*((1-g)*rhoY + g*Y1 - zl*thy))
+                tmp = (2*I0 - I1 - I2 + I3 - I4 - I5 + I6)
 
-                #get the maps
+                # ---- get the maps
                 cmap = FourierUtils.matrix_to_map(tmp, sep_x=sep_x, sep_y=sep_y)
 
-                # interpolation
-                if nOtf != 2*n_ph-1:
-                    Dani_l[iSrc, l] = FourierUtils.interpolateSupport(cmap, nOtf)
-                else:
-                    Dani_l[iSrc, l] = cmap
-# init : 1.6s
-# get tmp : 6.5s
-# get cmap : 4.5s
+                # ---- interpolation
+                Dani_l[iSrc, l] = FourierUtils.interpolateSupport(cmap, nOtf)
+
     return cte*Dani_l
 
 def anisokinetism_function(tel, atm, src, gs, nOtf, samp):
@@ -351,37 +293,34 @@ def anisokinetism_function(tel, atm, src, gs, nOtf, samp):
     """
 
     #1\ Defining the spatial filters
-    nLayer = atm.nL
-    Hs = atm.heights * tel.airmass
-    ax = src.direction[0] - gs.direction[0]
-    ay = src.direction[1] - gs.direction[1]
-    nSrc = len(ax)
+    dist_x = src.direction[0] - gs.direction[0]
+    dist_y = src.direction[1] - gs.direction[1]
+    nSrc = len(dist_x)
 
     #2\ defining tip-tilt modes
     zern = zernike([2,3], nOtf)
-    X = zern.modes[0]
-    Y = zern.modes[1]
+    X = zern.modes[0]/2
+    Y = zern.modes[1]/2
     X2 = X**2
     Y2 = Y**2
     XY = X*Y.T
     YX = Y*X.T
 
     # instantiating the phase structure function
-    Dani_l = np.zeros((nSrc, nLayer, nOtf, nOtf))
+    Dani_l = np.zeros((nSrc, atm.nL, nOtf, nOtf))
 
     # computing the phase structure function for each layers and src
     for iSrc in range(nSrc):
-        thx = ax[iSrc]
-        thy = ay[iSrc]
+        thx = dist_x[iSrc]
+        thy = dist_y[iSrc]
         if thx or thy:
-            for l in range(nLayer):
-                zl = Hs[l]
+            for l, zl in enumerate(atm.heights):
                 if zl !=0:
                     # update the atmosphere
                     atm_l = atm.slab(l)
-                    fr0   = atm_l.r0**(-5/3)
+                    fr0 = atm_l.r0**(-5/3)
                     # get the 2x2 anisokinetism covariance matrix
-                    covAniso = zern.anisokinetism(tel, atm_l, src, gs) * tel.D**2/4
+                    covAniso = zern.anisokinetism(tel, atm_l, src, gs)
                     # defining the Gaussian kernel
                     Dani_l[iSrc,l] = (covAniso[0, 0]*X2\
                                     + covAniso[1,1]*Y2\
@@ -389,3 +328,4 @@ def anisokinetism_function(tel, atm, src, gs, nOtf, samp):
                                     + covAniso[1,0]*YX)/fr0
 
     return Dani_l
+

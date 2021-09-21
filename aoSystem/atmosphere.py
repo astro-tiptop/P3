@@ -50,7 +50,7 @@ class atmosphere:
     @property
     def seeing(self):
         """Seeing value in arcsec at self.wvl"""
-        return 3600*180/np.pi*0.98*self.wvl/self.r0
+        return 3600*180/np.pi*0.976**self.wvl/self.r0
 
     @property
     def theta0(self):
@@ -85,7 +85,8 @@ class atmosphere:
         """Coherence time in ms at self.wvl"""
         return 0.314 * 1000 * self.r0/self.meanWind
 
-    def __init__(self,wvl,r0,weights,heights,wSpeed=0.0,wDir=0.0,L0=math.inf,verbose=False):
+    def __init__(self, wvl, r0, weights, heights, wSpeed=0.0, wDir=0.0,
+                 L0=math.inf, verbose=False):
 
         # PARSING INPUTS
         self.r0      = r0

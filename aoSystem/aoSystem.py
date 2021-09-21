@@ -155,9 +155,9 @@ class aoSystem():
                               r0*airmass**(-3.0/5.0),
                               weights,
                               np.array(heights)*airmass,
-                              wSpeed,
-                              wDir,
-                              L0)
+                              wSpeed=wSpeed,
+                              wDir=wDir,
+                              L0=L0)
 
          #%%  GUIDE STARS
         if config.has_option('sources_HO', 'Wavelength'):

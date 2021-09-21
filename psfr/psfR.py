@@ -62,7 +62,7 @@ class psfR:
 
         # INSTANTIATING THE SPATIAL FREQUENCY AND THE FOURIER MODEL
         self.fao = fourierModel(self.path_ini, calcPSF=False, display=False,
-                                freq=self.freq)
+                                freq=self.freq, ao=self.ao)
 
         # INSTANTIATING THE FITTING PHASE STRUCTURE FUNCTION FOR r0=1m
         self.dphi_fit = self.fittingPhaseStructureFunction(1)
@@ -166,7 +166,7 @@ class psfR:
             du = self.trs.rec.res
         elif method == 'dm-based':
             du = np.diff(self.trs.dm.com,axis=0)/self.ao.rtc.holoop['gain']
-        self.Cao  =  np.dot(du.T,du)/du.shape[0]
+        self.Cao = np.dot(du.T,du)/du.shape[0]
 
         # Unbiasing noise and accounting for the wave number
         Cao = (2*np.pi/self.freq.wvlRef)**2 * (self.Cao - self.trs.wfs.Cn_ao)
@@ -225,7 +225,6 @@ class psfR:
         if self.freq.isAniso and Cn2 is not None and (len(Cn2) == self.freq.dani_ang.shape[1]):
             self.dani = (self.dphi_ani.transpose(2,3,1,0) * Cn2[:,np.newaxis]).sum(axis=2)
             SF = SF[:,:,np.newaxis] + self.dani
-
         else:
             SF = np.repeat(SF[:,:,np.newaxis],self.ao.src.nSrc,axis=2)
 
@@ -240,7 +239,7 @@ class psfR:
         self.SF = self.phase_structure_function(r0, x0_dphi, Cn2=Cn2)
 
         # ----------------- COMPUTING THE PSF
-        PSF, SR = FourierUtils.sf_3D_to_psf_3D(self.SF,
+        PSF, self.SR = FourierUtils.sf_3D_to_psf_3D(self.SF,
                                                self.freq,
                                                self.ao,
                                                x_jitter = x0_jitter,
@@ -262,7 +261,7 @@ class psfR:
         '''
         sr2fwe = lambda x: np.sqrt(-np.log(x))* self.freq.wvlRef*1e9/2/np.pi
         otf_dl = self.freq.otfDL
-        S      = otf_dl.sum()
+        S = otf_dl.sum()
         self.wfe = dict()
 
         #1. STATIC ABERRATIONS
@@ -296,9 +295,9 @@ class psfR:
 
         #6. RESIDUAL TIP-TILT
         C = np.diag(self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt)
-        self.wfe['TIP-TILT'] = np.sqrt(np.sum(C))*1e9
+        self.wfe['TIP-TILT-WFE'] = np.sqrt(np.sum(C))*1e9
         sr_tt = np.sum(otf_dl * np.exp(-0.5*self.dphi_tt))/S
-        self.wfe['TIP-TILT-SR'] = sr2fwe(sr_tt)
+        self.wfe['TIP-TILT'] = sr2fwe(sr_tt)
 
         #7. PIXEL TF
         sr_pixel = np.sum(otf_dl * self.otfPixel)/S
@@ -332,6 +331,8 @@ class psfR:
             self.wfe['FOCAL ANISOPLANATISM'] = np.sqrt(sr2fwe(sr_ani) **2 - self.wfe['ANGULAR ANISOPLANATISM']**2)
         else:
             self.wfe['ANGULAR ANISOPLANATISM'] = 0
+            if self.freq.isAniso:
+                self.wfe['ANGULAR ANISOPLANATISM'] = self.wfe['TOTAL ANISOPLANATISM']
             self.wfe['ANISOKINETISM']          = 0
             self.wfe['FOCAL ANISOPLANATISM']   = 0
 
@@ -346,10 +347,14 @@ class psfR:
         self.wfe['REF WAVELENGTH'] = self.fao.freq.wvlRef
         self.wfe['MARECHAL SR'] = 1e2*np.exp(-(self.wfe['TOTAL WFE'] * 2*np.pi*1e-9/self.fao.freq.wvlRef)**2 )
         self.wfe['MARECHAL SR WITH PIXEL'] = 1e2*np.exp(-(self.wfe['TOTAL WFE WITH PIXEL'] * 2*np.pi*1e-9/self.fao.freq.wvlRef)**2 )
-
-        if hasattr(self,'SR'):
+        if hasattr(self, "SR"):
             self.wfe['PSF SR'] = self.SR[0]
-        self.wfe['IMAGE-BASED SR'] = 1e2*FourierUtils.getStrehl(self.trs.cam.image,self.ao.tel.pupil,self.fao.freq.sampRef,method='max')
+
+        #11. STREHL RATIO FROM THE IMAGE
+        self.wfe[self.ao.cam.tag + " SR"] = 1e2*FourierUtils.getStrehl(self.trs.cam.image,
+                                                                       self.ao.tel.pupil,
+                                                                       self.fao.freq.sampRef,
+                                                                       method='otf')
 
 
 

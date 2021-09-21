@@ -75,7 +75,7 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
             psf_prefix = 'psfao21_' + instru + '_wvl_' + str(round(wvl*1e6, 3)) + 'µm'
         else:
             psf_prefix = 'psf'
-        
+
         save_main_folder = 'PSFAO21_' + id_noise + 'NOISE_' + id_static + 'STATIC/'
         save_path = os.path.join(save_path, save_main_folder)
         if not os.path.isdir(save_path):
@@ -159,13 +159,10 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
     # PRE-CALCULATE THE PSD
     for j in range(n_psf_folder):
         # DERIVING THE AO-CORRECTED PSD
-        psd_in = psfao.freq.pistonFilter_ * psfao.moffat(psfao.freq.kx_,
-                                                        psfao.freq.ky_,
-                                                        [ax[j], pe[j],
-                                                         0, be[j], 0, 0])
-
-        Aemp = np.trapz(np.trapz(psd_in, psfao.freq.ky_[0]), psfao.freq.ky_[0])
-        psd_in = psd_in/Aemp
+        psd_in, _ = psfao.psfao_19.psd([1, 0, 1, ax[j], pe[j], 0, be[j]])
+        psd_in -= psfao.psfao_19._vk
+        #Aemp = np.trapz(np.trapz(psd_in, psfao.freq.ky_[0]), psfao.freq.ky_[0])
+        #psd_in = psd_in/Aemp
 
         # DERIVING THE TELESCOPE OTF
         if add_static:
@@ -230,7 +227,7 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
         # getting the list of sub-folders
         list_folders = os.listdir(save_path)
         list_folders = [x for x in list_folders if x != 'test_data']
-        
+
         # creating the sub-folder within the main saving folder
         test_path = os.path.join(save_path, 'test_data')
         if not os.path.isdir(test_path):
@@ -238,11 +235,11 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
         else:
             for filename in os.listdir(test_path):
                 os.remove(test_path+'/'+filename)
-            
+
         # selecting the test data randomly
         if n_test < 1: # convert fraction to absolute value
             n_test = int(n_test * n_psf_folder * n_sub_folder)
-            
+
         n_test_folder = int(n_test/n_sub_folder) # test data per sub-folders
 
         for folder in list_folders:
@@ -252,9 +249,61 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
             # randomly define the indexes of test data
             ran_idx = random.sample(range(len(list_data)), n_test_folder)
             sub_list = [list_data[x] for x in ran_idx]
-            
+
             for file_name in sub_list:
                 path_file = os.path.join(sub_path, file_name)
                 #if os.path.isfile(path_file):
                 os.rename(path_file, os.path.join(test_path, file_name))
-        
+
+def split_test_data(path_folder, n_sub_folder=10, mode=511):
+    """
+    Randomly distribute the data into the testdata directory into n_sub_folder
+    sub-folders to ease the data transfer management
+    """
+
+    # check the path
+    if not os.path.isdir(path_folder):
+        raise ValueError("The path does not exist")
+
+    # checking the presence of a test_data folder
+    path_test = os.path.join(path_folder, "test_data")
+    if not os.path.isdir(path_test):
+        raise ValueError("The test_data folder does not exist")
+
+    # selecting the .fits files
+    tmp = os.listdir(path_test)
+    list_file = [tmp[n] for n in range(len(tmp)) if ".fits" in tmp[n]]
+    n_files = len(list_file)
+
+    # checking that the number of files can be divided into n_sub_folder folders
+    #of same size
+    if np.mod(n_files, n_sub_folder):
+        n_values = np.array(range(1, n_sub_folder*2))
+        idx = np.argwhere(n_values == n_sub_folder)[0]
+        id_0 = np.argwhere(np.mod(n_files, n_values) ==0)
+        good_val = n_values[id_0]
+        n_sub_folder = good_val[np.argmin(abs(id_0-idx))][0]
+        print("The test data will be distributed over "+ str(n_sub_folder)\
+              +" sub_folders to have the same number of data per sub-folder")
+
+    if n_sub_folder==1:
+        raise ValueError("The files can not be equally distributed in an integer number of sub-folders")
+
+    # creating the list of list of files
+    n_files_per_sub = int(n_files/n_sub_folder)
+    arr_of_index = np.array(random.sample(range(n_files), n_files))
+    arr_of_index = arr_of_index.reshape(n_sub_folder, n_files_per_sub)
+
+    # creating anf filling sub_folders
+    for k in range(n_sub_folder):
+        # creating the sub_folder
+        path_test_k = os.path.join(path_test, "sub_folder_" + str(k))
+        if not os.path.isdir(path_test_k):
+            os.mkdir(path_test_k, mode=mode)
+
+        # moving the files
+        for j in range(n_files_per_sub):
+            file_name = list_file[arr_of_index[k][j]]
+            path_file_old = os.path.join(path_test, file_name)
+            path_file_new = os.path.join(path_test_k, file_name)
+            os.rename(path_file_old, path_file_new)

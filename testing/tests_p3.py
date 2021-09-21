@@ -266,24 +266,25 @@ def test_kasp_psfr(path_mat, path_save, true_r0=True, tol=1e-5):
         trs.atm.r0 = r0_true
         trs.atm.L0_tel = L0_true
         trs.atm.L0 = L0_true
-        trs.atm.seeing = 3600*180/np.pi*0.98*trs.atm.wvl/r0_true
+        trs.atm.seeing = 3600*180/np.pi*0.978*trs.atm.wvl/r0_true
     configFile(sd)
 
     # get the psf
     psfr = psfR(trs)
     if psfr.ao.atm.nL > 1:
-        Cn2 = list(np.array(trs.atm.Cn2) * (trs.atm.wvl/trs.cam.wvl[0])**2)
+        Cn2 = list(psfr.ao.atm.weights * psfr.ao.atm.r0**(-5/3))
     else:
-        Cn2 = [trs.atm.r0 * (trs.cam.wvl/trs.atm.wvl)**1.2]
+        Cn2 = [psfr.ao.atm.r0]
     x0  = Cn2 + [1, 1] + [1, 0, 0, 0]
 
-    fixed = (True,)*(psfr.ao.atm.nL + 2)+(False,)*3 + (True,)
+    fixed = (True,)*(psfr.ao.atm.nL + 2) + (False,)*3 + (True,)
 
     #adjust the flux and the position
     res = psfFitting(psfr.trs.cam.image, psfr, x0, verbose=2, fixed=fixed,
                      ftol=tol, xtol=tol, gtol=tol)
 
-    displayResults(psfr, res, scale='log10abs')
+    psfr.wfe['PSF SR'] = psfr.SR[0]
+    displayResults(psfr, res, scale='arcsinh')
 
     return psfr, res
 

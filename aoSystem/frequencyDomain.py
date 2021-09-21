@@ -138,10 +138,10 @@ class frequencyDomain():
         """"""
         return min(4,max(2,int(np.ceil(self.nOtf/self.resAO/2))))
 
-    def __init__(self,aoSys,kcExt=None,nyquistSampling=False):
+    def __init__(self, aoSys, kcExt=None, nyquistSampling=False):
 
         # PARSING INPUTS TO GET THE SAMPLING VALUES
-        self.ao     = aoSys
+        self.ao = aoSys
 
         # MANAGING THE WAVELENGTH
         self.nBin = self.ao.cam.nWvl # number of spectral bins for polychromatic PSFs
@@ -223,7 +223,8 @@ class frequencyDomain():
                                                                   self.ao.ngs,
                                                                   self.nOtf,
                                                                   self.sampRef,
-                                                                  self.ao.dms.nActu1D)
+                                                                  self.ao.dms.nActu1D,
+                                                                  msk_in = self.mskIn_)
 
                 return (self.dani_ang *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
 

@@ -23,7 +23,7 @@ class telemetryKASP:
     Object to load a .mat file procuded by the OOMAO-KASP simulator
     and create a telemetry object readable by the psfR object.
     """
-    def __init__(self,path_mat, path_save='./'):
+    def __init__(self,path_mat, path_save='./', fov_factor=2):
 
         # Check the telemetry path
         self.path_mat = path_mat
@@ -44,7 +44,7 @@ class telemetryKASP:
         self.data_struct = loadmat(path_mat,struct_as_record=True)['data_struct']
 
         # populating fields
-        self.populating_fields()
+        self.populating_fields(fov_factor=fov_factor)
 
     def instantiating_fields(self):
         """
@@ -143,7 +143,7 @@ class telemetryKASP:
         self.dm.opt_azi = [0.0]
         self.dm.opt_weight = [1.0]
         self.dm.nrec = 7
-        self.dm.area = "circle"
+        self.dm.area = "square"
 
         # cam
         self.cam = structtype()
@@ -165,7 +165,7 @@ class telemetryKASP:
         self.ttloop = structtype()
         self.ttloop.tf = structtype()
 
-    def populating_fields(self):
+    def populating_fields(self, fov_factor=2):
         """
             Populating fields of the telemetryKASP object from the .mat file
         """
@@ -178,7 +178,8 @@ class telemetryKASP:
         self.tel.D = float(self.data_struct['D'])
         self.tel.cobs = float(self.data_struct['cobs'])
         self.tel.resolution = int(self.data_struct['resolution'])
-        self.tel.zenith_angle = float(self.data_struct['zenith_angle'])
+        # the r0 and  altitudes are already scaled wrt airmass
+        self.tel.zenith_angle = 0#float(self.data_struct['zenith_angle'])*180/np.pi
         self.tel.airmass = float(self.data_struct['airmass'])
         self.tel.pupil = np.array(self.data_struct['pupil'][0,0])
         self.tel.map_ncpa = np.array(self.data_struct['map_ncpa'][0,0])
@@ -186,7 +187,7 @@ class telemetryKASP:
         # ATMOSPHERE
         self.atm.wvl = float(self.data_struct['wvl_atm'])
         self.atm.r0 = float(self.data_struct['r0'])
-        self.atm.seeing = 3600 * 180/np.pi * self.atm.wvl/self.atm.r0
+        self.atm.seeing = 3600 * 180/np.pi * 0.976 * self.atm.wvl/self.atm.r0
         self.atm.L0 = float(self.data_struct['L0'])
         self.atm.Cn2Heights = list(self.data_struct['cn2_alt'][0,0][0])
         self.atm.Cn2Weights = np.array(self.data_struct['cn2_weight'][0,0][0])
@@ -203,7 +204,7 @@ class telemetryKASP:
         self.cam.image = np.array(self.data_struct['psf'][0,0])
         self.cam.strehl = float(self.data_struct['strehl'][0,0])
         self.cam.psInMas = float(self.data_struct['cam_psInMas'])
-        self.cam.fov = int(self.data_struct['cam_fov'])*2
+        self.cam.fov = int(self.data_struct['cam_fov']) * fov_factor
         #note : the factor 2 allows to avoid aliasing effect
         self.cam.ittime = float(self.data_struct['cam_ittime'])
         self.cam.ron = float(self.data_struct['cam_ron'])
@@ -229,8 +230,8 @@ class telemetryKASP:
             self.aoMode = "NGS"
 
         # SYSTEM MATRICES
-        mech2opt = 2
-        self.mat.M = mech2opt*np.array(self.data_struct['mat_rec'][0,0])
+        factor=1
+        self.mat.M = factor*np.array(self.data_struct['mat_rec'][0,0])
         self.mat.DMTTRem = np.array(self.data_struct['mat_dmttrem'][0,0])
         self.mat.SlopeTTRem = np.array(self.data_struct['mat_slttrem'][0,0])
         self.mat.TT2COM = np.array(self.data_struct['mat_tt2com'][0,0])
@@ -250,8 +251,7 @@ class telemetryKASP:
         self.wfs.slopes -= np.mean(self.wfs.slopes,axis=0)
 
         # DM
-        # note : the factor 2 allows to convert the mechanical OPD to the optical OPD
-        self.dm.com = mech2opt*np.array(np.dot(self.mat.DMTTRem,np.squeeze(self.data_struct['dm_com'][0,0] ))).T
+        self.dm.com = np.array(np.dot(self.mat.DMTTRem,np.squeeze(self.data_struct['dm_com'][0,0] ))).T
         self.dm.com -= np.mean(self.dm.com,axis=0)
         self.dm.validActuators = self.data_struct['dm_validactu'][0,0]
         self.dm.nActuators = [int(self.data_struct['dm_nactu'])]
@@ -259,13 +259,13 @@ class telemetryKASP:
         self.dm.mechCoupling = [float(self.data_struct['dm_coupling'])]
         self.dm.heights = [float(self.data_struct['dm_height'])]
 
-        self.dm.pitch = [0.42]#[float(self.data_struct['dm_pitch'])]
-        self.wfs.dsub = [0.42]#[float(self.data_struct['wfs_dsub'])] #!!!!!!
+        self.dm.pitch = [float(self.data_struct['dm_pitch'])]
+        self.wfs.dsub = [float(self.data_struct['wfs_dsub'])]
 
         # RESIDUAL WAVEFRONT
         self.mat.R = np.array(np.dot(self.mat.DMTTRem,np.dot(self.mat.M,self.mat.SlopeTTRem))).T
-        self.rec.res = np.dot(self.wfs.slopes,self.mat.R)
-        self.rec.res -= np.mean(self.rec.res,axis=0)
+        self.rec.res = np.dot(self.wfs.slopes, self.mat.R)
+        self.rec.res -= np.mean(self.rec.res, axis=0)
         self.rec.wfe = 1e9*np.sqrt((self.rec.res.std(axis=0)**2).sum()/self.dm.nCom)
 
         # TIP-TILT
@@ -278,7 +278,7 @@ class telemetryKASP:
             self.tipTilt.ron = float(self.data_struct['tt_ron'])
             self.tipTilt.nExp = int(self.data_struct['tt_nexp'][0])
             self.tipTilt.slopes = np.array(np.squeeze(self.data_struct['tt_slopes'][0, 0] )).T
-            self.tipTilt.tilt2meter = self.tipTilt.pixel_scale * self.tel.D/1e3/206264.8
+            self.tipTilt.tilt2meter = self.tipTilt.pixel_scale * self.tel.D/1e3/206264.8/4
             self.tipTilt.slopes *= self.tipTilt.tilt2meter /(self.ngs.wvl/8)
         else:
             # NGS CASE : the tip-tilt is extracted from the WFS slopes
