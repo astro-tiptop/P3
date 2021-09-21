@@ -731,7 +731,11 @@ class aoSystem():
             self.wfe['TT Noise'] = 0
 
         # Focal anisoplanatism and anisokinetism
-        if self.lgs is not None:
+        self.wfe['Focal anisoplanatism'] = 0.0
+        self.wfe['Anisokinetism'] = 0.0
+        self.wfe['Angular anisoplanatism'] = 0
+
+        if self.aoMode=="SLAO":
             wfe = anisoplanatismModel.focal_anisoplanatism_wfe(self.tel,
                                                                self.atm,
                                                                self.lgs)
@@ -744,13 +748,13 @@ class aoSystem():
             wfe = anisoplanatismModel.anisoplanatism_wfe(self.tel, self.atm,
                                                      self.src, self.lgs)
             self.wfe['Angular anisoplanatism'] = wfe
-        else:
-            self.wfe['Focal anisoplanatism'] = 0.0
-            self.wfe['Anisokinetism'] = 0.0
+        elif self.aoMode=="SCAO":
+
             wfe = anisoplanatismModel.anisoplanatism_wfe(self.tel, self.atm,
                                                      self.src, self.ngs)
             self.wfe['Angular anisoplanatism'] = wfe
-        # TO be added : angular anisoplanatisms
+
+        # total wavefront error
         self.wfe['Total'] = np.sqrt(self.wfe['DM fitting']**2\
                                     + self.wfe['WFS aliasing']**2\
                                     + self.wfe['HO Servo-lag']**2\
