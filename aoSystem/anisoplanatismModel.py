@@ -117,7 +117,7 @@ def anisokinetism_wfe(tel, atm, src, ngs, method="Sasiela"):
 
 #%% PHASE STRUCTURE FUNCTION
 def anisoplanatism_structure_function(tel, atm, src, lgs, ngs,
-                                      nOtf, samp, nActu, msk_in=1):
+                                      nOtf, samp, nActu, msk_in=1, Hfilter=1):
     """
     Computes the anisoplanatic phase structure functions
     INPUTS:
@@ -144,12 +144,19 @@ def anisoplanatism_structure_function(tel, atm, src, lgs, ngs,
 
     else:
         # angular + focal anisoplanatism
-        dani_focang = focal_angular_function(tel, atm, src, lgs,
-                                             nActu, nOtf, samp)
+        lgs_dir = [lgs.zenith, lgs.azimuth]
+        lgs.azimuth = 0
+        lgs.zenith = 0
+        dani_foc = focal_angular_function(tel, atm, src, lgs,
+                                          nActu, nOtf, samp,
+                                          h_filt=Hfilter)
         # angular anisoplanatism only
+        lgs.zenith = lgs_dir[0]
+        lgs.azimuth = lgs_dir[1]
         dani_ang = angular_function(tel, atm, src, lgs,
                                     nOtf, samp, msk_in=msk_in)
 
+        dani_focang = dani_foc + dani_ang
         # anisokinetism
         dani_tt = anisokinetism_function(tel, atm, src, ngs, nOtf, samp)
 
@@ -222,20 +229,27 @@ def angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier", msk_in=1):
 
     return Dani_l
 
-def focal_angular_function(tel, atm, src, gs, nActu, nOtf, samp):
+def focal_angular_function(tel, atm, src, gs, nActu, nOtf, samp, h_filt=1):
     """
     Returns the nActu**2 x nActu**2 point wise phase structure function
     for the focal-angular anisoplanatism  by following Flicker's 2008 report.
     """
 
     if gs.height == 0 or gs.height==np.inf:
-        return angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier")
+        return angular_function(tel, atm, src, gs, nOtf, samp,
+                                method="Fourier", msk_in=h_filt)
+
 
     #1\ Grabbing inputs
     umax = tel.D/2 * max([1,samp])/2
     f0 = 2*np.pi/atm.L0
     dist = [ src.direction[0] - gs.direction[0],
               src.direction[1] - gs.direction[1]]
+
+    if np.isscalar(h_filt):
+        h_filt = 1
+    else:
+        h_filt_t = h_filt.T
 
     def vector_to_separation(u):
         x, y = np.meshgrid(u, u)
@@ -276,7 +290,9 @@ def focal_angular_function(tel, atm, src, gs, nActu, nOtf, samp):
                                          f0*(g*(rhoY-Y1) - zl*thy))
                 I6 = FourierUtils.Ialpha(f0*((1-g)*rhoX + g*X1 - zl*thx),
                                          f0*((1-g)*rhoY + g*Y1 - zl*thy))
-                tmp = (2*I0 - I1 - I2 + I3 - I4 - I5 + I6)
+                tmp = 2*I0 - I1 - I2 + I3 - I4 - I5 + I6
+                if not np.isscalar(h_filt):
+                    tmp = np.dot(h_filt, np.dot(tmp, h_filt_t))
 
                 # ---- get the maps
                 cmap = FourierUtils.matrix_to_map(tmp, sep_x=sep_x, sep_y=sep_y)

@@ -13,6 +13,7 @@ Created on Thu Aug 16 15:00:44 2018
 
 @author: omartin
 """
+import time
 import numpy as np
 import matplotlib as mpl
 
@@ -20,7 +21,6 @@ import numpy.fft as fft
 import matplotlib.pyplot as plt
 import scipy.special as spc
 
-import time
 from distutils.spawn import find_executable
 
 import aoSystem.FourierUtils as FourierUtils

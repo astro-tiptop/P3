@@ -138,7 +138,7 @@ class frequencyDomain():
         """"""
         return min(4,max(2,int(np.ceil(self.nOtf/self.resAO/2))))
 
-    def __init__(self, aoSys, kcExt=None, nyquistSampling=False):
+    def __init__(self, aoSys, kcExt=None, nyquistSampling=False, Hfilter=1):
 
         # PARSING INPUTS TO GET THE SAMPLING VALUES
         self.ao = aoSys
@@ -170,7 +170,7 @@ class frequencyDomain():
         self.wvlCen = wvlCen_
         self.wvlRef = np.min(self.wvl_)
         self.pitch = self.ao.dms.pitch
-
+        self.Hfilter = Hfilter
         self.tfreq = 1000*(time.time()-t0)
 
         # DEFINING THE DOMAIN ANGULAR FREQUENCIES
@@ -224,7 +224,8 @@ class frequencyDomain():
                                                                   self.nOtf,
                                                                   self.sampRef,
                                                                   self.ao.dms.nActu1D,
-                                                                  msk_in = self.mskIn_)
+                                                                  msk_in = self.mskIn_,
+                                                                  h_filt=self.Hfilter)
 
                 return (self.dani_ang *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
 

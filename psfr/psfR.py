@@ -30,10 +30,10 @@ class psfR:
         """
         Instantiating the psf-reconstruction model from a telemetry object
         """
-        # READ PARFILE
+
+        # INSTANTIATING THE MODEL OF THE AOSYSTEM
         tstart = time.time()
 
-        # PARSING INPUTS
         if not hasattr(trs,'path_ini'):
             raise ValueError("no .ini file attached with the telemetry object")
 
@@ -42,7 +42,7 @@ class psfR:
         self.theta_ext = theta_ext
         self.ao = aoSystem(self.path_ini, path_root=path_root)
 
-        # DEFINING THE NUMBER OF PARAMETERS
+        # defining the number of model parameters
         self.tag = 'PSF-R'
         self.param_labels = ['Cn2', 'gho', 'gtt', 'F', 'dx', 'dy', 'bkg', 'stat']
         self.n_param_atm = min(self.ao.atm.nL, self.ao.dms.nRecLayers)
@@ -50,33 +50,44 @@ class psfR:
 
         self.wvl, self.nwvl = FourierUtils.create_wavelength_vector(self.ao)
 
-        # CHECK THE PUPIL
+        # checking the pupil
         if self.ao.tel.path_pupil is None and np.any(trs.tel.pupil):
             self.ao.tel.pupil = self.trs.tel.pupil
 
         if self.ao.tel.path_static_on and hasattr(trs.tel,'map_ncpa')and np.any(trs.tel.map_ncpa):
             self.ao.tel.opdMap_on = trs.tel.map_ncpa
+        self.t_initAO = 1000*(time.time() - tstart)
 
-        # DEFINING THE SPATIAL FREQUENCIES DOMAIN
-        self.freq = frequencyDomain(self.ao)
 
         # INSTANTIATING THE SPATIAL FREQUENCY AND THE FOURIER MODEL
+        self.Hfilter = 1
+        if self.ao.aoMode=="SLAO":
+            n_ph = 2*self.ao.dms.nActu1D[0] + 1
+            modes = self.ao.dms.setInfluenceFunction(n_ph)
+            #val_act = np.argwhere(modes.max(axis=0)==0)
+            self.Hfilter = np.dot(modes, modes.T)
+
+        self.freq = frequencyDomain(self.ao, Hfilter=self.Hfilter)
         self.fao = fourierModel(self.path_ini, calcPSF=False, display=False,
                                 freq=self.freq, ao=self.ao)
 
+        self.t_freq = 1000*(time.time() - tstart) - self.t_initAO
+
         # INSTANTIATING THE FITTING PHASE STRUCTURE FUNCTION FOR r0=1m
-        self.dphi_fit = self.fittingPhaseStructureFunction(1)
+        self.dphi_fit = self.fitting_phase_structure_function(1)
+        self.t_dfit = 1000*(time.time() - tstart) - self.t_freq
 
         # INSTANTIATING THE ALIASING PHASE STRUCTURE FUNCTION FOR r0=1m
-        self.dphi_alias = self.aliasingPhaseStructureFunction(1)
-
-        # INSTANTIATING THE AO RESIDUAL PHASE STRUCTURE FUNCTION
-        self.dphi_ao = self.aoResidualStructureFunction()
+        self.dphi_alias = self.aliasing_phase_structure_function(1)
+        self.t_dalias = 1000*(time.time() - tstart) - self.t_dfit
 
         # INSTANTIATING THE TT RESIDUAL PHASE STRUCTURE FUNCTION IN LGS MODE
-        # IN NGS MODE, THE TIP-TILT CONTRIBUTION SHOULD BE ADDED TO THE RESIDUAL WAVEFRONT
-        # TO ACCOUNT FOR THE CROSS-TERMS
-        self.dphi_tt = self.tipTiltPhaseStructureFunction()
+        self.dphi_tt = self.jitter_phase_structure_function()
+        self.t_dtt = 1000*(time.time() - tstart) - self.t_dalias
+
+        # INSTANTIATING THE AO RESIDUAL PHASE STRUCTURE FUNCTION
+        self.dphi_ao = self.residual_phase_structure_function()
+        self.t_dao = 1000*(time.time() - tstart) - self.t_dtt
 
         # INSTANTIATING THE ANISOPLANATISM PHASE STRUCTURE FUNCTION IF ANY
         if self.ao.lgs is None or self.ao.lgs.height==0:
@@ -90,7 +101,7 @@ class psfR:
 
         # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION
         if self.trs.tel.name != 'OOMAO':
-            self.otfPixel = self.pixelOpticalTransferFunction()
+            self.otfPixel = self.pixel_optical_transfer_function()
         else:
             self.otfPixel = 1.0
 
@@ -114,41 +125,47 @@ class psfR:
 
         # Bounds on r0
         bounds_down = list(np.ones(self.ao.atm.nL)*_EPSILON)
-        bounds_up   = list(np.inf * np.ones(self.ao.atm.nL))
+        bounds_up = list(np.inf * np.ones(self.ao.atm.nL))
         # optical gains
         bounds_down += [0,0]
-        bounds_up   += [np.inf, np.inf]
+        bounds_up += [np.inf, np.inf]
         # Photometry
         bounds_down += list(np.zeros(self.ao.src.nSrc))
-        bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
+        bounds_up += list(np.inf*np.ones(self.ao.src.nSrc))
         # Astrometry
         bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
-        bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+        bounds_up += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
         # Background
         bounds_down += [-np.inf]
-        bounds_up   += [np.inf]
+        bounds_up += [np.inf]
         # Static aberrations
         bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
-        bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
+        bounds_up += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
         return (bounds_down,bounds_up)
 
-    def fittingPhaseStructureFunction(self, r0):
+    def fitting_phase_structure_function(self, r0):
+        """
+        Computes the phase structure function of the DM fitting error.
+        """
         psd = r0**(-5/3) * self.freq.psdKolmo_
         pix2freq = 1/(self.ao.tel.D * self.freq.sampRef)#2*self.freq.kc_/self.freq.resAO
         cov = FourierUtils.psd2cov(psd, pix2freq)
         return np.real(fft.fftshift(FourierUtils.cov2sf(cov)))
 
-    def aliasingPhaseStructureFunction(self, r0):
+    def aliasing_phase_structure_function(self, r0):
+        """
+        Computes the phase structure function of the WFS aliasing error.
+        """
         # computing the aliasing PSD over the AO-corrected area
         self.psdAlias_ = self.fao.aliasingPSD()/self.fao.ao.atm.r0**(-5/3)
 
         # zero-padding the PSD
-        self.psdAlias_ = FourierUtils.enlargeSupport(self.psdAlias_,self.freq.nOtf/self.freq.resAO)
+        self.psdAlias_ = FourierUtils.enlargeSupport(self.psdAlias_,
+                                                     self.freq.nOtf/self.freq.resAO)
 
         # computing the aliasing phase structure function
-        #pix2freq = 2*self.freq.kc_/self.freq.resAO
         pix2freq = 1/(self.ao.tel.D * self.freq.sampRef)
-        cov = FourierUtils.psd2cov(self.psdAlias_,pix2freq)
+        cov = FourierUtils.psd2cov(self.psdAlias_, pix2freq)
         dphi_alias = r0**(-5/3) * np.real(fft.fftshift(FourierUtils.cov2sf(cov)))
 
         # interpolating the phase structure function if required
@@ -158,14 +175,17 @@ class psfR:
                                                          kind='spline')
         return dphi_alias
 
-    def aoResidualStructureFunction(self, method='slopes-based', basis='Vii'):
+    def residual_phase_structure_function(self, method='slopes-based', basis='Vii'):
         """
+        Computes the phase structure function of the tip-tilt-excluded
+        residual phase.
         """
         # computing the empirical covariance matrix of the AO-residual OPD in the DM actuators domain
         if method == 'slopes-based':
             du = self.trs.rec.res
         elif method == 'dm-based':
             du = np.diff(self.trs.dm.com,axis=0)/self.ao.rtc.holoop['gain']
+
         self.Cao = np.dot(du.T,du)/du.shape[0]
 
         # Unbiasing noise and accounting for the wave number
@@ -180,8 +200,9 @@ class psfR:
 
         return dphi_ao
 
-    def tipTiltPhaseStructureFunction(self):
+    def jitter_phase_structure_function(self):
         """
+        Computes the phase structure function of the residual jitter.
         """
         # computing the empirical covariance matrix
         s = self.trs.tipTilt.slopes
@@ -190,13 +211,17 @@ class psfR:
         # computing the coefficients of the Gaussian Kernel in rad^2
         Guu = (2*np.pi/self.freq.wvlRef)**2 * (self.Ctt - self.trs.tipTilt.Cn_tt)
 
-        # rotating the axes
-        ang = self.trs.tel.pupilAngle * np.pi/180
         # freq.U_ ranges within [-1,1];
         # at Nyquist, angular frequencies range within [-D/lambda, D/lambda]
+        # rotating the axes
+        ang = self.trs.tel.pupilAngle * np.pi/180
         unit = self.freq.sampRef/2
-        Ur  = unit * (self.freq.U_*np.cos(ang) + self.freq.V_*np.sin(ang))
-        Vr  = unit * (-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang))
+        if ang:
+            Ur = unit * (self.freq.U_*np.cos(ang) + self.freq.V_*np.sin(ang))
+            Vr = unit * (-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang))
+        else:
+            Ur = unit * self.freq.U_
+            Vr = unit * self.freq.V_
 
         # computing the Gaussian-Kernel
         dphi_tt = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 \
@@ -204,8 +229,9 @@ class psfR:
 
         return dphi_tt
 
-    def pixelOpticalTransferFunction(self):
+    def pixel_optical_transfer_function(self):
         """
+        Computes the OTF of the pixel.
         """
         #note : self.U_/V_ ranges ar -1 to 1
         umax = self.ao.tel.D/self.freq.wvlRef * self.freq.sampRef
@@ -294,10 +320,16 @@ class psfR:
         self.wfe['SERVO-LAG'] = 1e9*np.sqrt(C.trace()/self.trs.dm.nCom)
 
         #6. RESIDUAL TIP-TILT
-        C = np.diag(self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt)
-        self.wfe['TIP-TILT-WFE'] = np.sqrt(np.sum(C))*1e9
-        sr_tt = np.sum(otf_dl * np.exp(-0.5*self.dphi_tt))/S
-        self.wfe['TIP-TILT'] = sr2fwe(sr_tt)
+        if self.ao.aoMode!="SCAO":
+            C = np.diag(self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt)
+            self.wfe['TIP-TILT-WFE'] = np.sqrt(np.sum(C))*1e9
+            sr_tt = np.sum(otf_dl * np.exp(-0.5*self.dphi_tt))/S
+            self.wfe['TIP-TILT'] = sr2fwe(sr_tt)
+        else:
+            self.wfe['TIP-TILT'] = 0
+            mat_tt = np.eye(self.trs.dm.nCom) - self.trs.mat.DMTTRem
+            C = np.dot(mat_tt, np.dot(C, mat_tt.T))
+            self.wfe['TIP-TILT CONTRIBUTION'] = 1e9*np.sqrt(C.trace()/self.trs.dm.nCom)
 
         #7. PIXEL TF
         sr_pixel = np.sum(otf_dl * self.otfPixel)/S
@@ -353,7 +385,7 @@ class psfR:
         #11. STREHL RATIO FROM THE IMAGE
         self.wfe[self.ao.cam.tag + " SR"] = 1e2*FourierUtils.getStrehl(self.trs.cam.image,
                                                                        self.ao.tel.pupil,
-                                                                       self.fao.freq.sampRef,
+                                                                       self.freq.sampRef,
                                                                        method='otf')
 
 

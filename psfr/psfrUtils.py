@@ -7,6 +7,7 @@ Created on Fri Jun 15 14:57:49 2018
 """
 
 # Libraries
+import time
 import numpy as np
 import numpy.fft as fft
 import aoSystem.FourierUtils as FourierUtils
@@ -87,7 +88,7 @@ def mkotf_indpts(nU1d,nPh,u1D,loc,dp):
 
     return indptsc,indptsc2
 
-def modes2Otf(Cmm, modes, pupil ,nOtf, samp=2, basis='Vii'):
+def modes2Otf(Cmm, modes, pupil, n_otf, samp=2, basis='Vii'):
     """
     Computes the OTF and phase structure function from the covariance matrix
     of given coeffcients and the corresponding modal basis.
@@ -103,14 +104,14 @@ def modes2Otf(Cmm, modes, pupil ,nOtf, samp=2, basis='Vii'):
         - dphi, the corresponding phase structure function in rad**2
     """
     #Autocorrelation of the pupil expressed in pupil
-    nPx = int(np.sqrt(modes.shape[0]))
+    n_pup = int(np.sqrt(modes.shape[0]))
     pup_pad = FourierUtils.enlargeSupport(pupil, samp)
     fft_pup = fft.fft2(pup_pad)
     conj_pup = np.conjugate(fft_pup)
-    G = fft.fftshift(np.real(fft.ifft2(fft_pup*conj_pup)))
+    G = fft.fftshift(np.real(fft.ifft2(abs(fft_pup)**2)))
 
     #Defining the inverse
-    den = np.zeros(np.array(G.shape))
+    den = np.zeros_like(G)
     msk = G/G.max() > 1e-7
     den[msk] = 1/G[msk]
 
@@ -118,13 +119,13 @@ def modes2Otf(Cmm, modes, pupil ,nOtf, samp=2, basis='Vii'):
         # Diagonalizing the Cvv matrix
         U, ss ,V = np.linalg.svd(Cmm)
         nModes = len(ss)
-        M = np.dot(modes, V)
-        #loop on actuators
-        buf = np.zeros_like(pup_pad)
+        M_all = np.dot(modes, V)
+        M_all = M_all.reshape(n_pup, n_pup, nModes)
+        M_all = FourierUtils.enlargeSupport(M_all, samp)*pup_pad[:, :, np.newaxis]
 
+        buf = np.zeros_like(G)
         for k in range(nModes):
-            Mk = M[:, k].reshape(nPx, nPx)
-            Mk = FourierUtils.enlargeSupport(Mk, samp)*pup_pad
+            Mk = M_all[:, :, k]
             # Vii computation
             Vk = np.real(fft.fft2(Mk**2)*conj_pup) - abs(fft.fft2(Mk))**2
             # Summing modes into dm basis
@@ -139,11 +140,11 @@ def modes2Otf(Cmm, modes, pupil ,nOtf, samp=2, basis='Vii'):
 
         #Double loops on modes
         for i in np.arange(1,nm,1):
-            Mi = np.reshape(modes[:,i],(nPx,nPx))
+            Mi = np.reshape(modes[:,i],(n_pup, n_pup))
             Mi = FourierUtils.enlargeSupport(Mi,samp)
             for j in range(1,i):
                 #Getting modes + interpolation to twice resolution
-                Mj = np.reshape(modes[:,j],(nPx,nPx))
+                Mj = np.reshape(modes[:,j],(n_pup, n_pup))
                 Mj = FourierUtils.enlargeSupport(Mj,samp)
                 term1 = np.real(fft.fft2(Mi*Mj*pup_pad)*conj_pup)
                 term2 = np.real(fft.fft2(Mi*pup_pad)*np.conjugate(fft.fft2(Mj*pup_pad)))
@@ -160,9 +161,9 @@ def modes2Otf(Cmm, modes, pupil ,nOtf, samp=2, basis='Vii'):
         otf = G
 
     # Interpolation of the OTF => determination of the PSF fov
-    otf = otf*(G>1e-5)
-    otf = FourierUtils.interpolateSupport(otf, nOtf)
-    dphi = FourierUtils.interpolateSupport(dphi, nOtf)
+    otf = otf*(G>1e-5) #3.6 ms
+    otf = FourierUtils.interpolateSupport(otf, n_otf) #84ms
+    dphi = FourierUtils.interpolateSupport(dphi, n_otf) #86ms
     otf = otf/otf.max()
     return otf, dphi
 

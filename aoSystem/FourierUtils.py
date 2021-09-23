@@ -647,17 +647,21 @@ def cropSupport(im,n):
     return imNew
 
 
-def enlargeSupport(im,n):
+def enlargeSupport(cube, n):
 
-    if len(im.shape) == 2:
-        nx,ny  = im.shape
-        return np.pad(im,[int((n-1)*nx/2),int((n-1)*ny/2)])
-    elif len(im.shape) == 3:
-        nx,ny,nz  = im.shape
-        if (nz < nx) and (nz < ny):
-            return np.pad(im,[int((n-1)*nx/2),int((n-1)*ny/2),(0,0)])
-        else:
-            return np.pad(im,[(0,0) , int((n-1)*ny/2),int((n-1)*nz/2)])
+    if np.ndim(cube)==2:
+        nx,ny = cube.shape
+        return np.pad(cube, [int((n-1)*nx/2), int((n-1)*ny/2)])
+    elif np.ndim(cube)==3:
+        nx, ny, nz = cube.shape
+        if nx==ny:
+            n1 = int((n-1)*nx/2)
+            n2 = int((n-1)*ny/2)
+            return np.pad(cube, [(n1, n1), (n2, n2), (0,0)])
+        elif ny==nz:
+            n1 = int((n-1)*ny/2)
+            n2 = int((n-1)*nz/2)
+            return np.pad(cube,[(0,0) , (n1, n1), (n2, n2)])
 
 def inpolygon(xq, yq, xv, yv):
         shape = xq.shape
