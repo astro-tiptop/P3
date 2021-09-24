@@ -290,20 +290,20 @@ def sort_params_from_labels(psfModelInst, x0):
             r0   = np.sum(Cn2)**(-3/5)
         else:
             # 1-LAYER CASE : FIT OF r0 in METERS
-            Cn2= []
+            Cn2= None
             r0 = x0[0]
             nL = 1
     else:
         nL = 0
-        r0 = []
-        Cn2 = []
+        r0 = None
+        Cn2 = None
 
     # ---------- MANAGING THE PARAMETERS FOR DPHI
     n_dphi = nL + psfModelInst.n_param_dphi
     if n_dphi > 0:
         x0_dphi = list(xall[nL:n_dphi])
     else:
-        x0_dphi = []
+        x0_dphi = None
 
     # ---------- MANAGING THE JITTER
     if "jitterX" in psfModelInst.param_labels:
@@ -313,7 +313,7 @@ def sort_params_from_labels(psfModelInst, x0):
             x0_jitter = psfModelInst.ao.cam.spotFWHM[0]
         n_tt = n_dphi+3
     else:
-        x0_jitter = []
+        x0_jitter = None
         n_tt = n_dphi
 
     # Astrometry/Photometry/Background
@@ -349,7 +349,7 @@ def sort_params_from_labels(psfModelInst, x0):
     if len(x0) > n_stellar:
         x0_stat = list(x0[n_stellar:])
     else:
-        x0_stat = []
+        x0_stat = None
 
     return (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat)
 
@@ -369,9 +369,9 @@ def telescopePsf(pupil,samp,kind='spline'):
         otf = interpolateSupport(telescopeOtf(pupil,2),nSize//samp,kind=kind)
         return interpolateSupport(otf2psf(otf),nSize,kind=kind)
 
-def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
-                    x_stellar = [[1.0], [0.],[0.],[0]],
-                    theta_ext = 0, nPix = None, otfPixel = 1):
+def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
+                    x_stellar=[[1.0], [0.],[0.],[0]],
+                    theta_ext=0, nPix=None, otfPixel=1):
         """
           Computation of the 3D PSF and the Strehl-ratio (from the OTF integral).
           The Phase structure function must be a nPx x nPx x nSrc array
@@ -390,7 +390,6 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
 
         PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
         SR  = np.zeros((ao.src.nSrc,freq.nWvl))
-
 
         # DEFINING THE RESIDUAL JITTER KERNEL
         Kjitter = 1
@@ -413,6 +412,12 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
             dr = bin_fact*(freq.U_[:,:,np.newaxis]*dx + freq.V_[:,:,np.newaxis]*dy)
             fftPhasor = np.exp(-np.pi*complex(0, 1)*dr)
 
+        # INSTRUMENTAL DEFECTS
+        if x_stat is not None:
+            freq.otfNCPA, _, freq.phaseMap = getStaticOTF(ao.tel, freq.nOtf,
+                                                          freq.sampRef,
+                                                          freq.wvlRef,
+                                                          xStat=x_stat)
         # OTF MULTIPLICATION
         otfStat = freq.otfNCPA * Kjitter * otfPixel
         otfStat = np.repeat(otfStat[:, :, np.newaxis], ao.src.nSrc, axis=2)
