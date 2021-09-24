@@ -6,15 +6,20 @@ Created on Thu Apr  8 09:37:55 2021
 @author: omartin
 """
 
+#%% IMPORTING LIBRARIES
 import numpy as np
 from astropy.table import Table
 import matplotlib.pyplot as plt
 
+#%% GETTING INFOR FROM THE READER
 def estimateLoopDelay(hdr):
-            
+    """
+    Return the loop delay in seconds for the HO and TT loops
+    """
+
     wssmprg  = int(hdr['WSSMPRG'])
     _,aoMode = getStagePositionWFS(hdr)
-    
+
     if wssmprg == 0:
         t0 = 8000e-6
     if wssmprg == 1:
@@ -31,7 +36,7 @@ def estimateLoopDelay(hdr):
         t0 = 2000e-6
     if wssmprg == 7:
         t0 = 1350e-6
-        
+
     # Total delays
     t8    = 40e-6
     delay = t0+t8
@@ -45,7 +50,7 @@ def estimateLoopDelay(hdr):
         delay_tt  = 1e-3 #STRAP
 
     return delay, delay_tt
-        
+
 def getScale(hdr):
     """
     Returns the instrument pixel scale in mas
@@ -56,8 +61,8 @@ def getScale(hdr):
         scales = {"NARROW": 9.942,
               "MEDIUM": 19.829,
               "WIDE": 39.686}
-        return scales[hdr['CAMNAME'].upper()]  
-    
+        return scales[hdr['CAMNAME'].upper()]
+
     elif instName == 'OSIRIS':
         return 9.95
     else:
@@ -68,7 +73,7 @@ def getPA(hdr):
     theta = float(hdr['ROTPOSN']) - getInstAngle(hdr)
     return theta
 
-def getPupilMask(hdr):    
+def getPupilMask(hdr):
     return hdr['PMSNAME']
 
 def getTelescopeAirmass(hdr):
@@ -83,12 +88,12 @@ def getInstAngle(hdr):
     """
     instName = getInstName(hdr)
     if instName == 'NIRC2':
-        return float(hdr['INSTANGL']) 
+        return float(hdr['INSTANGL'])
     elif instName == 'OSIRIS':
         return float(hdr['INSTANGL']) - 42.5
     else:
         return 0
-    
+
 def getInstName(hdr):
     return hdr['CURRINST']
 
@@ -100,7 +105,7 @@ def getCentralWavelength(hdr):
 
 def getGain(hdr):
     return hdr['DETGAIN']
-    
+
 def getFilterName(hdr):
     instName = getInstName(hdr)
     if instName == 'NIRC2':
@@ -116,13 +121,13 @@ def getFilterName(hdr):
         return f.split('-')[0]
     else:
         return None
-    
+
 def getFilterProfile(path_filter,spectral_filter):
     """
-    Returns the wavelength (in microns) and the transmission for 
+    Returns the wavelength (in microns) and the transmission for
     the specified NIRC2 filter.
 
-    Example: 
+    Example:
     (wave, trans) = nirc2.photometry.get_filter_profile('Kp')
     py.clf()
     py.plot(wave, trans)
@@ -130,17 +135,17 @@ def getFilterProfile(path_filter,spectral_filter):
     py.ylabel('Transmission')
     """
     spectral_filter = spectral_filter.replace('_','')
-    
+
     filters = ['J', 'H', 'K', 'Kcont', 'Kp', 'Ks', 'Lp', 'Ms',
                'Hcont', 'Brgamma', 'FeII']
-    
+
     filters_upper = [x.upper() for x in filters]
-    
+
     if spectral_filter.upper() not in filters_upper:
         print( 'Could not find profile for filter %s.' % spectral_filter)
         print( 'Choices are: ', filters)
         return
-    
+
     spectral_filter = filters[filters_upper.index(spectral_filter.upper())]
     table = Table.read(path_filter + spectral_filter + '.dat', format='ascii')
 
@@ -186,15 +191,15 @@ def getNCPAstr(hdr):
         strMonth = 'Sept'
     elif numMonth == '10': pass
     elif numMonth == '11': pass
-    elif numMonth == '12': pass    
-    
+    elif numMonth == '12': pass
+
     if numMonth != '03':
         NCPAstr = strMonth + '_' + strYear
-        
+
     return 'NCPA_Keck_' + NCPAstr + '.fits'
 
 def getExposureConfig(hdr):
-    
+
     ittime   = hdr['ITIME']
     coadds   = hdr['COADDS']
     sampmode = hdr['SAMPMODE']
@@ -204,11 +209,12 @@ def getExposureConfig(hdr):
         ron = 60
     else:
         ron = 15.0 * (16.0 / numreads)**0.5
-        
-    
+
+
     return ittime,coadds,sampmode,numreads,ron,gain
-        
-def samplingFilterProfile(path_filter,hdr,nWvl=3,thresold=0.9,bwMin = 100e-9,display=False):
+
+def samplingFilterProfile(path_filter, hdr, nWvl=3, thresold=0.9,
+                          bwMin = 100e-9, display=False):
     """
     """
     # reading the .dat file
@@ -231,15 +237,15 @@ def samplingFilterProfile(path_filter,hdr,nWvl=3,thresold=0.9,bwMin = 100e-9,dis
     # perform the linear regression on the desired wavelengths
     if nWvl > 1:
         wvl_c  = np.linspace(wvlMin,wvlMax,nWvl)
-        
+
     elif nWvl <=1:
          wvl_c  = np.array([getCentralWavelength(hdr)])
          bw     = 0.0
     tr_c   = np.polyval(p,wvl_c)
-    
+
     # assumption : no chromatic dispersion
     disp = [list(np.zeros(nWvl)),list(np.zeros(nWvl))]
-    
+
     if display:
         # plotting
         plt.figure(figsize=(7,7))
@@ -266,20 +272,20 @@ def getSaturationLevel(instName):
 
 def getStagePositionWFS(hdr):
     """
-    
+
     """
     OBWF   = float(hdr['OBWF'])
     LSPROP = hdr['LSPROP'].upper()
     if LSPROP == 'YES':
-        aoMode = 'LGS'     
+        aoMode = 'LGS'
         AOFCLGFO    = float(hdr['AOFCLGFO'])*1e3 #mm
         zstage_defocus = abs(OBWF - AOFCLGFO)
     else:
         aoMode = 'NGS'
         AOFCNGFO    = float(hdr['AOFCNGFO'])*1e3
         zstage_defocus = abs(OBWF - AOFCNGFO)
-        
+
     return zstage_defocus, aoMode
 
-def getWFSwavelength(hdr):    
+def getWFSwavelength(hdr):
     return float(hdr['GUIDWAVE'])*1e-6

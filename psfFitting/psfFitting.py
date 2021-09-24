@@ -16,12 +16,12 @@ from psfFitting.imageModel import imageModel
 import matplotlib.pyplot as plt
 
 #%%
-def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectralStacking=True,
-               spatialStacking=True,normType=1, bounds=None,
-               ftol=1e-8,xtol=1e-8,gtol=1e-8,max_nfev=1000,verbose=0):
+def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
+               spectralStacking=True, spatialStacking=True, normType=1,
+               bounds=None, ftol=1e-8, xtol=1e-8, gtol=1e-8, max_nfev=1000, verbose=0):
     """Fit a PSF with a parametric model solving the least-square problem
        epsilon(x) = SUM_pixel { weights * (amp * Model(x) + bck - psf)² }
-    
+
     Parameters
     ----------
     image : numpy.ndarray
@@ -46,7 +46,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
             0 : progress bar only
             1: number of iteration
             2: minimization details for each iteration
-        
+
     Returns
     -------
     out.x : numpy.array
@@ -70,18 +70,18 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
        .cost : float
            Value of cost function at optimum
     """
-    
+
     # WEIGHTS
     if weights is None: weights = np.ones_like(image)
     elif len(image)!=len(weights): raise ValueError("Keyword `weights` must have same number of elements as `psf`")
     sqW = np.sqrt(weights)
-    
+
     # NORMALIZING THE IMAGE
     if image.min() < 0 :
         image -= image.min()
     im_norm,param = FourierUtils.normalizeImage(image,normType=normType)
     nPix = im_norm.shape[1]
-    
+
     # DEFINING THE COST FUNCTIONS
     class CostClass(object):
         def __init__(self):
@@ -92,16 +92,16 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
             im_est = imageModel(psfModelInst(mini2input(y),nPix=im_norm.shape[0]),
                                 spatialStacking=spatialStacking,spectralStacking=spectralStacking,
                                 saturation=psfModelInst.ao.cam.saturation/param)
-            
+
             return (sqW * (im_est - im_norm)).reshape(-1)
-    cost = CostClass()   
-    
+    cost = CostClass()
+
     # DEFINING THE BOUNDS
     if fixed is not None:
         if len(fixed)!=len(x0): raise ValueError("When defined, `fixed` must be same size as `x0`")
         FREE    = [not fixed[i] for i in range(len(fixed))]
         INDFREE = np.where(FREE)[0]
-        
+
     def get_bounds(inst):
         if bounds == None:
             b_low = inst.bounds[0]
@@ -111,13 +111,13 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
             return (b_low,b_up)
         else:
             return (np.take(bounds[0],INDFREE),np.take(bounds[1],INDFREE))
-    
+
     def input2mini(x):
         # Transform user parameters to minimizer parameters
         if fixed is None: xfree = x
         else: xfree = np.take(x,INDFREE)
         return xfree
-    
+
     def mini2input(y,forceZero=False):
         # Transform minimizer parameters to user parameters
         if fixed is None:
@@ -130,7 +130,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
             for i in range(len(y)):
                 xall[INDFREE[i]] = y[i]
         return xall
-            
+
     # PERFORMING MINIMIZATION WITH CONSTRAINS AND BOUNDS
     if method == 'trf':
         result = least_squares(cost,input2mini(x0),
@@ -163,7 +163,7 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
     nparam        = len(result.x) - 3*psfModelInst.ao.src.nSrc - 1
     if nparam > 10:
         nparam -= psfModelInst.ao.tel.nModes
-    
+
     idF = nparam+1
     xpsf[idF]  = 1.0 # flux=1
     xpsf[idF+1:idF+3*psfModelInst.ao.src.nSrc+1]   = 0.0 # dx,dy,bkcg=0
@@ -171,31 +171,31 @@ def psfFitting(image,psfModelInst,x0,weights=None,fixed=None,method='trf',spectr
     if np.ndim(result.psf) > 2:
         result.psf = result.psf.sum(axis=2)
     result        = evaluateFittingQuality(result,psfModelInst)
-    
+
     # static map
     nModes = psfModelInst.ao.tel.nModes
     if (nModes) > 0 and len(result.x) > nModes + psfModelInst.ao.src.nSrc:
         result.opd = (psfModelInst.ao.tel.statModes*result.x[-nModes:]).sum(axis=2)
-    
+
     # 95% confidence interval
     try:
         result.xerr = mini2input(confidence_interval(result.fun, result.jac), forceZero=True)
     except:
         print('Identification of the confidence interval failed ')
         result.xerr = list(-1 * np.ones_like(result.x))
-    
+
     return result
 
 
 def evaluateFittingQuality(result,psfModelInst):
-    
+
     # ESTIMATING IMAGE-BASED METRICS
     def meanErrors(sky,fit):
         mse = 1e2*np.sqrt(np.sum((sky-fit)**2))/sky.sum()
         mae = 1e2*np.sum(abs(sky-fit))/sky.sum()
         fvu = 1e2*np.sum((sky-fit)**2)/np.sum((sky-sky.mean())**2)
         return mse,mae,fvu
-        
+
     if np.ndim(result.im_sky) == 2:
         # case fit of a 2D image
         result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.ao.tel.pupil,psfModelInst.freq.sampRef)
@@ -203,15 +203,15 @@ def evaluateFittingQuality(result,psfModelInst):
         result.FWHMx_sky , result.FWHMy_sky = FourierUtils.getFWHM(result.im_sky,psfModelInst.ao.cam.psInMas,nargout=2)
         result.FWHMx_fit , result.FWHMy_fit = FourierUtils.getFWHM(result.im_fit,psfModelInst.ao.cam.psInMas,nargout=2)
         result.mse, result.mae , result.fvu = meanErrors(result.im_sky,result.im_fit)
-        
+
     elif (np.ndim(result.im_sky) == 3) and (psfModelInst.nwvl>1):
-        # case fit of an hyperspectral data cube 
+        # case fit of an hyperspectral data cube
         nWvl = psfModelInst.nwvl
         result.SR_sky = result.SR_fit = np.zeros(nWvl)
         result.FWHMx_sky = result.FWHMy_sky = np.zeros(nWvl)
         result.FWHMx_fit = result.FWHMy_fit = np.zeros(nWvl)
         result.mse = result.mae = result.fvu= np.zeros(nWvl)
-       
+
         for j in range(nWvl):
             ims_j = result.im_sky[:,:,j]
             imf_j = result.im_fit[:,:,j]
@@ -226,11 +226,11 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
     """
         Displaying PSF and key metrics
     """
-    
+
     # RETRIEVING LABELS
     psfrLabel = psfModelInst.tag
     instLabel = psfModelInst.ao.cam.tag
-    
+
     # MANAGING THE IMAGE SIZE TO BE DIPSLAYED
     nPix  = res.im_sky.shape[0]
     if nBox != None and nBox < nPix:
@@ -240,9 +240,9 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
     else:
         im_sky = res.im_sky
         im_fit = res.im_fit
-    
+
     im_diff= im_sky - im_fit
-    
+
     # DEFINING THE FUNCTION TO APPLY
     if scale == 'log10abs':
         fun = lambda x: np.log10(abs(x))
@@ -254,7 +254,7 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
         scale = 'linear'
         print('Scale input is not recognized, go linear')
         fun = lambda x: x
-            
+
     # MANAGING THE IMAGE RANGE
     if vmin == None:
         if scale =='log10abs':
@@ -263,7 +263,7 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
             vmin = np.min( [np.min(fun(im_sky)), np.min(fun(im_fit))])
     if vmax == None:
         vmax = np.max([np.max(fun(im_sky)), np.max(fun(im_fit))])
-    
+
     # IMAGES
     plt.figure(figsize=figsize)
     plt.subplot(231)
@@ -275,20 +275,20 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
     plt.imshow(fun(im_fit),vmin=vmin,vmax=vmax)
     plt.title(psfrLabel)
     plt.colorbar()
-    plt.axis('off')  
+    plt.axis('off')
     plt.subplot(233)
     plt.imshow(fun(im_diff),vmin=vmin,vmax=vmax)
     plt.title(psfrLabel+' - ' + instLabel)
     plt.axis('off')
     plt.colorbar()
-    
+
     # AZIMUTHAL AVERAGES
     x,prof_sky = FourierUtils.radial_profile(im_sky,pixelscale=psfModelInst.ao.cam.psInMas)
-    prof_fit   = FourierUtils.radial_profile(im_fit,nargout=1)    
+    prof_fit   = FourierUtils.radial_profile(im_fit,nargout=1)
     plt.subplot(212)
     plt.plot(x,fun(prof_sky),label=instLabel)
     plt.plot(x,fun(prof_fit),label=psfrLabel)
-    
+
     #plt.ylim([vmin,vmax])
     plt.legend()
     plt.ylabel('Azimuthal profile ('+ scale +'-scale)')

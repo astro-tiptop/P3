@@ -6,8 +6,7 @@ Created on Fri Jun 15 14:57:49 2018
 @author: omartin
 """
 
-# Libraries
-import time
+#%% Libraries
 import numpy as np
 import numpy.fft as fft
 import aoSystem.FourierUtils as FourierUtils

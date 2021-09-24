@@ -300,15 +300,16 @@ def test_psfr(path_trs, tol=1e-5):
 
     # Get the PSF
     psfr = psfR(sd.trs)
-    x0 = [0.7, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+    r0 = psfr.ao.atm.r0
+    x0 = [r0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
     fixed = (True,)*3 + (False,)*4
     #adjust the flux and the position
     res = psfFitting(im_nirc2, psfr, x0, verbose=2, fixed=fixed,
                      ftol=tol, xtol=tol, gtol=tol)
+    psfr.wfe['PSF SR'] = psfr.SR[0]
+    displayResults(psfr, res, nBox=100, scale='arcsinh')
 
-    displayResults(psfr, res, nBox=90, scale='log10abs')
-
-    return psfr
+    return psfr, res
 
 def test_prime(psfr, fixed_stat = True, tol=1e-5):
     """
@@ -323,9 +324,9 @@ def test_prime(psfr, fixed_stat = True, tol=1e-5):
     # fitting
     res = psfFitting(im_nirc2, psfr, x0, verbose=2,
                      fixed=fixed, xtol=tol, ftol=tol, gtol=tol)
-
+    psfr.wfe['PSF SR'] = psfr.SR[0]
     # Display
-    displayResults(psfr, res, nBox=90, scale='log10abs')
+    displayResults(psfr, res, nBox=100, scale='log10abs')
 
     return res
 

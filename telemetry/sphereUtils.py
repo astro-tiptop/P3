@@ -195,12 +195,12 @@ def fitting_image(im, psfao, r0=None, SR=None, fit_stat=True, weights=None, norm
     res = psfFitting(im, psfao, x0, fixed=fixed, weights=weights, normType=normType,
                      verbose=verbose, ftol=tol, gtol=tol, xtol=tol, max_nfev=max_nfev)
 
+    if res.x[6] > 4:
+        return None
     # STEP 2: JOINT FIT OF THE ATMOSPHERIC AND INSTRUMENTAL PARAMETERS
     if fit_stat:
         # defining the new initial guess
-        #x0 = list(res.x[:6]) + [min(x0[6], res.x[6])] + list(res.x[7:11]) + [0,]*3 + [0,]*psfao.ao.tel.nModes
         x0 = list(res.x[:11]) + [0,]*3 + [0,]*psfao.ao.tel.nModes
-        print(x0)
         # narrowing the bounds of the atmospheric parameters
         psfao.bounds = psfao.update_bounds(res.x, res.xerr, sig=5)
         # disable the fit of astrometry (conflict with  with tip-tilt modes)

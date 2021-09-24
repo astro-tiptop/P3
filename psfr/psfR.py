@@ -320,16 +320,15 @@ class psfR:
         self.wfe['SERVO-LAG'] = 1e9*np.sqrt(C.trace()/self.trs.dm.nCom)
 
         #6. RESIDUAL TIP-TILT
-        if self.ao.aoMode!="SCAO":
-            C = np.diag(self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt)
-            self.wfe['TIP-TILT-WFE'] = np.sqrt(np.sum(C))*1e9
-            sr_tt = np.sum(otf_dl * np.exp(-0.5*self.dphi_tt))/S
-            self.wfe['TIP-TILT'] = sr2fwe(sr_tt)
-        else:
-            self.wfe['TIP-TILT'] = 0
-            mat_tt = np.eye(self.trs.dm.nCom) - self.trs.mat.DMTTRem
-            C = np.dot(mat_tt, np.dot(C, mat_tt.T))
-            self.wfe['TIP-TILT CONTRIBUTION'] = 1e9*np.sqrt(C.trace()/self.trs.dm.nCom)
+        C = np.diag(self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt)
+        self.wfe['TIP-TILT-WFE'] = np.sqrt(np.sum(C))*1e9
+        sr_tt = np.sum(otf_dl * np.exp(-0.5*self.dphi_tt))/S
+        self.wfe['TIP-TILT'] = sr2fwe(sr_tt)
+#        else:
+#            self.wfe['TIP-TILT'] = 0
+#            mat_tt = np.eye(self.trs.dm.nCom) - self.trs.mat.DMTTRem
+#            C = np.dot(mat_tt, np.dot(C, mat_tt.T))
+#            self.wfe['TIP-TILT CONTRIBUTION'] = 1e9*np.sqrt(C.trace()/self.trs.dm.nCom)
 
         #7. PIXEL TF
         sr_pixel = np.sum(otf_dl * self.otfPixel)/S
@@ -383,10 +382,13 @@ class psfR:
             self.wfe['PSF SR'] = self.SR[0]
 
         #11. STREHL RATIO FROM THE IMAGE
+        method="max"
+        if self.ao.cam.tag=="OOMAO":
+            method="otf"
         self.wfe[self.ao.cam.tag + " SR"] = 1e2*FourierUtils.getStrehl(self.trs.cam.image,
                                                                        self.ao.tel.pupil,
                                                                        self.freq.sampRef,
-                                                                       method='otf')
+                                                                       method=method)
 
 
 

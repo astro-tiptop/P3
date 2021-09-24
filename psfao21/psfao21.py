@@ -64,7 +64,7 @@ class psfao21:
                 # CREATING INSTANCES OF THE MAOPPY MODEL
                 self.psfao_19.append(Psfao((self.npix, self.npix),
                                     system=system, samp=samp[n]))
-                                
+
                 # DEFINING THE FREQUENCY DOMAIN
                 self.ao.cam.nWvl = 1
                 self.ao.src.wvl = [src_wvl[n]]
@@ -139,6 +139,7 @@ class psfao21:
                     + [np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]\
                     + [max(self.wvl)*1e9/2,]*self.ao.tel.nModes
 
+        self.psfao_19.bounds = (bounds_low_psd, bounds_up_psd)
         return (bounds_low, bounds_up)
 
     def get_power_spectrum_density(self, x0, psd_model, freq, grad=False):
@@ -240,4 +241,3 @@ class psfao21:
                 PSF.append(psf)
             PSF = np.array(PSF).transpose((1, 2, 3, 0))
         return PSF
-    

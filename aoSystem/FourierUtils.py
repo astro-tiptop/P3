@@ -393,7 +393,7 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
 
         # DEFINING THE RESIDUAL JITTER KERNEL
         Kjitter = 1
-        if np.any(x_jitter[0:2]):
+        if x_jitter is not None:
             u_max = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
             norm_fact = u_max**2 *(2 * np.sqrt(2*np.log(2)))**2
             Djitter = norm_fact * (x_jitter[0]**2 * freq.U2_
@@ -455,7 +455,7 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
 
         return PSF + bkg, SR
 
-def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
+def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
                     x_stellar = [[1.0], [0.],[0.],[0]],
                     theta_ext = 0, nPix = None, otfPixel = 1):
         """
@@ -513,7 +513,7 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
         for jWvl in range(freq.nWvl):
 
             # UPDATE THE INSTRUMENTAL OTF
-            if freq.nWvl>1 or len(x_stat)>0:
+            if freq.nWvl>1 or x_stat is not None:
                 freq.otfNCPA, _, _ =  getStaticOTF(ao.tel, freq.nOtf,
                                                    freq.samp[jWvl],
                                                    freq.wvl[jWvl],
@@ -521,7 +521,7 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=[],
                                                    theta_ext=theta_ext)
 
             # UPDATE THE RESIDUAL JITTER
-            if freq.nyquistSampling == True and freq.nWvl > 1 and np.any(x_jitter[0:2]):
+            if freq.nyquistSampling == True and freq.nWvl > 1 and x_jitter is not None:
                 norm_fact2 = (freq.samp[jWvl]*ao.tel.D/freq.wvl[jWvl]/(3600*180*1e3/np.pi))**2
                 norm_fact2 *= (2 * np.sqrt(2*np.log(2)))**2
                 Kjitter = np.exp(-0.5 * Djitter * norm_fact2/norm_fact)

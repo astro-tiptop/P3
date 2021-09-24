@@ -12,12 +12,12 @@ from configparser import ConfigParser
 class configFile():
 
 
-    def __init__(self,sysdiag):
+    def __init__(self, sysdiag, verbose=False):
 
         # create the .ini file
         file = sysdiag.trs.tel.name + '_' + sysdiag.trs.cam.name + '_' + sysdiag.trs.obsdate + '_' + sysdiag.trs.acqtime + '.ini'
         self.path_ini = sysdiag.trs.path_save + '/'+ file
-        if os.path.exists(self.path_ini):
+        if os.path.exists(self.path_ini) and verbose:
             print('WARNING: the .ini file already exists')
 
         # open the .ini file
