@@ -7,6 +7,7 @@ Created on Fri Sep 24 10:13:40 2021
 """
 #%% importing librairies
 import os
+import matplotlib.pyplot as plt
 import pandas as pd
 from psfr.psfR import psfR
 from psfFitting.psfFitting import psfFitting
@@ -19,38 +20,18 @@ import warnings
 warnings.simplefilter("ignore")
 
 #%% PSFR
-def run_keck_psfr(path_sav, path_fits, path_p3, path_save="./",
-             display=False, tol=1e-5, verbose=-1):
+def psfr_on_multiple_databases(path_save,
+                               year=["20130203", "20130801", "20130914"],
+                               merge_df=True):
     """
-    Run the P3 PSFR by using the telemetry data in the .sav files and compare
-    with the NIRC2 frame given in the path_fits file.
+    Run the PSFR over multiple Keck telemetry databases"
     """
+    # loop on data bases
+    for date in year:
+        psfr_on_database(path_save, year=date)
 
-    # find out the AO case
-    # ------ Get the telemetry
-    path_calib = path_p3 + "/aoSystem/data/KECK_CALIBRATION/"
-    trs = telemetryKeck(path_sav, path_fits, path_calib, path_save=path_save,
-                        nLayer=1)
-    # ---- Process the telemetry to get the r0 and the noise
-    sd  = systemDiagnosis(trs)
-
-    # ---- create the .ini file
-    configFile(sd)
-
-    # ---- instantiate the PSF mode
-    psfr = psfR(sd.trs)
-
-    # ---- adjust the flux and the position
-    x0 = [psfr.ao.atm.r0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
-    fixed = (True,)*3 + (False,)*4
-    res = psfFitting(psfr.trs.cam.image, psfr, x0, verbose=verbose, fixed=fixed,
-                     ftol=tol, xtol=tol, gtol=tol)
-    psfr.wfe['PSF SR'] = psfr.SR[0]
-
-    if display:
-        displayResults(psfr, res, nBox=100, scale='arcsinh')
-
-    return psfr, res
+    if merge_df:
+        merge_dataframe(path_save, tocsv=True)
 
 def psfr_on_database(path_save, year="20130801", display=False, tol=1e-5):
     """
@@ -105,6 +86,43 @@ def psfr_on_database(path_save, year="20130801", display=False, tol=1e-5):
     df_psfr.set_index('ID')
     df_psfr.to_csv(path_save + df_name + ".csv", index=False)
 
+def run_keck_psfr(path_sav, path_fits, path_p3, path_save="./",
+             display=False, tol=1e-5, verbose=-1):
+    """
+    Run the P3 PSFR by using the telemetry data in the .sav files and compare
+    with the NIRC2 frame given in the path_fits file.
+    """
+
+    # find out the AO case
+    # ------ Get the telemetry
+    path_calib = path_p3 + "/aoSystem/data/KECK_CALIBRATION/"
+    trs = telemetryKeck(path_sav, path_fits, path_calib, path_save=path_save,
+                        nLayer=1)
+    # ---- Process the telemetry to get the r0 and the noise
+    sd  = systemDiagnosis(trs)
+
+    # ---- create the .ini file
+    configFile(sd)
+
+    # ---- instantiate the PSF mode
+    psfr = psfR(sd.trs)
+
+    # ---- get the PSF
+    x0 = [psfr.ao.atm.r0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+    psf = psfr(x0)
+    psfr.wfe['PSF SR'] = psfr.SR[0]
+
+    # ---- adjust the flux and the position
+    fixed = (True,)*3 + (False,)*4
+    res = psfFitting(psfr.trs.cam.image, psfr, x0, verbose=verbose, fixed=fixed,
+                     ftol=tol, xtol=tol, gtol=tol)
+    psfr.wfe['FIT PSF SR'] = psfr.SR[0]
+
+    if display:
+        displayResults(psfr, res, nBox=100, scale='arcsinh')
+
+    return psfr, res
+
 def define_database_colnames():
     """
     Defines the name of the recorded data"
@@ -115,12 +133,14 @@ def define_database_colnames():
             "SEEING DIMM [AS]", "SEEING MASS", "CN2 0KM", "CN2 0.5KM", "CN2 1KM", "CN2 2KM", "CN2 4KM",
             "CN2 8KM", "CN2 16KM", "HO GAIN", "HO LAT [ms]", "HO RATE [Hz]", "HO NPH",
             "HO WFE [NM]", "TT GAIN", "TT LAT [ms]", "TT RATE [Hz]", "TT NPH","TT WFE [NM]",
+            "JITTERX [MAS]", "JITTERY [MAS]", "JITTERXY [MAS]",
             "TEL R0 [CM]", "TEL L0 [M]", "TEL TAU0 [MS]", "TEL V [M/S]", "TEL THETA0 [AS]",
             "HO NOISE [RAD]", "TT NOISE [RAD]", "WFE NCPA [NM]", "WFE FITTING [NM]",
             "WFE ALIASING [NM]", "WFE HO NOISE [NM]", "WFE TT NOISE [NM]",
             "WFE SERVO-LAG [NM]", "WFE JITTER [NM]", "WFE ANGULAR ANISO [NM]",
             "WFE FOCAL ANISO [NM]", "WFE TT ANISO [NM]", "WFE TOTAL [NM]",
-            "PSF PIXEL [NM]", "PSFR SR", "PSFR FWHMX", "PSFR FWHMY",  "PSFR MSE"]
+            "PSF PIXEL [NM]", "PSFR SR", "FIT PSFR SR", "FIT PSFR SR BKG",
+            "PSFR FWHMX", "PSFR FWHMY",  "PSFR MSE"]
 
     return name
 
@@ -160,6 +180,7 @@ def unpack_results(psfr, res):
     TTRATE = psfr.ao.rtc.ttloop["rate"]
     TTNPH = psfr.trs.wfs.nph
     TTWFE = psfr.ao.rtc.holoop["wfe"]
+    JX, JY, JXY = psfr.ao.cam.spotFWHM[0]
     TELR0 = psfr.trs.atm.r0_tel*1e2
     TELL0 = psfr.trs.atm.L0_tel
     TELTAU0 = psfr.trs.atm.tau0_tel*1e3
@@ -180,7 +201,9 @@ def unpack_results(psfr, res):
     WFETTANISO = psfr.wfe["FOCAL ANISOPLANATISM"]
     WFETOTAL = psfr.wfe["TOTAL WFE"]
     PSFPIX = psfr.wfe["PIXEL TF"]
-    PSFSR = res.SR_fit
+    PSFSR = psfr.wfe["PSF SR"]/1e2
+    FITPSFSRNOBKG = psfr.wfe["FIT PSF SR"]
+    FITPSFSRBKG = res.SR_fit
     PSFWHMX = res.FWHMx_fit
     PSFWHMY = res.FWHMy_fit
     MSE = res.mse
@@ -188,10 +211,98 @@ def unpack_results(psfr, res):
     data = [DATE, ID, AOMODE, AIRMASS, WVL, BW, PUPANG, PUPMASK, PUPRES, CAMPS,
             CAMFOV, CAMSR, CAMFWHMX, CAMFWHMY, CAMFITBKG, SEEINGDIMM, SEEINGMASS,
             CN20, CN205, CN21, CN22, CN24, CN28, CN216, HOGAIN, HOLAT, HORATE,
-            HONPH, HOWFE, TTGAIN, TTLAT, TTRATE, TTNPH, TTWFE, TELR0, TELL0,
+            HONPH, HOWFE, TTGAIN, TTLAT, TTRATE, TTNPH, TTWFE, JX, JY, JXY, TELR0, TELL0,
             TELTAU0, TELV, TELTHETA0, HONOISE, TTNOISE, WFENCPA, WFEFIT,
             WFEALIAS, WFEHONOISE, WFETTNOISE, WFELAG, WFETT, WFEANISO, WFEFOC,
-            WFETTANISO, WFETOTAL, PSFPIX, PSFSR, PSFWHMX, PSFWHMY, MSE]
+            WFETTANISO, WFETOTAL, PSFPIX, PSFSR, FITPSFSRNOBKG, FITPSFSRBKG,
+            PSFWHMX, PSFWHMY, MSE]
 
     return data
+#%% PROCESSING
+def merge_dataframe(save_folder, tocsv=False):
+    """
+    Merge .csv file inside the save_folder
+    """
+    # grab .csv data that were not merged already
+    list_csv = os.listdir(save_folder)
+    n_file = len(list_csv)
+    list_csv = [list_csv[n] for n in range(n_file) if ".csv" in list_csv[n]]
+    n_file = len(list_csv)
+    list_csv = [list_csv[n] for n in range(n_file) if "merged" not in list_csv[n]]
 
+    # creating data frames
+    df_merged = pd.DataFrame()
+    for file in list_csv:
+        path_file = save_folder + file
+        df_tmp = pd.read_csv(path_file)
+        df_merged = pd.concat([df_merged, df_tmp])
+
+    # sort
+    df_merged = df_merged.sort_values("DATE")
+
+    # save
+    if tocsv:
+        pref = list_csv[0].split('_')[0]
+        df_merged.to_csv(pref + "psfr_merged.csv")
+
+    return df_merged
+
+def plot_metrics(df, val_x, val_y=None, sort_by=None, n_bins=10, grid_on=True,
+                 line_xy=True, aspect='equal'):
+    """
+    Plot values of val_y versus val_x taken from the dataframe df.
+    If val_y is None, plot the histograms
+    """
+
+    # checking inputs
+    if val_x not in df:
+        raise ValueError(val_x + " is not a column of the data frame")
+    if val_y is not None and val_y not in df:
+        raise ValueError(val_y + " is not a column of the data frame")
+    if sort_by is not None and sort_by not in df:
+        raise ValueError(sort_by + " is not a column of the data frame")
+    if val_y is None and n_bins is None or n_bins < 0:
+        raise ValueError("the number of bins must be a postive integer")
+
+    # finding unique values for the reference column
+    sort_unique = None
+    n_sort = 1
+    alpha = 1 # transparency
+    if sort_by is not None:
+        sort_unique = pd.unique(df[sort_by])
+        n_sort = len(sort_unique)
+        alpha = 0.5
+
+    # histogram
+    if val_y is None: # histogram
+        plt.figure()
+        for k in range(n_sort):
+            if n_sort == 1:
+                plt.hist(df[val_x], bins=n_bins, alpha=alpha)
+            else:
+                df_tmp = df[df[sort_by]==sort_unique[k]]
+                plt.hist(df_tmp[val_x], bins=n_bins, alpha=alpha, label=sort_unique[k])
+        plt.set_ylabel("Counts")
+
+
+    # versus plot
+    else:
+        plt.figure()
+        for k in range(n_sort):
+            if n_sort == 1:
+                plt.scatter(df[val_x], df[val_y])
+            else:
+                df_tmp = df[df[sort_by]==sort_unique[k]]
+                plt.scatter(df_tmp[val_x], df_tmp[val_y], label=sort_unique[k])
+        plt.ylabel(val_y)
+        if line_xy:
+            plt.plot(plt.xlim(), plt.ylim(), 'k--')
+
+    plt.xlabel(val_x)
+    if n_sort>1:
+        plt.legend()
+    if grid_on:
+        plt.grid('on')
+    #if aspect:
+    #    ax = plt.gca()
+    #    ax.set_aspect('equal')
