@@ -9,6 +9,7 @@ Created on Mon Mar  1 14:57:57 2021
 #%% IMPORTING LIBRAIRIES
 import os
 import time
+from pathlib import Path
 import numpy as np
 from numpy.random import uniform
 import random
@@ -21,7 +22,7 @@ np.random.seed(1)
 
 def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9,
                  mag=0, zp=25.44, dit=0.5, ndit=50, sky_mag=13.6, ron=60, norm=1,
-                 save_path=None, nround=7, full_name=False, n_test=0,
+                 save_path=None, nround=7, full_name=False, n_test=0, n_split=10,
                  bounds=[[0.05, 1e-3, 100, 1e-3, 0.5, 1.1, -0.1],
                          [0.4, 5e-2, 390, 1e-1, 2, 3.0, 0.1]]):
 
@@ -61,11 +62,12 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
     id_static = 'NO'
     if add_static:
         id_static = ''
-    if mag != 0:
+    if mag:
         flux = 10 ** (-0.4*(mag - zp))*dit*ndit
         sky_flux = 10 ** (-0.4*(sky_mag - zp)) * ndit * dit * (psfao.ao.cam.psInMas/1e3) ** 2
         ron_stack = ron * np.sqrt(ndit)
-        id_noise = ''
+        id_noise = ""
+        id_mag = "_MAG" + str(mag)
 
     # creating tha main data folder
     if save_path:
@@ -76,11 +78,10 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
         else:
             psf_prefix = 'psf'
 
-        save_main_folder = 'PSFAO21_' + id_noise + 'NOISE_' + id_static + 'STATIC/'
+        save_main_folder = 'PSFAO21_' + id_noise + 'NOISE_' + id_static + "STATIC" + id_mag + "/"
         save_path = os.path.join(save_path, save_main_folder)
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
-
 
     # ------------------- DEFINING BOUNDS
     if (len(bounds[0]) == 0) or (len(bounds[1]) == 0):
@@ -141,7 +142,7 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
                 if not os.path.isdir(path_folder):
                     os.mkdir(path_folder)
 
-    r053 = r0 ** (-5.0/3.0)
+    r053 = r0 **(-5.0/3.0)
 
     # -------------------  DEFINING SECONDARY PARAMETERS
     C = uniform(low=C_lb, high=C_ub, size=n_psf_folder)
@@ -154,15 +155,13 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
     #%% LOOPS
     pix2freq = 1/(psfao.ao.tel.D * psfao.freq.sampRef)**2
     otf_dl = fft.fftshift(psfao.freq.otfDL)
-    id_stat = ''
-    id_noise = ''
+    str_stat = ""
+    str_mag = ""
     # PRE-CALCULATE THE PSD
     for j in range(n_psf_folder):
         # DERIVING THE AO-CORRECTED PSD
         psd_in, _ = psfao.psfao_19.psd([1, 0, 1, ax[j], pe[j], 0, be[j]])
         psd_in -= psfao.psfao_19._vk
-        #Aemp = np.trapz(np.trapz(psd_in, psfao.freq.ky_[0]), psfao.freq.ky_[0])
-        #psd_in = psd_in/Aemp
 
         # DERIVING THE TELESCOPE OTF
         if add_static:
@@ -185,7 +184,7 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
             psf_i = np.real(fft.fftshift(fft.ifft2(otf_stat * np.exp(-0.5*Dphi))))
 
             # ADDING THE NOISE
-            if mag != 0:
+            if mag:
                 #noise_sky = np.random.poisson(skyFlux*np.ones_like(psf_i)) - skyFlux
                 noise_sky = np.random.poisson(sky_flux*np.ones_like(psf_i))
                 noise_dec = ron_stack*np.random.randn(psf_i.shape[0], psf_i.shape[1])
@@ -201,9 +200,9 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
                 if add_static:
                     s = ['_m'+str(nn+1)+'_' + str(round(stat[nn, j], nround))
                          for nn in range(nmodes)]
-                    id_stat = ''.join(s)
-                if mag != 0:
-                    id_noise = '_mag_' + str(mag)
+                    str_stat = ''.join(s)
+                if mag:
+                    str_mag = '_mag_' + str(mag)
 
                 idpsf = psf_prefix + '_r0_' \
                             + str(round(r0[j, k], nround))\
@@ -212,7 +211,7 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
                             + '_ax_' + str(round(ax[j], nround))\
                             + '_pe_' + str(round(pe[j], nround))\
                             + '_be_' + str(round(be[j], nround))\
-                            + id_stat + id_noise  +  '_norm_'  + str(norm)
+                            + str_stat + str_mag  +  '_norm_'  + str(norm)
 
                 # corresponding subfolders
                 idsub = 'r0_' + str(r0_int[idr0[j, k]]) + '_sig2_' + str(A_int[idA[j, k]])
@@ -241,7 +240,8 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
             n_test = int(n_test * n_psf_folder * n_sub_folder)
 
         n_test_folder = int(n_test/n_sub_folder) # test data per sub-folders
-
+        print(n_test)
+        print(n_test_folder)
         for folder in list_folders:
             # list files within the sub-folder
             sub_path = os.path.join(save_path, folder)
@@ -254,6 +254,15 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
                 path_file = os.path.join(sub_path, file_name)
                 #if os.path.isfile(path_file):
                 os.rename(path_file, os.path.join(test_path, file_name))
+
+        # split in multiple subfolders
+        split_test_data(save_path, n_sub_folder=n_split)
+        # put the test data in the main folder
+        path = Path(save_path)
+        path_parent = str(path.parent.absolute())
+        new_name = "/PSFAO21_TESTDATA_" + id_noise + 'NOISE_' + id_static + "STATIC" + id_mag + "/"
+        os.rename(test_path, path_parent + new_name)
+
 
 def split_test_data(path_folder, n_sub_folder=10, mode=511):
     """
