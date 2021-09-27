@@ -215,7 +215,7 @@ class psfR:
         # at Nyquist, angular frequencies range within [-D/lambda, D/lambda]
         # rotating the axes
         ang = self.trs.tel.pupilAngle * np.pi/180
-        unit = self.freq.sampRef/2
+        unit = 2 * self.freq.sampRef/2
         if ang:
             Ur = unit * (self.freq.U_*np.cos(ang) + self.freq.V_*np.sin(ang))
             Vr = unit * (-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang))

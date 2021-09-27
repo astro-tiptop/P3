@@ -203,7 +203,7 @@ def unpack_results(psfr, res):
     WFETOTAL = psfr.wfe["TOTAL WFE"]
     PSFPIX = psfr.wfe["PIXEL TF"]
     PSFSR = psfr.wfe["PSF SR"]/1e2
-    FITPSFSRNOBKG = psfr.wfe["FIT PSF SR"]
+    FITPSFSRNOBKG = psfr.wfe["FIT PSF SR"]/1e2
     FITPSFSRBKG = res.SR_fit
     PSFWHMX = res.FWHMx_fit
     PSFWHMY = res.FWHMy_fit

@@ -907,7 +907,7 @@ class fourierModel:
 
         return PSF, SR
 
-    def __call__(self,x0,nPix=None):
+    def __call__(self, x0, nPix=None):
 
         psf,_ = self.point_spread_function(x0 = x0, nPix = nPix,
                                            verbose = False,
