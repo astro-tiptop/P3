@@ -378,7 +378,7 @@ class telemetryKeck:
             unit_tt = 0.18
         else:
             unit_tt = 1
-            self.tipTilt.tilt2meter = 4*12.68e-6 # should be np.pi*tel.D/4/3600/180
+            self.tipTilt.tilt2meter = 12.68e-6 # should be np.pi*tel.D/4/3600/180
             self.tipTilt.slopes = np.copy(trsData.A['RESIDUALWAVEFRONT'][0][:,self.dm.nCom:self.dm.nCom+2])# %angle in arcsec
             self.tipTilt.com = np.copy(trsData.A['TTCOMMANDS'][0])
             self.tipTilt.intensity  = None

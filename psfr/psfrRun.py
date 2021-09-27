@@ -9,6 +9,7 @@ Created on Fri Sep 24 10:13:40 2021
 import os
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 from psfr.psfR import psfR
 from psfFitting.psfFitting import psfFitting
 from psfFitting.psfFitting import displayResults
@@ -248,7 +249,7 @@ def merge_dataframe(save_folder, tocsv=False):
     return df_merged
 
 def plot_metrics(df, val_x, val_y=None, sort_by=None, n_bins=10, grid_on=True,
-                 line_xy=True, aspect='equal'):
+                 line_xy=False, aspect='equal'):
     """
     Plot values of val_y versus val_x taken from the dataframe df.
     If val_y is None, plot the histograms
@@ -278,11 +279,16 @@ def plot_metrics(df, val_x, val_y=None, sort_by=None, n_bins=10, grid_on=True,
         plt.figure()
         for k in range(n_sort):
             if n_sort == 1:
-                plt.hist(df[val_x], bins=n_bins, alpha=alpha)
+                n_val = df[val_x].count()
+                weights = np.ones(n_val)/n_val
+                plt.hist(df[val_x], bins=n_bins, alpha=alpha, weights=weights)
             else:
                 df_tmp = df[df[sort_by]==sort_unique[k]]
-                plt.hist(df_tmp[val_x], bins=n_bins, alpha=alpha, label=sort_unique[k])
-        plt.set_ylabel("Counts")
+                n_val = df_tmp[val_x].count()
+                weights = np.ones(n_val)/n_val
+                plt.hist(df_tmp[val_x], bins=n_bins, alpha=alpha,
+                         label=sort_unique[k], weights=weights)
+        plt.ylabel("Probability")
 
 
     # versus plot
@@ -303,6 +309,6 @@ def plot_metrics(df, val_x, val_y=None, sort_by=None, n_bins=10, grid_on=True,
         plt.legend()
     if grid_on:
         plt.grid('on')
-    #if aspect:
-    #    ax = plt.gca()
-    #    ax.set_aspect('equal')
+    if aspect and line_xy:
+        ax = plt.gca()
+        ax.set_aspect('equal')
