@@ -18,7 +18,8 @@ import matplotlib.pyplot as plt
 #%%
 def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
                spectralStacking=True, spatialStacking=True, normType=1,
-               bounds=None, ftol=1e-8, xtol=1e-8, gtol=1e-8, max_nfev=1000, verbose=0):
+               bounds=None, ftol=1e-8, xtol=1e-8, gtol=1e-8, max_nfev=1000,
+               verbose=0, alpha_positivity=None):
     """Fit a PSF with a parametric model solving the least-square problem
        epsilon(x) = SUM_pixel { weights * (amp * Model(x) + bck - psf)² }
 
@@ -77,29 +78,41 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
     sqW = np.sqrt(weights)
 
     # NORMALIZING THE IMAGE
-    if image.min() < 0 :
+    if image.min() < 0:
         image -= image.min()
-    im_norm,param = FourierUtils.normalizeImage(image,normType=normType)
+    im_norm, param = FourierUtils.normalizeImage(image, normType=normType)
     nPix = im_norm.shape[1]
 
     # DEFINING THE COST FUNCTIONS
     class CostClass(object):
-        def __init__(self):
+        def __init__(self, alpha_positivity=None):
             self.iter = 0
-        def __call__(self,y):
+            self.alpha_positivity = alpha_positivity
+        def regularization_positivity(self, im_res):
+            R = np.ones_like(im_res)
+            R[im_res>0] = 0
+            return self.alpha_positivity*R
+        def __call__(self, y):
             if (self.iter%3)==0 and (method=='lm' or verbose == 0 or verbose == 1): print("-",end="")
             self.iter += 1
+            # image model
             im_est = imageModel(psfModelInst(mini2input(y),nPix=im_norm.shape[0]),
                                 spatialStacking=spatialStacking,spectralStacking=spectralStacking,
                                 saturation=psfModelInst.ao.cam.saturation/param)
 
-            return (sqW * (im_est - im_norm)).reshape(-1)
-    cost = CostClass()
+            im_res = im_norm - im_est
+            df_term = sqW * im_res
+            if alpha_positivity is not None:
+                df_term *= np.sqrt(1 + self.regularization_positivity(im_res))
+
+            return df_term.reshape(-1)
+
+    cost = CostClass(alpha_positivity=alpha_positivity)
 
     # DEFINING THE BOUNDS
     if fixed is not None:
         if len(fixed)!=len(x0): raise ValueError("When defined, `fixed` must be same size as `x0`")
-        FREE    = [not fixed[i] for i in range(len(fixed))]
+        FREE = [not fixed[i] for i in range(len(fixed))]
         INDFREE = np.where(FREE)[0]
 
     def get_bounds(inst):
@@ -153,14 +166,14 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
     result.xinit  = x0
     result.im_sky = image
     # scale fitted image
-    tmp           = imageModel(psfModelInst(result.x,nPix=nPix),
-                               spatialStacking=spatialStacking,spectralStacking=spectralStacking,
-                               saturation=psfModelInst.ao.cam.saturation/param)
-    result.im_fit = FourierUtils.normalizeImage(tmp,param=param,normType=normType)
+    tmp = imageModel(psfModelInst(result.x,nPix=nPix),
+                     spatialStacking=spatialStacking,spectralStacking=spectralStacking,
+                     saturation=psfModelInst.ao.cam.saturation/param)
+    result.im_fit = FourierUtils.normalizeImage(tmp, param=param,normType=normType)
     result.im_dif = result.im_sky - result.im_fit
     # psf
-    xpsf          = np.copy(result.x)
-    nparam        = len(result.x) - 3*psfModelInst.ao.src.nSrc - 1
+    xpsf = np.copy(result.x)
+    nparam = len(result.x) - 3*psfModelInst.ao.src.nSrc - 1
     if nparam > 10:
         nparam -= psfModelInst.ao.tel.nModes
 
@@ -187,7 +200,7 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
     return result
 
 
-def evaluateFittingQuality(result,psfModelInst):
+def evaluateFittingQuality(result, psfModelInst):
 
     # ESTIMATING IMAGE-BASED METRICS
     def meanErrors(sky,fit):
@@ -222,7 +235,8 @@ def evaluateFittingQuality(result,psfModelInst):
             result.mse[j], result.mae[j] , result.fvu[j] = meanErrors(ims_j,imf_j)
     return result
 
-def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10abs',figsize=(10,10)):
+def displayResults(psfModelInst, res, vmin=None, vmax=None, nBox=None,
+                   scale='log10abs', figsize=(10,10)):
     """
         Displaying PSF and key metrics
     """
@@ -283,8 +297,8 @@ def displayResults(psfModelInst,res,vmin=None,vmax=None,nBox=None,scale='log10ab
     plt.colorbar()
 
     # AZIMUTHAL AVERAGES
-    x,prof_sky = FourierUtils.radial_profile(im_sky,pixelscale=psfModelInst.ao.cam.psInMas)
-    prof_fit   = FourierUtils.radial_profile(im_fit,nargout=1)
+    x,prof_sky = FourierUtils.radial_profile(im_sky, pixelscale=psfModelInst.ao.cam.psInMas)
+    prof_fit   = FourierUtils.radial_profile(im_fit, nargout=1)
     plt.subplot(212)
     plt.plot(x,fun(prof_sky),label=instLabel)
     plt.plot(x,fun(prof_fit),label=psfrLabel)

@@ -138,7 +138,7 @@ class telemetryKeck:
 
         # dm
         self.dm = structtype()
-        self.dm.volt2meter = 0.5e-6#0.4095e-6#0.4095e-6#0.6e-6 # conversion factor from volts to meter OPD
+        self.dm.volt2meter = 0.6e-6#0.4095e-6#0.4095e-6#0.6e-6 # conversion factor from volts to meter OPD
         self.dm.nActuators = [21]   # 1D Number of actuators
         self.dm.nCom  = []     # Number of total actuators within the pupil
         self.dm.pitch  = [0.5625]
