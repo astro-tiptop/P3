@@ -1250,7 +1250,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     elif nargout == 4:
         return FWHMx,FWHMy,aRatio,theta
 
-def getStrehl(psf0, pupil, samp, recentering=False, nR=5, method='otf'):
+def getStrehl(psf0, pupil, samp, recentering=False, nR=5, method='max'):
     if recentering:
         psf = centerPsf(psf0,2)
     else:

@@ -10,6 +10,7 @@ import os
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import aoSystem.FourierUtils as FourierUtils
 from psfr.psfR import psfR
 from psfFitting.psfFitting import psfFitting
 from psfFitting.psfFitting import displayResults
@@ -23,18 +24,18 @@ warnings.simplefilter("ignore")
 #%% PSFR
 def psfr_on_multiple_databases(path_save,
                                year=["20130203", "20130801", "20130914"],
-                               merge_df=True):
+                               merge_df=True, fit=False):
     """
     Run the PSFR over multiple Keck telemetry databases"
     """
     # loop on data bases
     for date in year:
-        psfr_on_database(path_save, year=date)
+        psfr_on_database(path_save, year=date, fit=fit)
 
     if merge_df:
         merge_dataframe(path_save, tocsv=True)
 
-def psfr_on_database(path_save, year="20130801", display=False, tol=1e-5):
+def psfr_on_database(path_save, year="20130801", fit=False, display=False, tol=1e-5):
     """
     Run PSFR over a large data base. Must be copied/pasted to another file
     not within the P3 repo before changing the paths
@@ -78,7 +79,7 @@ def psfr_on_database(path_save, year="20130801", display=False, tol=1e-5):
         file_fits = path_fits + list_fits[id_file_fits.index(id_file)]
         # run psfr
         psfr, res = run_keck_psfr(file_sav, file_fits, path_p3, path_save=path_save,
-                                  display=display, tol=tol, verbose=-1)
+                                  display=display, tol=tol, verbose=-1, fit=fit)
         # grabbing results
         data.append(unpack_results(psfr, res))
 
@@ -88,7 +89,7 @@ def psfr_on_database(path_save, year="20130801", display=False, tol=1e-5):
     df_psfr.to_csv(path_save + df_name + ".csv", index=False)
 
 def run_keck_psfr(path_sav, path_fits, path_p3, path_save="./",
-             display=False, tol=1e-5, verbose=-1):
+             display=False, tol=1e-5, verbose=-1, fit=False):
     """
     Run the P3 PSFR by using the telemetry data in the .sav files and compare
     with the NIRC2 frame given in the path_fits file.
@@ -109,20 +110,43 @@ def run_keck_psfr(path_sav, path_fits, path_p3, path_save="./",
     psfr = psfR(sd.trs)
 
     # ---- get the PSF
-    x0 = [psfr.ao.atm.r0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
-    psf = psfr(x0)
+    r0 = psfr.ao.atm.r0
+    #if psfr.trs.atm.seeing_dimm!=-1:
+    #    r0 = (0.978*206264.8*500e-9)/psfr.trs.atm.seeing_dimm * psfr.trs.tel.airmass**(-3/5)
+    #    r0 *= (psfr.ao.atm.wvl/500e-9)**1.2
+    x0 = [r0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+    psf = np.squeeze(psfr(x0))
     psfr.wfe['PSF SR'] = psfr.SR[0]
 
-    # ---- adjust the flux and the position
-    fixed = (True,)*3 + (False,)*4
-    res = psfFitting(psfr.trs.cam.image, psfr, x0, verbose=verbose, fixed=fixed,
-                     ftol=tol, xtol=tol, gtol=tol)
-    psfr.wfe['FIT PSF SR'] = psfr.SR[0]
+    if fit:
+        # ---- adjust the flux and the position
+        fixed = (True,)*3 + (False, False, False, True)
+        res = psfFitting(psfr.trs.cam.image, psfr, x0, verbose=verbose, fixed=fixed,
+                         ftol=tol, xtol=tol, gtol=tol)
+        psfr.wfe['FIT PSF SR'] = psfr.SR[0]
 
-    if display:
-        displayResults(psfr, res, nBox=100, scale='arcsinh')
+        if display:
+            displayResults(psfr, res, nBox=100, scale='arcsinh')
+    else:
+        class res_obj(object):
+            def __init__(self, psfr, psf):
+                self.im_sky = psfr.trs.cam.image
+                self.SR_sky = FourierUtils.getStrehl(self.im_sky,
+                                                     psfr.ao.tel.pupil,
+                                                     psfr.freq.sampRef)
+                self.SR_fit = psfr.SR[0]/1e2
+                self.FWHMx_sky, self.FWHMy_sky = FourierUtils.getFWHM(self.im_sky,
+                                                                      psfr.ao.cam.psInMas,
+                                                                      nargout=2)
+                self.FWHMx_fit, self.FWHMy_fit = FourierUtils.getFWHM(psf,
+                                                                      psfr.ao.cam.psInMas,
+                                                                      nargout=2)
+                self.mse = 0
+                self.x = x0
+        res = res_obj(psfr, psf)
 
     return psfr, res
+
 
 def define_database_colnames():
     """
@@ -140,7 +164,7 @@ def define_database_colnames():
             "WFE ALIASING [NM]", "WFE HO NOISE [NM]", "WFE TT NOISE [NM]",
             "WFE SERVO-LAG [NM]", "WFE JITTER [NM]", "WFE ANGULAR ANISO [NM]",
             "WFE FOCAL ANISO [NM]", "WFE TT ANISO [NM]", "WFE TOTAL [NM]",
-            "PSF PIXEL [NM]", "PSFR SR", "FIT PSFR SR", "FIT PSFR SR BKG",
+            "PSF PIXEL [NM]", "PSFR SR", "FIT PSFR SR",
             "PSFR FWHMX", "PSFR FWHMY",  "PSFR MSE"]
 
     return name
@@ -203,7 +227,6 @@ def unpack_results(psfr, res):
     WFETOTAL = psfr.wfe["TOTAL WFE"]
     PSFPIX = psfr.wfe["PIXEL TF"]
     PSFSR = psfr.wfe["PSF SR"]/1e2
-    FITPSFSRNOBKG = psfr.wfe["FIT PSF SR"]/1e2
     FITPSFSRBKG = res.SR_fit
     PSFWHMX = res.FWHMx_fit
     PSFWHMY = res.FWHMy_fit
@@ -215,7 +238,7 @@ def unpack_results(psfr, res):
             HONPH, HOWFE, TTGAIN, TTLAT, TTRATE, TTNPH, TTWFE, JX, JY, JXY, TELR0, TELL0,
             TELTAU0, TELV, TELTHETA0, HONOISE, TTNOISE, WFENCPA, WFEFIT,
             WFEALIAS, WFEHONOISE, WFETTNOISE, WFELAG, WFETT, WFEANISO, WFEFOC,
-            WFETTANISO, WFETOTAL, PSFPIX, PSFSR, FITPSFSRNOBKG, FITPSFSRBKG,
+            WFETTANISO, WFETOTAL, PSFPIX, PSFSR, FITPSFSRBKG,
             PSFWHMX, PSFWHMY, MSE]
 
     return data
@@ -244,7 +267,7 @@ def merge_dataframe(save_folder, tocsv=False):
     # save
     if tocsv:
         pref = list_csv[0].split('_')[0]
-        df_merged.to_csv(pref + "psfr_merged.csv")
+        df_merged.to_csv(save_folder + pref + "_psfr_merged.csv")
 
     return df_merged
 

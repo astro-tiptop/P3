@@ -9,6 +9,7 @@ Created on Wed Feb 17 10:33:19 2021
 #%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
 from scipy.optimize import least_squares
+from scipy.signal import medfilt2d
 import aoSystem.FourierUtils as FourierUtils
 from psfFitting.confidenceInterval import confidence_interval
 from psfFitting.imageModel import imageModel
@@ -103,6 +104,7 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
             im_res = im_norm - im_est
             df_term = sqW * im_res
             if alpha_positivity is not None:
+                #im_in = medfilt2d(im_res)
                 df_term *= np.sqrt(1 + self.regularization_positivity(im_res))
 
             return df_term.reshape(-1)

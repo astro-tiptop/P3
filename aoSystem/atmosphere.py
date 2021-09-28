@@ -42,15 +42,14 @@ class atmosphere:
         return self.p_wvl
 
     def set_wvl(self,val):
-        self.r0  = self.r0*(val/self.wvl)**1.2
+        self.r0 = self.r0*(val/self.wvl)**1.2
         self.p_wvl = val
-
-    wvl = property(get_wvl,set_wvl)
+    wvl = property(get_wvl, set_wvl)
 
     @property
     def seeing(self):
         """Seeing value in arcsec at self.wvl"""
-        return 3600*180/np.pi*0.976**self.wvl/self.r0
+        return 3600*180/np.pi*0.976**self.p_wvl/self.r0
 
     @property
     def theta0(self):
@@ -63,7 +62,7 @@ class atmosphere:
                 cst = (24*spc.gamma(6/5)/5)**(-5/6)*self.r0**(5/3)
                 th0 = ( cst/sum(self.weights*self.heights**(5/3) ) )**(3/5)
             else:
-                func= lambda x: self.angularStructureFunction(x) -2
+                func = lambda x: self.angularStructureFunction(x) -2
                 th0 = abs(spo.fsolve(func,0))
                 th0 = th0[0]
 
@@ -73,12 +72,12 @@ class atmosphere:
     @property
     def meanHeight(self):
         """ Mean-weighted height in meter"""
-        return sum( self.weights*self.heights**(5/3) )**(3/5)
+        return sum(self.weights*self.heights**(5/3))**(3/5)
 
     @property
     def meanWind(self):
         """ Mean-weighted wind speed in m/s"""
-        return sum( self.weights*self.wSpeed**(5/3) )**(3/5)
+        return sum(self.weights*self.wSpeed**(5/3))**(3/5)
 
     @property
     def tau0(self):
@@ -89,26 +88,26 @@ class atmosphere:
                  L0=math.inf, verbose=False):
 
         # PARSING INPUTS
-        self.r0      = r0
-        self.p_wvl   = wvl # = source.wvl
-        self.nL      = len(weights)
+        self.r0 = r0
+        self.p_wvl = wvl # = source.wvl
+        self.nL = len(weights)
         self.weights = np.array(weights)
         self.heights = np.array(heights)
-        self.wSpeed  = np.array(wSpeed)
-        self.wDir    = np.array(wDir)
+        self.wSpeed = np.array(wSpeed)
+        self.wDir = np.array(wDir)
         self.verbose = verbose
 
         # MANAGE THE L0 VALUE
         if np.isscalar(L0) | (not np.isscalar(L0) and len(L0)==1):
             self.L0 = L0
-            L0      = L0*np.ones(self.nL)
+            L0 = L0*np.ones(self.nL)
         elif (not np.isscalar(L0) and len(L0)>1):
             L0 = np.array(L0[0:self.nL])
             self.L0 = (np.sum(self.weights * L0**(5/3)))** (3/5)/sum(self.weights)
         if np.isscalar(wSpeed):
             wSpeed  = wSpeed*np.ones(self.nL)
         if np.isscalar(wDir):
-            wDir    = wDir*np.ones(self.nL)
+            wDir = wDir*np.ones(self.nL)
 
         # DEFINE LAYERS
         if self.nL>0:
