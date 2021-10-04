@@ -52,7 +52,7 @@ class telemetryKeck:
         self.instantiatingFields()
 
         #2\ restoring instrument data
-        self.restoringInstrumentData(cam_fov=cam_fov)
+        self.restoringInstrumentData(cam_fov=cam_fov, verbose=verbose)
 
         if self.path_trs != None:
             #3\ restoring calibration data
@@ -138,7 +138,7 @@ class telemetryKeck:
 
         # dm
         self.dm = structtype()
-        self.dm.volt2meter = 0.4095e-6#0.4095e-6#0.6e-6 # conversion factor from volts to meter OPD
+        self.dm.volt2meter = 0.4095e-6#0.4095e-6#0.4095e-6#0.6e-6 # conversion factor from volts to meter OPD
         self.dm.nActuators = [21]   # 1D Number of actuators
         self.dm.nCom  = []     # Number of total actuators within the pupil
         self.dm.pitch  = [0.5625]
@@ -168,7 +168,7 @@ class telemetryKeck:
         self.ttloop = structtype()
         self.ttloop.tf = structtype()
 
-    def restoringInstrumentData(self,cam_fov=None):
+    def restoringInstrumentData(self, cam_fov=None, verbose=False):
         """
         """
         hdr = fits.getheader(self.path_img, ignore_missing_end=True)
@@ -204,7 +204,7 @@ class telemetryKeck:
             self.cam.image = fits.getdata(self.path_img, ignore_missing_end=True) #in DN
 
             if cam_fov and (cam_fov < min(self.cam.image.shape)) :
-                self.cam.fov   = cam_fov
+                self.cam.fov = cam_fov
                 # retrieving the cog and cropping the image
                 im_tmp = medfilt2d(self.cam.image.astype(float),kernel_size=5)
                 y0 , x0 = np.unravel_index(im_tmp.argmax(),im_tmp.shape)
@@ -225,8 +225,11 @@ class telemetryKeck:
             self.cam.ittime,self.cam.coadds,self.cam.sampmode,self.cam.nreads,self.cam.ron,self.cam.gain =\
             keckUtils.getExposureConfig(hdr)
             self.cam.saturation = keckUtils.getSaturationLevel(self.cam.name)
+            self.cam.is_saturated = False
             if self.cam.image.max() > self.cam.saturation*self.cam.coadds:
-                print('WARNING : the image is likely to be saturated')
+                self.cam.is_saturated = True
+                if verbose:
+                    print('WARNING : the image is likely to be saturated')
             # ron in e- and gain in e-/DN
             self.cam.ronDN = np.sqrt(self.cam.coadds)*self.cam.ron/self.cam.gain
             # NCPA
@@ -378,15 +381,16 @@ class telemetryKeck:
             unit_tt = 0.18
         else:
             unit_tt = 1
-            self.tipTilt.tilt2meter = 12.68e-6 # should be np.pi*tel.D/4/3600/180
+            self.tipTilt.tilt2meter = (np.pi/3600/180)*self.tel.D#12.68e-6 # should be np.pi*tel.D/4/3600/180
             self.tipTilt.slopes = np.copy(trsData.A['RESIDUALWAVEFRONT'][0][:,self.dm.nCom:self.dm.nCom+2])# %angle in arcsec
+            #self.tipTilt.slopes[:, 1] = -self.tipTilt.slopes[:, 1]
             self.tipTilt.com = np.copy(trsData.A['TTCOMMANDS'][0])
             self.tipTilt.intensity  = None
 
         self.tipTilt.slopes = unit_tt * self.tipTilt.tilt2meter*self.tipTilt.slopes
-        self.tipTilt.slopes -= np.mean(self.tipTilt.slopes,axis=0)
+        self.tipTilt.slopes -= np.mean(self.tipTilt.slopes, axis=0)
         self.tipTilt.com = self.tipTilt.tilt2meter*self.tipTilt.com
-        self.tipTilt.com -= np.mean(self.tipTilt.com,axis=0)
+        self.tipTilt.com -= np.mean(self.tipTilt.com, axis=0)
         self.tipTilt.nExp = self.tipTilt.slopes.shape[0]
 
         # 3\ Get system matrices and reconstructed wavefront

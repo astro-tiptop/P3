@@ -200,22 +200,24 @@ class psfR:
 
         return dphi_ao
 
-    def jitter_phase_structure_function(self):
+    def jitter_phase_structure_function(self, Ctt=None):
         """
         Computes the phase structure function of the residual jitter.
         """
         # computing the empirical covariance matrix
-        s = self.trs.tipTilt.slopes
-        self.Ctt = np.dot(s.T, s)/self.trs.tipTilt.nExp
+        if Ctt is None:
+            s = self.trs.tipTilt.slopes
+            self.Ctt = np.dot(s.T, s)/self.trs.tipTilt.nExp
+            Ctt = self.Ctt - self.trs.tipTilt.Cn_tt
 
         # computing the coefficients of the Gaussian Kernel in rad^2
-        Guu = (2*np.pi/self.freq.wvlRef)**2 * (self.Ctt - self.trs.tipTilt.Cn_tt)
+        Guu = (2*np.pi/self.freq.wvlRef)**2 * Ctt
 
         # freq.U_ ranges within [-1,1];
         # at Nyquist, angular frequencies range within [-D/lambda, D/lambda]
         # rotating the axes
         ang = self.trs.tel.pupilAngle * np.pi/180
-        unit = 2 * self.freq.sampRef/2
+        unit = self.freq.sampRef/2
         if ang:
             Ur = unit * (self.freq.U_*np.cos(ang) + self.freq.V_*np.sin(ang))
             Vr = unit * (-self.freq.U_*np.sin(ang) + self.freq.V_*np.cos(ang))
@@ -224,8 +226,7 @@ class psfR:
             Vr = unit * self.freq.V_
 
         # computing the Gaussian-Kernel
-        dphi_tt = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 \
-                + Guu[0,1]*Ur*Vr.T + Guu[1,0]*Vr*Ur.T
+        dphi_tt = Guu[0,0]*Ur**2 + Guu[1,1]*Vr**2 + 2*Guu[1,0]*Ur*Vr
 
         return dphi_tt
 
@@ -313,22 +314,19 @@ class psfR:
         msk = self.trs.dm.validActuators.reshape(-1)
         self.wfe['HO NOISE'] = 1e9 * np.sqrt(self.trs.holoop.tf.pn * np.mean(self.trs.wfs.Cn_ao[msk,msk]))
         # noise on tip-tilt modes
-        self.wfe['TT NOISE'] = 1e9 * np.sqrt(self.trs.ttloop.tf.pn * np.diag(self.trs.tipTilt.Cn_tt).sum())
+        dphi_tt_n = self.jitter_phase_structure_function(Ctt=self.trs.ttloop.tf.pn*self.trs.tipTilt.Cn_tt)
+        sr_tt_n = np.sum(otf_dl * np.exp(-0.5*dphi_tt_n))/S
+        self.wfe['TT NOISE'] = sr2fwe(sr_tt_n)
 
         #5. AO BANDWIDTH ERROR
         C = self.Cao - (1+self.trs.holoop.tf.pn)*self.trs.wfs.Cn_ao
         self.wfe['SERVO-LAG'] = 1e9*np.sqrt(C.trace()/self.trs.dm.nCom)
 
         #6. RESIDUAL TIP-TILT
-        C = np.diag(self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt)
-        self.wfe['TIP-TILT-WFE'] = np.sqrt(np.sum(C))*1e9
+        C = self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt
+        self.wfe['TIP-TILT-WFE'] = np.sqrt(C.trace()/2)*1e9
         sr_tt = np.sum(otf_dl * np.exp(-0.5*self.dphi_tt))/S
-        self.wfe['TIP-TILT'] = sr2fwe(sr_tt)
-#        else:
-#            self.wfe['TIP-TILT'] = 0
-#            mat_tt = np.eye(self.trs.dm.nCom) - self.trs.mat.DMTTRem
-#            C = np.dot(mat_tt, np.dot(C, mat_tt.T))
-#            self.wfe['TIP-TILT CONTRIBUTION'] = 1e9*np.sqrt(C.trace()/self.trs.dm.nCom)
+        self.wfe['TIP-TILT'] = np.sqrt(sr2fwe(sr_tt)**2 - self.wfe['TT NOISE']**2)
 
         #7. PIXEL TF
         sr_pixel = np.sum(otf_dl * self.otfPixel)/S
@@ -378,18 +376,15 @@ class psfR:
         self.wfe['REF WAVELENGTH'] = self.fao.freq.wvlRef
         self.wfe['MARECHAL SR'] = 1e2*np.exp(-(self.wfe['TOTAL WFE'] * 2*np.pi*1e-9/self.fao.freq.wvlRef)**2 )
         self.wfe['MARECHAL SR WITH PIXEL'] = 1e2*np.exp(-(self.wfe['TOTAL WFE WITH PIXEL'] * 2*np.pi*1e-9/self.fao.freq.wvlRef)**2 )
-        if hasattr(self, "SR"):
-            self.wfe['PSF SR'] = self.SR[0]
 
         #11. STREHL RATIO FROM THE IMAGE
-        method="max"
-        if self.ao.cam.tag=="OOMAO":
-            method="otf"
         self.wfe[self.ao.cam.tag + " SR"] = 1e2*FourierUtils.getStrehl(self.trs.cam.image,
                                                                        self.ao.tel.pupil,
-                                                                       self.freq.sampRef,
-                                                                       method=method)
-
+                                                                       self.freq.sampRef)
+        self.psf = self([self.ao.atm.r0,1,1])
+        self.wfe['PSFR SR OTF'] = self.SR[0]
+        self.wfe["PSFR SR PEAK"] = 1e2*FourierUtils.getStrehl(self.psf, self.ao.tel.pupil,
+                                                              self.freq.sampRef)
 
 
 

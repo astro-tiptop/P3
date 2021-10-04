@@ -33,7 +33,8 @@ def psfr_on_multiple_databases(path_save,
         psfr_on_database(path_save, year=date, fit=fit)
 
     if merge_df:
-        merge_dataframe(path_save, tocsv=True)
+        df_merged = merge_dataframe(path_save, tocsv=True)
+        return df_merged
 
 def psfr_on_database(path_save, year="20130801", fit=False, display=False, tol=1e-5):
     """
@@ -101,49 +102,38 @@ def run_keck_psfr(path_sav, path_fits, path_p3, path_save="./",
     trs = telemetryKeck(path_sav, path_fits, path_calib, path_save=path_save,
                         nLayer=1)
     # ---- Process the telemetry to get the r0 and the noise
-    sd  = systemDiagnosis(trs)
+    sd = systemDiagnosis(trs)#, Dout=9, Din=2.65, noise=0)
 
     # ---- create the .ini file
     configFile(sd)
 
-    # ---- instantiate the PSF mode
+    # ---- instantiate the PSF model and get the PSF
     psfr = psfR(sd.trs)
-
-    # ---- get the PSF
-    r0 = psfr.ao.atm.r0
-    #if psfr.trs.atm.seeing_dimm!=-1:
-    #    r0 = (0.978*206264.8*500e-9)/psfr.trs.atm.seeing_dimm * psfr.trs.tel.airmass**(-3/5)
-    #    r0 *= (psfr.ao.atm.wvl/500e-9)**1.2
-    x0 = [r0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
-    psf = np.squeeze(psfr(x0))
-    psfr.wfe['PSF SR'] = psfr.SR[0]
 
     if fit:
         # ---- adjust the flux and the position
+        x0 = [psfr.ao.atm.r0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
         fixed = (True,)*3 + (False, False, False, True)
         res = psfFitting(psfr.trs.cam.image, psfr, x0, verbose=verbose, fixed=fixed,
                          ftol=tol, xtol=tol, gtol=tol)
-        psfr.wfe['FIT PSF SR'] = psfr.SR[0]
 
         if display:
             displayResults(psfr, res, nBox=100, scale='arcsinh')
     else:
         class res_obj(object):
-            def __init__(self, psfr, psf):
+            def __init__(self, psfr):
                 self.im_sky = psfr.trs.cam.image
-                self.SR_sky = FourierUtils.getStrehl(self.im_sky,
-                                                     psfr.ao.tel.pupil,
-                                                     psfr.freq.sampRef)
-                self.SR_fit = psfr.SR[0]/1e2
+                self.SR_sky = psfr.wfe[psfr.ao.cam.tag + " SR"]
+                self.SR_fit = psfr.wfe["PSFR SR PEAK"]
                 self.FWHMx_sky, self.FWHMy_sky = FourierUtils.getFWHM(self.im_sky,
                                                                       psfr.ao.cam.psInMas,
                                                                       nargout=2)
-                self.FWHMx_fit, self.FWHMy_fit = FourierUtils.getFWHM(psf,
+                self.FWHMx_fit, self.FWHMy_fit = FourierUtils.getFWHM(np.squeeze(psfr.psf),
                                                                       psfr.ao.cam.psInMas,
                                                                       nargout=2)
                 self.mse = 0
-                self.x = x0
-        res = res_obj(psfr, psf)
+                self.x = [psfr.ao.atm.r0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+        res = res_obj(psfr)
 
     return psfr, res
 
@@ -154,7 +144,7 @@ def define_database_colnames():
     """
     name = ["DATE", "ID", "AOMODE", "AIRMASS", "WVL [µm]", "BANDWIDTH [µm]",
             "PUP ANG [DEG]", "PUP MASK", "PUP RES [PX]", "CAM PS [MAS]", "CAM FOV [PX]",
-            "CAM SR", "CAM FWHMX [MAS]", "CAM FWHMY [MAS]", "CAM FIT BKG",
+            "CAM SR", "CAM FWHMX [MAS]", "CAM FWHMY [MAS]", "CAM FIT BKG", "CAM SATURATION",
             "SEEING DIMM [AS]", "SEEING MASS", "CN2 0KM", "CN2 0.5KM", "CN2 1KM", "CN2 2KM", "CN2 4KM",
             "CN2 8KM", "CN2 16KM", "HO GAIN", "HO LAT [ms]", "HO RATE [Hz]", "HO NPH",
             "HO WFE [NM]", "TT GAIN", "TT LAT [ms]", "TT RATE [Hz]", "TT NPH","TT WFE [NM]",
@@ -164,7 +154,7 @@ def define_database_colnames():
             "WFE ALIASING [NM]", "WFE HO NOISE [NM]", "WFE TT NOISE [NM]",
             "WFE SERVO-LAG [NM]", "WFE JITTER [NM]", "WFE ANGULAR ANISO [NM]",
             "WFE FOCAL ANISO [NM]", "WFE TT ANISO [NM]", "WFE TOTAL [NM]",
-            "PSF PIXEL [NM]", "PSFR SR", "FIT PSFR SR",
+            "PSF PIXEL [NM]", "PSFR SR PEAK", "PSFR SR OTF",
             "PSFR FWHMX", "PSFR FWHMY",  "PSFR MSE"]
 
     return name
@@ -188,10 +178,11 @@ def unpack_results(psfr, res):
     PUPRES = psfr.ao.tel.resolution
     CAMPS = psfr.ao.cam.psInMas
     CAMFOV = psfr.trs.cam.image.shape[0]
-    CAMSR = res.SR_sky
+    CAMSR = res.SR_sky/1e2
     CAMFWHMX = res.FWHMx_sky
     CAMFWHMY = res.FWHMy_sky
     CAMFITBKG = res.x[-1]
+    CAMSAT = psfr.trs.cam.is_saturated
     SEEINGDIMM = float(psfr.trs.atm.seeing_dimm)
     SEEINGMASS = float(psfr.trs.atm.seeing_mass)
     CN20, CN205, CN21, CN22, CN24, CN28, CN216 = psfr.trs.atm.Cn2
@@ -220,25 +211,25 @@ def unpack_results(psfr, res):
     WFEHONOISE = psfr.wfe["HO NOISE"]
     WFETTNOISE = psfr.wfe["TT NOISE"]
     WFELAG = psfr.wfe["SERVO-LAG"]
-    WFETT = psfr.wfe["TIP-TILT-WFE"]
+    WFETT = psfr.wfe["TIP-TILT"]
     WFEANISO = psfr.wfe["ANGULAR ANISOPLANATISM"]
     WFEFOC = psfr.wfe["ANISOKINETISM"]
     WFETTANISO = psfr.wfe["FOCAL ANISOPLANATISM"]
     WFETOTAL = psfr.wfe["TOTAL WFE"]
     PSFPIX = psfr.wfe["PIXEL TF"]
-    PSFSR = psfr.wfe["PSF SR"]/1e2
-    FITPSFSRBKG = res.SR_fit
+    PSFSRPEAK = psfr.wfe["PSFR SR PEAK"]/1e2
+    PSFSROTF = psfr.wfe["PSFR SR OTF"]/1e2
     PSFWHMX = res.FWHMx_fit
     PSFWHMY = res.FWHMy_fit
     MSE = res.mse
     # PACKING THE DATA
     data = [DATE, ID, AOMODE, AIRMASS, WVL, BW, PUPANG, PUPMASK, PUPRES, CAMPS,
-            CAMFOV, CAMSR, CAMFWHMX, CAMFWHMY, CAMFITBKG, SEEINGDIMM, SEEINGMASS,
+            CAMFOV, CAMSR, CAMFWHMX, CAMFWHMY, CAMFITBKG, CAMSAT, SEEINGDIMM, SEEINGMASS,
             CN20, CN205, CN21, CN22, CN24, CN28, CN216, HOGAIN, HOLAT, HORATE,
             HONPH, HOWFE, TTGAIN, TTLAT, TTRATE, TTNPH, TTWFE, JX, JY, JXY, TELR0, TELL0,
             TELTAU0, TELV, TELTHETA0, HONOISE, TTNOISE, WFENCPA, WFEFIT,
             WFEALIAS, WFEHONOISE, WFETTNOISE, WFELAG, WFETT, WFEANISO, WFEFOC,
-            WFETTANISO, WFETOTAL, PSFPIX, PSFSR, FITPSFSRBKG,
+            WFETTANISO, WFETOTAL, PSFPIX, PSFSRPEAK, PSFSROTF,
             PSFWHMX, PSFWHMY, MSE]
 
     return data
@@ -272,7 +263,7 @@ def merge_dataframe(save_folder, tocsv=False):
     return df_merged
 
 def plot_metrics(df, val_x, val_y=None, sort_by=None, n_bins=10, grid_on=True,
-                 line_xy=False, aspect='equal'):
+                 line_xy=False, line_10=False, aspect='equal'):
     """
     Plot values of val_y versus val_x taken from the dataframe df.
     If val_y is None, plot the histograms
@@ -313,7 +304,6 @@ def plot_metrics(df, val_x, val_y=None, sort_by=None, n_bins=10, grid_on=True,
                          label=sort_unique[k], weights=weights)
         plt.ylabel("Probability")
 
-
     # versus plot
     else:
         plt.figure()
@@ -325,7 +315,11 @@ def plot_metrics(df, val_x, val_y=None, sort_by=None, n_bins=10, grid_on=True,
                 plt.scatter(df_tmp[val_x], df_tmp[val_y], label=sort_unique[k])
         plt.ylabel(val_y)
         if line_xy:
-            plt.plot(plt.xlim(), plt.ylim(), 'k--')
+            xx = np.linspace(plt.xlim()[0], plt.xlim()[1], num=50)
+            plt.plot(xx, xx, 'k--', linewidth=1.2)
+            if line_10:
+                plt.plot(xx, xx*1.1, 'k-.', linewidth=1)
+                plt.plot(xx, xx*0.9, 'k-.', linewidth=1)
 
     plt.xlabel(val_x)
     if n_sort>1:

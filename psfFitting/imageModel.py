@@ -10,7 +10,7 @@ import numpy as np
 def imageModel(psf_in, spectralStacking = True, spatialStacking = True, saturation=np.inf):
     """
     Function to model an image of a stellar population fields from the psfModelInst class
-    The model is: 
+    The model is:
            î[x,y,l] = sum_i F_i x F[OTF_i[l]x FFTPHASOR[dx_i,dy_i]] + bkg_0
     where
         - l is wavelength
@@ -19,9 +19,9 @@ def imageModel(psf_in, spectralStacking = True, spatialStacking = True, saturati
         - bkg_0 is a constant background
         - FFTPHASOR is the Fourier phasor to shift the PSF within the image
         - F[x] is the 2D Fourier transform of x.
-        
+
     INPUTS:
-        - psf_in: -  REQUIRED -  3D or 4D numpy array delivered by the P3 models: 
+        - psf_in: -  REQUIRED -  3D or 4D numpy array delivered by the P3 models:
             - fourierModel
             - psfao21
             - psfR
@@ -36,8 +36,10 @@ def imageModel(psf_in, spectralStacking = True, spatialStacking = True, saturati
 
     # MANAGE THE DATA MODEL : 4D ARRAYS, CUBE OR IMAGE
     n_dim = np.ndim(psf_in)
+    if n_dim==2:
+        return psf_in
+
     is_4d = n_dim > 3
-    
     if (spectralStacking == False) and (spatialStacking == False):
         im = np.squeeze(psf_in)
     elif (spectralStacking == True) and (spatialStacking == False) and is_4d:
@@ -50,14 +52,13 @@ def imageModel(psf_in, spectralStacking = True, spatialStacking = True, saturati
         im = np.squeeze(psf_in.sum(axis=2))
     else:
         im = np.squeeze(psf_in.sum(axis=(2,3)))
-        
+
     if saturation < np.inf:
         im[np.where(im>=saturation)] = saturation
-                
+
     return im
 
-                        
-                        
-        
-        
-        
+
+
+
+

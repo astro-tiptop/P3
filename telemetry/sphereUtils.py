@@ -7,17 +7,25 @@ Created on Thu Apr  8 09:37:55 2021
 """
 import os
 import shutil
-import numpy as np
-from astropy.io import fits
-from query_eso_archive import query_simbad
-from astropy.coordinates import SkyCoord
 from astropy.time import Time
+from configparser import ConfigParser
+import tqdm
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from astropy.io import fits
+from astropy.coordinates import SkyCoord
 from astropy import units as u
+# Julien Milli's
+from query_eso_archive import query_simbad
+# Arthur Vigan's
 from sphere.transmission import irdis_nd
+# P3 librairies
 from psfao21.psfao21 import psfao21
 from psfFitting.psfFitting import psfFitting
 import aoSystem.FourierUtils as FourierUtils
-import tqdm
+
 #%% IMAGE PROCESSING
 def remove_corrupted_data(path_data, path_out):
     """
@@ -260,6 +268,123 @@ def define_database_colnames(fit=False, n_modes=0):
         names += ["MSE", "MAE", "FVU"]
 
     return names
+
+#%% DATA ANALYSIS
+def compute_lwe_wavefront_error(df, path_ini, path_root=""):
+    """
+    Computes the LWE wavefront error in nm from dataframe df.
+    """
+    if "FIT MODE0" not in df:
+        raise ValueError("There is no LWE data in the data frame")
+
+    # list the columns
+    mode_col =  [col for col in df.columns if "FIT MODE" in col]
+    df_sub = df[mode_col]
+
+    # grab the modal basis
+    parser = ConfigParser()
+    parser.optionxform = str
+    parser.read(path_ini)
+    path_stat = parser.get('telescope','PathStatModes')
+    mat_mod = fits.getdata(path_root + path_stat[1:-1])
+
+    # get the phase
+    lwe_col = []
+    for n in range(df_sub.shape[0]):
+        tmp = df_sub.loc[n]
+        if tmp.any():
+            opd = np.sum(np.array(tmp)[:, np.newaxis, np.newaxis]*mat_mod, axis=0)
+            lwe_err = np.std(opd[opd!=0])
+        lwe_col.append(lwe_err)
+
+    df["LWE [nm]"] = lwe_col
+    return df
+
+def plot_lwe_histograms(df_in, bins=20, alpha=0.5, thres=200):
+    """
+    Plot histograms of LWE unsigned amplitude.
+    """
+    #remove cases where the fit did not occur
+    df = df_in.copy()
+    mode_col =  [col for col in df.columns if "FIT MODE" in col]
+    df[mode_col][df[mode_col]>300] = np.nan
+    df.dropna(subset=mode_col, inplace=True)
+
+
+    # plots histograms
+    fig, axs = plt.subplots(nrows=1, ncols=3, constrained_layout=True)
+    m = abs(df["FIT MODE0"])[abs(df["FIT MODE0"])<thres]
+    weights = np.ones(m.count())/m.count()
+    axs[0].hist(m, bins=bins, label="East", weights=weights, alpha=alpha)
+    m = abs(df["FIT MODE1"])[abs(df["FIT MODE1"])<thres]
+    weights = np.ones(m.count())/m.count()
+    axs[0].hist(m, bins=bins, label="South", weights=weights, alpha=alpha)
+    m = abs(df["FIT MODE2"])[abs(df["FIT MODE2"])<thres]
+    weights = np.ones(m.count())/m.count()
+    axs[0].hist(m, bins=bins, label="West", weights=weights, alpha=alpha)
+    axs[0].set_xlabel("Differential piston [nm]")
+    axs[0].set_ylabel("Probability")
+    axs[0].legend()
+
+    weights = np.ones(df[mode_col[0]].count())/df[mode_col[0]].count()
+    axs[1].hist(df["FIT MODE3"], bins=bins, label="North", weights=weights, alpha=alpha)
+    axs[1].hist(df["FIT MODE4"], bins=bins, label="East", weights=weights, alpha=alpha)
+    axs[1].hist(df["FIT MODE5"], bins=bins, label="South", weights=weights, alpha=alpha)
+    axs[1].hist(df["FIT MODE6"], bins=bins, label="West", weights=weights, alpha=alpha)
+    axs[1].set_xlabel("Tip [nm]")
+    axs[1].legend()
+
+    axs[2].hist(df["FIT MODE7"], bins=bins, label="North", weights=weights, alpha=alpha)
+    axs[2].hist(df["FIT MODE8"], bins=bins, label="East", weights=weights, alpha=alpha)
+    axs[2].hist(df["FIT MODE9"], bins=bins, label="South", weights=weights, alpha=alpha)
+    axs[2].hist(df["FIT MODE10"], bins=bins, label="West", weights=weights, alpha=alpha)
+    axs[2].set_xlabel("Tilt [nm]")
+    axs[2].legend()
+
+def plot_wfe_versus_ngs_mag(df_in, band="G", step_mag=0.5):
+    """
+    Plot the SPHERE wavefront error/H-band SR versus the NGS magnitude.
+    """
+    pd.options.mode.chained_assignment = None
+
+    df = df_in.copy()
+    # Dropping missing mG values or meaningless SRMEAN values
+    df['SRMEAN'][df['SRMEAN']>=0.99]=np.nan
+    df['SRMEAN'][df['SRMEAN']==0]=np.nan
+    df[band+' MAG'][df[band+' MAG']==-1]=np.nan
+    df.dropna(subset=["SRMEAN", band+" MAG"], inplace=True)
+
+    # Computing the WFE
+    df["WFE"] = np.sqrt(-np.log(df["SRMEAN"]))*1.65e3/2/np.pi
+    # grouping
+    cat = np.arange(2, 15, step_mag)
+    bins = pd.cut(df[band+' MAG'], cat)
+    agg_df_SR = df.groupby(bins)['SRMEAN'].agg(['count', np.nanmedian, np.nanstd])
+    agg_df_WFE = df.groupby(bins)['WFE'].agg(['count', np.nanmedian, np.nanstd])
+
+    #plot H-band SR v G mag
+    plt.figure()
+    plt.errorbar(cat[:-1] +np.diff(cat)/2,
+                 agg_df_SR['nanmedian'],
+                 xerr=step_mag/2,
+                 yerr=agg_df_SR['nanstd'],
+                 fmt='o', capthick=2)
+    plt.ylim([0,1])
+    plt.grid()
+    plt.xlabel(band+' magnitude')
+    plt.ylabel('Measured Strehl at 1.65µm')
+
+    #plot WFE v G mag
+    plt.figure()
+    plt.errorbar(cat[:-1] +np.diff(cat)/2,
+                 agg_df_WFE['nanmedian'],
+                 xerr=step_mag/2,
+                 yerr=agg_df_WFE['nanstd'],
+                 fmt='o', capthick=2)
+    plt.grid()
+    plt.xlabel(band+' magnitude')
+    plt.ylabel('Measured wavefront error [nm]')
+
 #%% READING THE HEADER
 
 def get_wavelength(path_data):

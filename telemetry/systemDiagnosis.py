@@ -29,7 +29,7 @@ arc2rad = 1/rad2arc
 class systemDiagnosis:
 
     def __init__(self, trs, noiseMethod='autocorrelation', nshift=1, nfit=2,
-                 noise=0, quantile=0.95, nWin=10, nZer=None, j0=4, Dout=None, Din=None):
+                 noise=1, quantile=0.95, nWin=10, nZer=None, j0=4, Dout=None, Din=None):
 
         self.trs = trs
 
@@ -158,20 +158,21 @@ class systemDiagnosis:
 
         return nph, ron, nph_tt, ron_tt
 
-    def get_noise_variance(self,noiseMethod='autocorrelation',nshift=1,nfit=2):
+    def get_noise_variance(self, noiseMethod='autocorrelation', nshift=1, nfit=2):
         """
             ESTIMATE THE WFS NOISE VARIANCE
         """
 
 
-        def slopes_to_noise(u,noiseMethod='autocorrelation',nshift=1,nfit=2,rtf=None):
+        def slopes_to_noise(u, noiseMethod='autocorrelation', nshift=1,
+                            nfit=2, rtf=None):
 
             nF,nU      = u.shape
             u         -= np.mean(u,axis=0)
             Cnn        = np.zeros((nU,nU))
             validInput = np.argwhere(u.std(axis=0)!=0)
 
-            if noiseMethod == 'rtf':
+            if noiseMethod=='rtf':
 
                 fftS = fft.fft(u,axis=0)
                 fftS = fftS[0:nF//2,:]/rtf
@@ -189,7 +190,7 @@ class systemDiagnosis:
 
                 Cnn = (np.transpose(Cnn) + Cnn - np.diag(np.diag(Cnn)))//nF
 
-            if noiseMethod == 'interpolation':
+            if noiseMethod=='interpolation':
                 # Polynomial fitting procedure
                 delay   = np.linspace(0,1,nfit+1)
                 for i in np.arange(0,nU,1):
@@ -199,14 +200,14 @@ class systemDiagnosis:
                     yfit   = np.polyval(pfit,delay)
                     Cnn[i,i] = mx - yfit[0]
 
-            if noiseMethod == 'autocorrelation':
+            if noiseMethod=='autocorrelation':
                 du_n  = u - np.roll(u,-nshift,axis=0)
                 du_p  = u - np.roll(u,nshift,axis=0)
                 Cnn   = 0.5*(np.matmul(u.T,du_n + du_p))/nF
 
             return Cnn
 
-        if noiseMethod == 'nonoise':
+        if noiseMethod=='nonoise':
             nU    = self.trs.dm.com.shape[1]
             Cn_ao = np.zeros((nU,nU))
             nT    = self.trs.tipTilt.slopes.shape[1]
@@ -222,10 +223,8 @@ class systemDiagnosis:
         return Cn_ao, Cn_tt
 
 #%%
-    def select_actuators(self,Din=None,Dout=None):
+    def select_actuators(self, Din=None, Dout=None):
         iF   = self.trs.mat.dmIF.copy()
-        #import pdb
-        #pdb.set_trace()
         nAct = iF.shape[-1]
 
         if (not Din) and (not Dout):
@@ -236,12 +235,12 @@ class systemDiagnosis:
                 return iF[:,actuInPupil], actuInPupil
         else:
             # resolution
-            nPix      = int(np.sqrt(iF.shape[0]))
-            D_tel     = self.trs.dm.pitch[0] * (self.trs.dm.nActuators[0]-1)
+            nPix = int(np.sqrt(iF.shape[0]))
+            D_tel = self.trs.dm.pitch[0] * (self.trs.dm.nActuators[0]-1)
             pix_scale = D_tel/nPix
 
             # find actuators positions
-            iF      = iF.reshape((nPix,nPix,nAct))
+            iF  = iF.reshape((nPix,nPix,nAct))
             act_pos = [np.unravel_index(iF[:,:,k].argmax(),(nPix,nPix)) for k in range(nAct)] # positions in pixels
             rad_pos = np.array([pix_scale*np.hypot(act_pos[k][0]-nPix/2,act_pos[k][1]-nPix/2) for k in range(nAct)])
 
@@ -256,7 +255,8 @@ class systemDiagnosis:
             #pup   = np.logical_and(R <= Dout/2,R>=Din/2) * 1
             return iF[:,:,actuInPupil].reshape((nPix**2,nG)) , actuInPupil
 
-    def reconstruct_zernike(self,nZer=None,wfsMask=None,j0=4,Dout=None,Din=None):
+    def reconstruct_zernike(self, nZer=None, wfsMask=None, j0=4,
+                            Dout=None, Din=None):
         """
         Reconstrut the covariance matrix of the Zernike coefficients from the reconstructed open-loop wavefront
         """
@@ -272,17 +272,17 @@ class systemDiagnosis:
         # select actuators
 
         nPix = self.trs.tel.resolution
-        iF , self.actuInPupil = self.select_actuators(Dout=Dout,Din=Din)
+        iF, self.actuInPupil = self.select_actuators(Dout=Dout, Din=Din)
         # Noll's indexes
-        if nZer == None:
+        if nZer is None:
             nZer = int(0.75*self.trs.dm.validActuators.sum())
-        self.trs.wfs.jIndex = list(range(j0,nZer+j0))
+        self.trs.wfs.jIndex = list(range(j0, nZer+j0))
         # Central obstruction
         cobs = 0
         if Dout and Din:
             cobs = Din/Dout
-        self.z = zernike(self.trs.wfs.jIndex,self.trs.tel.resolution,cobs=cobs)
-        self.zM   = self.z.modes.T.reshape((nPix**2,nZer))
+        self.z = zernike(self.trs.wfs.jIndex, self.trs.tel.resolution, cobs=cobs)
+        self.zM = self.z.modes.T.reshape((nPix**2, nZer))
 
         # ---- DERIVING THE APPROXIMATED ZERNIKE
 #        matII  = np.dot(iF.T,iF)
@@ -291,23 +291,23 @@ class systemDiagnosis:
 #        self.zM_app = np.dot(iF,vec_a.T)
         self.zM_app = self.zM
         # ----  COMPUTING THE ZERNIKE RECONSTrUCTOR
-        self.mZZ  = np.dot(self.zM_app.T,self.zM_app)
-        self.mZI  = np.dot(self.zM_app.T,iF)
-        self.trs.mat.u2z = np.dot(np.linalg.pinv(self.mZZ,rcond=1/1e2),self.mZI)
+        self.mZZ = np.dot(self.zM_app.T, self.zM_app)
+        self.mZI = np.dot(self.zM_app.T, iF)
+        self.trs.mat.u2z = np.dot(np.linalg.pinv(self.mZZ, rcond=1/30), self.mZI)
 
         # ----  RECONSTRUCTING THE COEFFICIENTS
         # open-loop reconstruction
-        dt    = self.trs.holoop.lat * self.trs.holoop.freq
+        dt = self.trs.holoop.lat * self.trs.holoop.freq
         dt_up = int(np.ceil(dt))
         dt_lo = int(np.floor(dt))
         self.trs.dm.com_delta = (1-dt_up+dt)*np.roll(self.trs.rec.res,(-dt_up,0)) + (1-dt+dt_lo)*np.roll(self.trs.rec.res,(-dt_lo,0))
-        self.trs.dm.u_ol      = self.trs.dm.com + self.trs.dm.com_delta
-        self.trs.dm.u_ol     -= np.mean(self.trs.dm.u_ol,axis=1)[:,np.newaxis]
+        self.trs.dm.u_ol = self.trs.dm.com + self.trs.dm.com_delta
+        self.trs.dm.u_ol -= np.mean(self.trs.dm.u_ol,axis=1)[:,np.newaxis]
 
         # reconstructing the amplitude of Zernike coefficients
-        self.trs.wfs.coeffs = np.dot(self.trs.mat.u2z,self.trs.dm.u_ol[:,self.actuInPupil].T)
-        self.trs.wfs.coeffs -= np.mean(self.trs.wfs.coeffs,axis=1)[:,np.newaxis]
-        Cz_ho  = np.dot(self.trs.wfs.coeffs,self.trs.wfs.coeffs.T)/self.trs.wfs.nExp
+        self.trs.wfs.coeffs = np.dot(self.trs.mat.u2z, self.trs.dm.u_ol[:,self.actuInPupil].T)
+        self.trs.wfs.coeffs -= np.mean(self.trs.wfs.coeffs, axis=1)[:,np.newaxis]
+        Cz_ho = np.dot(self.trs.wfs.coeffs,self.trs.wfs.coeffs.T)/self.trs.wfs.nExp
 
         #tip-tilt case
         if self.trs.aoMode == 'LGS':
@@ -317,8 +317,8 @@ class systemDiagnosis:
 
         return Cz_ho, Cz_tt
 
-    def get_atmosphere_statistics(self,ftol=1e-5,xtol=1e-5,gtol=1e-5,max_nfev=100,\
-                                noise=0,quantile=0.95,nWin=10,verbose=-1,Dout=None):
+    def get_atmosphere_statistics(self, tol=1e-5, max_nfev=100, noise=0,
+                                  quantile=0.95, nWin=10, verbose=-1, Dout=None):
 
         # ---- DEFINING THE COST FUNCTIONS
         z = self.z
@@ -338,22 +338,23 @@ class systemDiagnosis:
         cost = CostClass(self)
 
         # ---- GETTING THE INPUT : VARIANCE OF ZERNIKE MODE
-        self.trs.wfs.var_meas  = np.diag(self.trs.wfs.Cz_ao)
+        self.trs.wfs.var_meas = np.diag(self.trs.wfs.Cz_ao)
 
         Cnn = self.trs.wfs.Cn_ao[np.ix_(self.actuInPupil,self.actuInPupil)]
         self.trs.wfs.var_noise_zer = np.diag(np.dot(np.dot(self.trs.mat.u2z,Cnn),self.trs.mat.u2z.T))
 
-        var_emp = (2*np.pi/self.trs.atm.wvl)**2 *(self.trs.wfs.var_meas - noise*self.trs.wfs.var_noise_zer)
+        var_emp = (2*np.pi/self.trs.atm.wvl)**2 * (self.trs.wfs.var_meas - noise*self.trs.wfs.var_noise_zer)
         var_emp = self.average_radial_order(var_emp)
 
         # ---- DATA-FITTING WITH A LEVENBERG-MARQUARDT ALGORITHM
         # minimization
-        x0  = np.array([0.2,25])
-        self.res_r0 = least_squares(cost,x0,method='trf',ftol=ftol, xtol=xtol, gtol=gtol,\
-                            max_nfev=max_nfev,verbose=max(verbose,0),bounds=([0.01,1],[1,100]))
+        x0 = np.array([0.2, 25])
+        self.res_r0 = least_squares(cost, x0, method='trf', ftol=tol, xtol=tol,
+                                    gtol=tol, max_nfev=max_nfev, verbose=max(verbose,0),
+                                    bounds=([0.01,1],[1,100]))
 
         # fit uncertainties
-        self.res_r0.xerr   = confidence_interval(self.res_r0.fun,self.res_r0.jac)
+        self.res_r0.xerr  = confidence_interval(self.res_r0.fun,self.res_r0.jac)
         self.trs.wfs.coeffs_mod = z.CoefficientsVariance(D/self.res_r0.x)
         # unpacking results
         r0 = self.res_r0.x[0] # r0 los at the atm wavelength
@@ -366,15 +367,16 @@ class systemDiagnosis:
         tau0 = 0.314 * r0/v0
 
         # ---- COMPUTING UNCERTAINTIES
-        dr0   = self.res_r0.xerr[0]
-        dL0   = self.res_r0.xerr[1]
+        dr0 = self.res_r0.xerr[0]
+        dL0 = self.res_r0.xerr[1]
         dtau0 = 0.314*np.hypot(dr0/v0,r0*dv0/v0**2)
 
         return r0, L0, tau0, v0 , dr0, dL0, dtau0, dv0
 
-    def get_wind_speed(self,thres = 1/np.exp(1),coeff=1.15,noise=0,nWin=10,quantile=0.95):
+    def get_wind_speed(self, thres=1/np.exp(1), coeff=1.15, noise=0,
+                       nWin=10, quantile=0.95):
 
-        def get_quantiles_student(quantile=0.95,nWin=10):
+        def get_quantiles_student(quantile=0.95, nWin=10):
             # quantiles
             q   = np.array([0.75,0.8,0.85,0.9,0.95,0.975,0.99,0.995,0.997,0.998] )
             idq = q.searchsorted(quantile)
@@ -402,11 +404,11 @@ class systemDiagnosis:
             return area[n-1,idq]
 
         # ---- DERIVING THE AUTOCORRELATION OF ZERNIKE MODES
-        z    = self.trs.wfs.coeffs
+        z = self.trs.wfs.coeffs
         z_pad= np.pad(z,((0,0),(0,z.shape[1])))
         fftZ = fft.fft(z_pad,axis=1)
-        cov  = fft.ifft(abs(fftZ)**2,axis=1)/z.shape[1]
-        cov  = np.real(cov[:,:cov.shape[1]//2])
+        cov = fft.ifft(abs(fftZ)**2,axis=1)/z.shape[1]
+        cov = np.real(cov[:,:cov.shape[1]//2])
 
         # ---- DENOISING
         cov -=  noise*self.trs.wfs.var_noise_zer[:,np.newaxis]
@@ -426,12 +428,12 @@ class systemDiagnosis:
             # get the upper bound
             indlim = np.argwhere(cov[i] < thres)[0][0]
             # defining the window for the delay and get the corresponding autocorrelation function
-            x   = np.linspace(indlim-nWin//2,indlim+nWin//2,num=nWin).astype(int)
-            y   = cov[i,x]
+            x = np.linspace(indlim-nWin//2,indlim+nWin//2,num=nWin).astype(int)
+            y = cov[i,x]
             # computing moments over the window
-            Sx  = x.sum()
+            Sx = x.sum()
             Sxx = np.sum(x**2)
-            Sy  = y.sum()
+            Sy = y.sum()
             Syy = np.sum(y**2)
             Sxy = np.sum(x*y)
             # the slope over the window
@@ -453,16 +455,16 @@ class systemDiagnosis:
         dtaun= np.zeros(nu)
         for i in range(nu):
             taun[i] = np.mean(tau[nrad == n_unique[i]])
-            dtaun[i] =  np.mean(dtau[nrad == n_unique[i]])
+            dtaun[i] = np.mean(dtau[nrad == n_unique[i]])
         # ---- MEASURING WINDSPEED (CONAN95 + FUSCO+04)
         #Note : there's a mistake in Fusco+04 : v = D*sum1/(coeff*pi*sum2)
         sum1 =  ((n_unique + 1)/taun).sum()
         sum2 = ((n_unique + 1)**2).sum()
-        v0   = self.trs.tel.D * sum1 / (coeff*np.pi*0.3*sum2)
+        v0 = self.trs.tel.D * sum1 / (coeff*np.pi*0.3*sum2)
 
         # ---- COMPUTING UNCERTAINTIES
         dsum1 = (dtaun*(n_unique + 1)/taun**2).sum()
-        dv0   = self.trs.tel.D * dsum1 / (coeff*np.pi*0.3*sum2)
+        dv0  = self.trs.tel.D * dsum1 / (coeff*np.pi*0.3*sum2)
 
         return v0, dv0
 

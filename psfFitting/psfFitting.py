@@ -164,7 +164,7 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
                                verbose=max(verbose, 0))
 
     # update parameters
-    result.x      = mini2input(result.x)
+    result.x = mini2input(result.x)
     result.xinit  = x0
     result.im_sky = image
     # scale fitted image
@@ -182,10 +182,10 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
     idF = nparam+1
     xpsf[idF]  = 1.0 # flux=1
     xpsf[idF+1:idF+3*psfModelInst.ao.src.nSrc+1]   = 0.0 # dx,dy,bkcg=0
-    result.psf    = np.squeeze(psfModelInst(xpsf,nPix=nPix)[:,:,0])
-    if np.ndim(result.psf) > 2:
-        result.psf = result.psf.sum(axis=2)
-    result        = evaluateFittingQuality(result,psfModelInst)
+    result.psf = np.squeeze(psfModelInst(xpsf,nPix=nPix))
+    #if np.ndim(result.psf) > 2:
+    #    result.psf = result.psf.sum(axis=2)
+    result = evaluateFittingQuality(result,psfModelInst)
 
     # static map
     nModes = psfModelInst.ao.tel.nModes
