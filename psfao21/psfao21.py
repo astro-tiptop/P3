@@ -104,8 +104,8 @@ class psfao21:
         bounds_down += [0, 0, 1e-3, 1e-2, -np.pi, 1.01]
         bounds_up += [np.inf, np.inf, np.inf, 1e2, np.pi, 5]
         # Jitter
-        bounds_down += [0, 0, -1]
-        bounds_up += [np.inf, np.inf, 1]
+        bounds_down += [0, 0, -np.inf]
+        bounds_up += [np.inf, np.inf, np.inf]
         # Photometry
         bounds_down += list(np.zeros(self.ao.src.nSrc * self.nwvl))
         bounds_up += list(np.inf*np.ones(self.ao.src.nSrc * self.nwvl))
@@ -121,12 +121,14 @@ class psfao21:
 
         return (bounds_down, bounds_up)
 
-    def update_bounds(self, xfinal, xerr, sig=5):
+    def update_bounds(self, xfinal, xerr, fixed=None, sig=5):
         '''
             Defining bounds on the PSFAO21 parameters based on the first step
             of the split fitting.
         '''
-
+        xerr = np.copy(xerr)
+        if fixed is not None:
+            xerr[np.where(fixed)[0]] = np.inf
         # lower bounds
         bounds_low_psd = list(xfinal[0:7] - sig/3*xerr[0:7])
         bounds_low = bounds_low_psd\

@@ -309,3 +309,4 @@ def displayResults(psfModelInst, res, vmin=None, vmax=None, nBox=None,
     plt.legend()
     plt.ylabel('Azimuthal profile ('+ scale +'-scale)')
     plt.xlabel('Distance from on-axis [mas]')
+    plt.show()

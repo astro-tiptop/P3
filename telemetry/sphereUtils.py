@@ -203,14 +203,18 @@ def fitting_image(im, psfao, r0=None, SR=None, fit_stat=True, weights=None, norm
     res = psfFitting(im, psfao, x0, fixed=fixed, weights=weights, normType=normType,
                      verbose=verbose, ftol=tol, gtol=tol, xtol=tol, max_nfev=max_nfev)
 
-    if res.x[6] > 4:
-        return None
     # STEP 2: JOINT FIT OF THE ATMOSPHERIC AND INSTRUMENTAL PARAMETERS
     if fit_stat:
         # defining the new initial guess
-        x0 = list(res.x[:11]) + [0,]*3 + [0,]*psfao.ao.tel.nModes
+        x0_2 = list(res.x[:11]) + [0,]*3 + [0,]*psfao.ao.tel.nModes
+        if res.x[6] > 2.5: # managing beta parameter
+            x0_2[6] = x0[6]
+            res.xerr[6] = 0.2
+
         # narrowing the bounds of the atmospheric parameters
         psfao.bounds = psfao.update_bounds(res.x, res.xerr, sig=5)
+        print(x0_2)
+        print(psfao.bounds)
         # disable the fit of astrometry (conflict with  with tip-tilt modes)
         fixed = define_fixed_parameters(im.shape[0], psfao.ao.tel.D, psfao.wvl[0],
                                         psfao.ao.dms.nActu1D, psfao.ao.cam.psInMas,
@@ -221,11 +225,10 @@ def fitting_image(im, psfao, r0=None, SR=None, fit_stat=True, weights=None, norm
         dx_fit = res.x[11]*psfao.ao.cam.psInMas
         dy_fit = res.x[12]*psfao.ao.cam.psInMas
         # fit them all
-        res = psfFitting(im, psfao, x0, fixed=fixed, weights=weights, normType=normType,
+        res = psfFitting(im, psfao, x0_2, fixed=fixed, weights=weights, normType=normType,
                          verbose=verbose, ftol=tol, gtol=tol, xtol=tol, max_nfev=max_nfev)
         res.x[11] = dx_fit
         res.x[12] = dy_fit
-
 
     # getting the parameters
     SR = [res.SR_sky, res.SR_fit]
@@ -248,8 +251,8 @@ def define_database_colnames(fit=False, n_modes=0):
     """
     Define the name for the columns of the Dataframe.
     """
-    names=['YYMMDDHHMMSS', 'AIRMASS', 'MEAN WAVELENGTH [µm]', 'BANDWIDTH [µm]',
-           'V MAG', 'R MAG', 'G MAG', 'J MAG', 'H MAG', 'K MAG',
+    names=['TARGET', 'OBS ID', 'DATE', 'EXP TIME', "RA", "DEC", 'AIRMASS', 'MEAN WAVELENGTH [µm]',
+           'BANDWIDTH [µm]', 'V MAG', 'R MAG', 'G MAG', 'J MAG', 'H MAG', 'K MAG', "NPH [#photons/aperture]",
            'FWHMLINOBS [as]', 'tau0 [s]', 'wSpeed [m/s]', 'wDir [deg]', 'RHUM [%]','PRESSURE',
            'SRMIN', 'SRMAX', 'SRMEAN', 'FWHM [mas]', 'MIN SEEING SPARTA [as]',
            'MAX SEEING SPARTA [as]', 'MEAN SEEING SPARTA [as]', 'MIN WSPEED SPARTA [m/s]',
@@ -386,7 +389,14 @@ def plot_wfe_versus_ngs_mag(df_in, band="G", step_mag=0.5):
     plt.ylabel('Measured wavefront error [nm]')
 
 #%% READING THE HEADER
+def get_obs_id(file_name, hdr):
+    """
+    Retrieve the name of the target
+    """
+    obj_name = hdr["ESO OBS TARG NAME"]
+    obs_id = file_name.split("_")[-1]
 
+    return obj_name, obs_id
 def get_wavelength(path_data):
     """
         Read the file IRD_SCIENCE_LAMBDA_INFO to extract the filter information
@@ -397,7 +407,7 @@ def get_wavelength(path_data):
 
     return wvl, bw
 
-def read_sparta_data(path_data, which='last'):
+def read_sparta_data(path_data, date_obs=None, path_dtts=None, which='last'):
     """
         Read the file SPH_SPARTA_PSFDATA-psf_sparta_data to get the atmospheric parameters.
         if the files exists, this is a [3, npsf+1,4] array
@@ -407,13 +417,15 @@ def read_sparta_data(path_data, which='last'):
         reminder:  The SPARTA Strehl ratio is provided at 1.6 micron and the turbulence parameters (r0, seeing) at 500nm.
     """
 
+    #"/ird_convert_recenter_dc5-SPH_SPARTA_SAMPLEDDATA-sampled_sparta_data.fits" contains time series
+    # dim 0 : timestamp - dim 1: r0 500nm los - dim 2 :windspeed - dim 3 : SR - dim4 : seeing
+    #dim5: ?, dim6: ? related to the WFS cog ?
     path_sparta = path_data + '/ird_convert_recenter_dc5-SPH_SPARTA_PSFDATA-psf_sparta_data.fits'
     if os.path.isfile(path_sparta):
         sparta = fits.getdata(path_sparta)
         # number of acquisitions during the observation
-        nPSF          = sparta.shape[1]-1
+        nPSF = sparta.shape[1]-1
         # note : nPSF must == nFiles/2 with raw images or im.shape[0]//2 with processed images
-
         r0 = np.array(sparta[0, :, :])
         vspeed = np.array(sparta[1, :, :])
         SR = np.array(sparta[2, :, :])
@@ -425,7 +437,31 @@ def read_sparta_data(path_data, which='last'):
             SR = SR[nPSF, :]
             seeing = seeing[nPSF, :]
 
-        return r0, vspeed, SR, seeing
+    # grab the number of photons
+    def find_closest(df, date, Texp):
+        df["date"] = pd.to_datetime(df["date"])
+        id_closest = np.argmin(abs(df["date"] - date))
+        date_min = df["date"][id_closest] - pd.DateOffset(seconds=Texp/2)
+        date_max = df["date"][id_closest] + pd.DateOffset(seconds=Texp/2)
+        id_min = np.argmin(abs(df["date"] - date_min))
+        id_max = np.argmin(abs(df["date"] - date_max))
+        return id_min, id_max
+
+    n_ph = -1
+    if path_dtts is not None and date_obs is not None:
+        if os.path.isdir(path_dtts + date_obs):
+            # grab the exposure time and the exact date
+            hdr = fits.getheader(path_sparta)
+            Texp  = hdr['ESO DET SEQ1 DIT'] * hdr['ESO DET NDIT']
+            date = pd.to_datetime(hdr["DATE-OBS"])
+            # Get the number of photons
+            file_name = "sparta_visible_WFS_" + date_obs + ".csv"
+            df = pd.read_csv(path_dtts + date_obs + "/" + file_name)
+            df_flux = df['flux_VisLoop[#photons/aperture]']
+            id_min, id_max = find_closest(df, date, Texp)
+            n_ph = df_flux[id_min:id_max].median()
+
+    return r0, vspeed, SR, seeing, n_ph
 
 def get_star_coordinates(hdr):
     """
@@ -465,7 +501,7 @@ def get_star_magnitudes(hdr):
     if 'simbad_FLUX_K' in DICT_SIMBAD:
         KMAG = DICT_SIMBAD['simbad_FLUX_K']
 
-    return VMAG, RMAG, GMAG, JMAG, HMAG, KMAG
+    return VMAG, RMAG, GMAG, JMAG, HMAG, KMAG, RA, DEC
 
 def get_detector_config(hdr):
     """
@@ -474,7 +510,7 @@ def get_detector_config(hdr):
     if 'PIXSCAL' in hdr:
         psInMas = float(hdr['PIXSCAL'])
     else:
-        psInMas = -1
+        psInMas = 12.25
     gain = float(hdr['ESO DET CHIP1 GAIN'])
     ron  = float(hdr['ESO DET CHIP1 RON'])
     if ron==0:
@@ -504,8 +540,10 @@ def get_date(hdr):
     Get the date from the header
     """
     DATE_OBS = hdr['DATE-OBS']
-    return DATE_OBS[0:4] + DATE_OBS[5:7] + DATE_OBS[8:10]\
-          +DATE_OBS[11:13] + DATE_OBS[14:16] + DATE_OBS[17:19]
+    date = DATE_OBS[:10]
+    exptime = DATE_OBS[11:]
+
+    return date, exptime
 
 def get_telescope_pointing(hdr):
     """
@@ -538,25 +576,36 @@ def get_temperature(hdr):
         Get values from temperature sensors.
     """
 
-    # temperature sensors
-    TEMP = np.zeros(60)
-    TEMP[0] = float(hdr['ESO TEL AMBI TEMP'])
-    TEMP[1] = float(hdr['ESO TEL TH M1 TEMP'])
-    for t in range(1,6):
-        TEMP[t+2]   = float(hdr['ESO INS1 TEMP10'+str(t)+' VAL'])
-    INS = 0
-    for iii in range(4):
-        if 'ESO INS'+str(iii+1)+' TEMP401 ID' in hdr:
-            INS = int(iii+1)
-    if INS>0:
-        for t in range(3,53):
-            if t<12 or t>51:
-                dd = -273 # from Kelvin to degrees Celsius
-            else:
-                dd = 0
-            TEMP[t+7]   = float(hdr['ESO INS'+str(INS)+' TEMP4'+str(t+3).zfill(2)+' VAL']) + dd
+    temp_col = [col for col in hdr.keys() if "TEMP" in col]
+    temp_val = [hdr[tt] for tt in temp_col]
+    idx = [type(tmp) == float for tmp in temp_val]
+    NAME = [temp_col[n] for n in range(len(idx)) if idx[n]==True]
+    TEMP = [temp_val[n] for n in range(len(idx)) if idx[n]==True]
 
-    return TEMP
+#    # temperature sensors
+#    TEMP = np.zeros(60)
+#    NAME = [None,]*60
+#    TEMP[0] = float(hdr['ESO TEL AMBI TEMP']) # from the ASM
+#    NAME[0] = "AIR 30m"
+#    TEMP[1] = float(hdr['ESO TEL TH M1 TEMP'])
+#    NAME[1] = "M1"
+#    for t in range(1,6):
+#        TEMP[t+1]   = float(hdr['ESO INS1 TEMP10'+str(t)+' VAL'])
+#        NAME[t+1] = "INS1 TEMP10"+str(t)
+#    INS = 0
+#    for iii in range(4):
+#        if 'ESO INS'+str(iii+1)+' TEMP401 ID' in hdr:
+#            INS = int(iii+1)
+#    if INS>0:
+#        for t in range(3,53):
+#            if t<12 or t>51:
+#                dd = -273 # from Kelvin to degrees Celsius
+#            else:
+#                dd = 0
+#            TEMP[t+4] = float(hdr['ESO INS'+str(INS)+' TEMP4'+str(t+3).zfill(2)+' VAL']) + dd
+#            NAME[t+4] = "INS" + str(INS) + " TEMP4" + str(t+3).zfill(2)
+
+    return TEMP, NAME
 
 def get_moon_position(hdr):
     """

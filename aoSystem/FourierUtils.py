@@ -103,7 +103,7 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=None, theta_ext=0, spatialFilter=1)
 
 def instantiateAngularFrequencies(nOtf,fact=2):
     # DEFINING THE DOMAIN ANGULAR FREQUENCIES
-    U_,V_  = shift_array(nOtf,nOtf,fact = fact)
+    U_,V_  = shift_array(nOtf, nOtf, fact=fact) #from -1 to 1
     U2_    = U_**2
     V2_    = V_**2
     UV_    = U_*V_
@@ -251,7 +251,7 @@ def pupil2psf(pupil,phase,overSampling):
 def sf2otf(sf):
     return np.exp(-0.5 * sf)
 
-def shift_array(nX,nY,fact=2*np.pi*complex(0,1)):
+def shift_array(nX, nY, fact=2*np.pi*complex(0,1)):
     X, Y = np.mgrid[0:nX,0:nY].astype(float)
     X = (X-nX/2) * fact/nX
     Y = (Y-nY/2) * fact/nY
@@ -394,11 +394,11 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
         # DEFINING THE RESIDUAL JITTER KERNEL
         Kjitter = 1
         if x_jitter is not None:
-            u_max = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
-            norm_fact = u_max**2 *(2 * np.sqrt(2*np.log(2)))**2
-            Djitter = norm_fact * (x_jitter[0]**2 * freq.U2_
-                                   + x_jitter[1]**2 * freq.V2_
-                                   + 2*x_jitter[2] *freq.UV_)
+            u_max = freq.samp/2*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
+            norm_fact = u_max *(2*np.sqrt(2*np.log(2)))
+            Djitter = norm_fact**2 * (x_jitter[0]*freq.U2_
+                                    + x_jitter[1]*freq.V2_
+                                    + 2*x_jitter[2]*freq.UV_)
             Kjitter = np.exp(-0.5 * Djitter)
 
         # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
@@ -457,7 +457,7 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
 
 def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
                     x_stellar = [[1.0], [0.],[0.],[0]],
-                    theta_ext = 0, nPix = None, otfPixel = 1):
+                    theta_ext = 0, nPix=None, otfPixel=1):
         """
           Computation of the 4D PSF and the Strehl-ratio (from the OTF integral).
           The Phase structure function must be a nPx x nPx x nSrc array

@@ -234,8 +234,8 @@ class psfR:
         """
         Computes the OTF of the pixel.
         """
-        #note : self.U_/V_ ranges ar -1 to 1
-        umax = self.ao.tel.D/self.freq.wvlRef * self.freq.sampRef
+        #note : self.U_/V_ ranges from -1 to 1
+        umax = self.ao.tel.D/self.freq.wvlRef * self.freq.sampRef/2
         ps = self.ao.cam.psInMas * np.pi*1e-3/3600/180
         otfPixel = np.sinc(self.freq.U_ * umax * ps)\
                   *np.sinc(self.freq.V_ * umax * ps)

@@ -175,7 +175,7 @@ class frequencyDomain():
 
         # DEFINING THE DOMAIN ANGULAR FREQUENCIES
         t0 = time.time()
-        self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf,fact=2)
+        self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf, fact=2)
 
         # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
         self.otfNCPA, self.otfDL, self.phaseMap =\
