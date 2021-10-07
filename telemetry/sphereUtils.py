@@ -7,6 +7,7 @@ Created on Thu Apr  8 09:37:55 2021
 """
 import os
 import shutil
+from pathlib import Path
 from astropy.time import Time
 from configparser import ConfigParser
 import tqdm
@@ -19,6 +20,7 @@ from astropy.coordinates import SkyCoord
 from astropy import units as u
 # Julien Milli's
 from query_eso_archive import query_simbad
+from plot_sparta_data import plot_sparta_data
 # Arthur Vigan's
 from sphere.transmission import irdis_nd
 # P3 librairies
@@ -94,6 +96,61 @@ def process_clean_data(path_data, nPix):
     out = out/DIT/ND
     return out
 
+def sort_telemetry_folder(path_telemetry):
+    """
+    Gather the SPHER.* .fits file in the path_dtts folder into sub-folder for
+    each observation date.
+    """
+    if not os.path.isdir(path_telemetry):
+        raise ValueError("The folder does not exist")
+    path_telemetry = Path(path_telemetry)
+
+    years = os.listdir(path_telemetry)
+    for year in years:
+        path_year = Path(os.path.join(path_telemetry, year))
+        # get the list of .fits file
+        list_fits = os.listdir(path_year)
+        list_fits = [file for file in list_fits if ".fits" in file]
+        list_date = [file.split(".")[1].split("T")[0] for file in list_fits]
+        list_unique = np.unique(list_date)
+        for date in list_unique:
+            path_date = os.path.join(path_year, date)
+            # create the folder
+            if not os.path.isdir(path_date):
+                os.mkdir(path_date)
+            # move the corresponding file into the folder
+            idx = [i for i, x in enumerate(list_date) if x == date]
+            sub_list = np.take(list_fits, idx)
+            for file in sub_list:
+                path_old = os.path.join(path_year, file)
+                path_new = os.path.join(path_date, file)
+                os.rename(path_old, path_new)
+
+def query_sparta_data(path_telemetry, debug=False, redo=False):
+    """
+    Run the plot_sparat_data script to query SPARTA data (acquired every 30s)
+    as well as additionnal parameters from the ASM, SLODAR, ECMWF,...
+    """
+    if not os.path.isdir(path_telemetry):
+        raise ValueError("The folder does not exist")
+    path_telemetry = Path(path_telemetry)
+
+    years = os.listdir(path_telemetry)
+    for year in years:
+        path_year = Path(os.path.join(path_telemetry, year))
+        list_sub = os.listdir(path_year)
+        # run
+        for folder in list_sub:
+            path_folder = os.path.join(path_year, folder)
+            print("Process folder " + folder)
+            if os.path.isdir(path_folder):
+                list_file = os.listdir(path_folder)
+                wfs_is_there = np.any(["sparta_visible_WFS" in file for file in list_file])
+                if redo or not wfs_is_there:
+                    plot_sparta_data(path_raw=path_folder,
+                                     path_output=path_folder,
+                                     plot=False,
+                                     debug=debug)
 #%% IMAGE FITTING
 def reading_ini_file(path_ini, path_to_modes=None):
     """
