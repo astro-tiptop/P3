@@ -126,17 +126,15 @@ class psfao21:
             Defining bounds on the PSFAO21 parameters based on the first step
             of the split fitting.
         '''
-        xerr = np.copy(xerr)
-        if fixed is not None:
-            xerr[np.where(fixed)[0]] = np.inf
+        bounds = np.array(self.bounds)
         # lower bounds
-        bounds_low_psd = list(xfinal[0:7] - sig/3*xerr[0:7])
+        bounds_low_psd = list(np.maximum(xfinal[:7] - sig/3*xerr[:7], bounds[0, :7]))
         bounds_low = bounds_low_psd\
                     + [-np.inf, -np.inf, -np.inf, 0, -np.inf, -np.inf, -np.inf]\
                     + [-max(self.wvl)*1e9/2,]*self.ao.tel.nModes
 
         #upper bounds
-        bounds_up_psd = list(xfinal[0:7] + sig/3*xerr[0:7])
+        bounds_up_psd = list(np.minimum(xfinal[:7] + sig/3*xerr[:7], bounds[1, :7]))
         bounds_up = bounds_up_psd\
                     + [np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]\
                     + [max(self.wvl)*1e9/2,]*self.ao.tel.nModes

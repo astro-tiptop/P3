@@ -27,6 +27,7 @@ from sphere.transmission import irdis_nd
 from psfao21.psfao21 import psfao21
 from psfFitting.psfFitting import psfFitting
 import aoSystem.FourierUtils as FourierUtils
+from aoSystem.zernike import zernike
 
 #%% IMAGE PROCESSING
 def remove_corrupted_data(path_data, path_out):
@@ -158,8 +159,6 @@ def reading_ini_file(path_ini, path_to_modes=None):
     We can change the modal basis with path_to_modes. By default, the modes will
     be defined from the path given in the .ini file
     """
-    from configparser import ConfigParser
-
     parser = ConfigParser()
     parser.optionxform = str
     parser.read(path_ini)
@@ -207,7 +206,10 @@ def define_initial_guess(im, wvl, r0=None, SR=None,  n_modes=0, normType=0):
         sig2 = (2*np.pi*120e-9/wvl)**2
     else:
         sig2 = -np.log(SR)
-    F = FourierUtils.normalizeImage(im, normType=normType)[0].sum()
+    im_nnz = np.copy(im)
+    if im_nnz.min()<0:
+        im_nnz -= im_nnz.min()
+    F = FourierUtils.normalizeImage(im_nnz, normType=normType)[0].sum()
     x0 =[r0, 0, sig2, 1e-2, 1, 0, 1.3, # psfao21 model
          0, 0, 0, # jitter x-y-xy
          F, 0, 0, 0] # flux, dx, dy, background
@@ -241,8 +243,8 @@ def define_fixed_parameters(n_px, D, wvl, n_actu, pixel_scale_mas,
     fixed += (False,)*n_modes
     return fixed
 
-def fitting_image(im, psfao, r0=None, SR=None, fit_stat=True, weights=None, normType=1,
-                  tol=1e-8, max_nfev=100, sig=5, verbose=-1, fix_C=True):
+def fitting_image(im, psfao, r0=None, SR=None, fit_stat=True, weights=None, normType=0,
+                  tol=1e-8, max_nfev=100, verbose=-1, fix_C=True):
     """
     Fitting a 2D image of a star by considering the instance psfao as a model
     for the PSF. If fit_lwe is True, the fit jointly estimates the atmospheric
@@ -250,42 +252,32 @@ def fitting_image(im, psfao, r0=None, SR=None, fit_stat=True, weights=None, norm
     Returns the res dictionnary from the psffitting function.
     """
 
-    # STEP 1 :  FIT THE ATMOSPHERIC PARAMETERS ONLY
-    x0 = define_initial_guess(im, psfao.wvl[0], r0=r0, SR=SR,
-                              normType=normType, n_modes=0)
-    fixed = define_fixed_parameters(im.shape[0], psfao.ao.tel.D, psfao.wvl[0],
-                                    psfao.ao.dms.nActu1D, psfao.ao.cam.psInMas,
-                                    fix_C=fix_C, fix_shift=False, n_modes=0)
-    # fit
-    res = psfFitting(im, psfao, x0, fixed=fixed, weights=weights, normType=normType,
-                     verbose=verbose, ftol=tol, gtol=tol, xtol=tol, max_nfev=max_nfev)
+    if not fit_stat or SR<0.4:
+        x0 = define_initial_guess(im, psfao.wvl[0], r0=r0, SR=SR,
+                                  normType=normType, n_modes=0)
+        fixed = define_fixed_parameters(im.shape[0], psfao.ao.tel.D, psfao.wvl[0],
+                                        psfao.ao.dms.nActu1D, psfao.ao.cam.psInMas,
+                                        fix_C=fix_C, fix_shift=False, n_modes=0)
+        # fit
+        res = psfFitting(im, psfao, x0, fixed=fixed, weights=weights, normType=normType,
+                         verbose=verbose, ftol=tol, gtol=tol, xtol=tol, max_nfev=max_nfev)
 
-    # STEP 2: JOINT FIT OF THE ATMOSPHERIC AND INSTRUMENTAL PARAMETERS
-    if fit_stat:
-        # defining the new initial guess
-        x0_2 = list(res.x[:11]) + [0,]*3 + [0,]*psfao.ao.tel.nModes
-        if res.x[6] > 2.5: # managing beta parameter
-            x0_2[6] = x0[6]
-            res.xerr[6] = 0.2
-
-        # narrowing the bounds of the atmospheric parameters
-        psfao.bounds = psfao.update_bounds(res.x, res.xerr, sig=5)
-        print(x0_2)
-        print(psfao.bounds)
-        # disable the fit of astrometry (conflict with  with tip-tilt modes)
+    else:
+        x0 = define_initial_guess(im, psfao.wvl[0], r0=r0, SR=SR,
+                                  normType=normType, n_modes=psfao.ao.tel.nModes)
         fixed = define_fixed_parameters(im.shape[0], psfao.ao.tel.D, psfao.wvl[0],
                                         psfao.ao.dms.nActu1D, psfao.ao.cam.psInMas,
                                         fix_C=fix_C, fix_shift=True,
                                         n_modes=psfao.ao.tel.nModes)
 
-        # storing the astrometry values from the previous fit
-        dx_fit = res.x[11]*psfao.ao.cam.psInMas
-        dy_fit = res.x[12]*psfao.ao.cam.psInMas
-        # fit them all
-        res = psfFitting(im, psfao, x0_2, fixed=fixed, weights=weights, normType=normType,
-                         verbose=verbose, ftol=tol, gtol=tol, xtol=tol, max_nfev=max_nfev)
-        res.x[11] = dx_fit
-        res.x[12] = dy_fit
+
+    # fit them all
+    res = psfFitting(im, psfao, x0, fixed=fixed, weights=weights, normType=normType,
+                     verbose=verbose, ftol=tol, gtol=tol, xtol=tol, max_nfev=max_nfev)
+
+    if not fit_stat or SR<0.4:
+        res.x = np.concatenate((res.x, -np.ones(psfao.ao.tel.nModes)))
+        res.xerr = np.concatenate((res.xerr, -np.ones(psfao.ao.tel.nModes)))
 
     # getting the parameters
     SR = [res.SR_sky, res.SR_fit]
@@ -309,7 +301,8 @@ def define_database_colnames(fit=False, n_modes=0):
     Define the name for the columns of the Dataframe.
     """
     names=['TARGET', 'OBS ID', 'DATE', 'EXP TIME', "RA", "DEC", 'AIRMASS', 'MEAN WAVELENGTH [µm]',
-           'BANDWIDTH [µm]', 'V MAG', 'R MAG', 'G MAG', 'J MAG', 'H MAG', 'K MAG', "NPH [#photons/aperture]",
+           'BANDWIDTH [µm]', 'V MAG', 'R MAG', 'G MAG', 'J MAG', 'H MAG', 'K MAG',
+           "WFS NPH [#photons/aperture/frame]", "WFS frame rate [Hz]",
            'FWHMLINOBS [as]', 'tau0 [s]', 'wSpeed [m/s]', 'wDir [deg]', 'RHUM [%]','PRESSURE',
            'SRMIN', 'SRMAX', 'SRMEAN', 'FWHM [mas]', 'MIN SEEING SPARTA [as]',
            'MAX SEEING SPARTA [as]', 'MEAN SEEING SPARTA [as]', 'MIN WSPEED SPARTA [m/s]',
@@ -330,7 +323,43 @@ def define_database_colnames(fit=False, n_modes=0):
     return names
 
 #%% DATA ANALYSIS
-def compute_lwe_wavefront_error(df, path_ini, path_root=""):
+def compute_tiptilt_filtering_matrix(pupil, mat_modes=None):
+    """
+    Compute the matrix to filter the tip-tilt compnent from ` phase map.
+    """
+    # create tip-tilt modes
+    n_pup = pupil.shape[0]
+    z = zernike([2,3], n_pup, pupil=pupil.astype(bool))
+    M = z.modes.reshape((2, n_pup**2)).T
+    # compute the filtering matrix
+    M_inv = np.linalg.pinv(M)
+    H_filter = np.eye(n_pup**2) - np.dot(M, M_inv)
+    # compute the phase to coeffs matrix
+    phase_to_coeffs = None
+    if mat_modes is not None:
+        if mat_modes.shape[0]!=n_pup**2:
+            raise ValueError("The modal_basis must be shaped as a n_pup**2 x n_modes array")
+        phase_to_coeffs = np.linalg.pinv(mat_modes)
+    return H_filter, phase_to_coeffs, M_inv
+
+def remove_tiptilt_from_phase(phase, H_filter, phase_to_coeffs=None):
+    """
+    Remove the tip-tilt component from the phase and reproject over the modes.
+    """
+    # create tip-tilt modes
+    n_pup = int(np.sqrt(H_filter.shape[0]))
+    if phase.shape[0]!=n_pup:
+        raise ValueError("The phase must have the same resolution than the filter")
+    #filtering the phase
+    phase_filtered = np.dot(H_filter, phase.reshape(n_pup**2))
+    coeffs_filtered = None
+    # projecting over the tip-tilt free basis
+    if phase_to_coeffs is not None:
+        coeffs_filtered = np.dot(phase_to_coeffs, phase_filtered)
+
+    return phase_filtered.reshape(n_pup, n_pup),  coeffs_filtered
+
+def compute_lwe_wavefront_error(df, path_ini, path_root="", remove_tiptilt=True):
     """
     Computes the LWE wavefront error in nm from dataframe df.
     """
@@ -342,22 +371,33 @@ def compute_lwe_wavefront_error(df, path_ini, path_root=""):
     df_sub = df[mode_col]
 
     # grab the modal basis
-    parser = ConfigParser()
-    parser.optionxform = str
-    parser.read(path_ini)
-    path_stat = parser.get('telescope','PathStatModes')
-    mat_mod = fits.getdata(path_root + path_stat[1:-1])
-
+    psfao = psfao21(path_ini, path_root=path_root)
+    n_pup = psfao.ao.tel.resolution
+    mat_modes = psfao.ao.tel.statModes.reshape(n_pup**2, psfao.ao.tel.nModes)
+    pupil = psfao.ao.tel.pupil
+    mat_modes = mat_modes*pupil.reshape(n_pup**2)[:, np.newaxis]
     # get the phase
     lwe_col = []
+    if remove_tiptilt:
+        coeffs_col = []
+        H_filter, P2C, _ = compute_tiptilt_filtering_matrix(pupil, mat_modes=mat_modes)
     for n in range(df_sub.shape[0]):
-        tmp = df_sub.loc[n]
+        tmp = np.array(df_sub.loc[n])
         if tmp.any():
-            opd = np.sum(np.array(tmp)[:, np.newaxis, np.newaxis]*mat_mod, axis=0)
+            opd = np.reshape(np.sum(mat_modes*tmp, axis=1), (n_pup, n_pup))
+            if remove_tiptilt:
+                opd, coeffs = remove_tiptilt_from_phase(opd, H_filter, phase_to_coeffs=P2C)
+                coeffs_col.append(coeffs)
+            # compute the LWE wavefront error
             lwe_err = np.std(opd[opd!=0])
         lwe_col.append(lwe_err)
 
+    # update the data frame
     df["LWE [nm]"] = lwe_col
+    if remove_tiptilt:
+        coeffs_col = np.array(coeffs_col)
+        for n in range(psfao.ao.tel.nModes):
+            df["FIT MODE"+str(n) + " TT REMOVED"] = coeffs_col[:, n]
     return df
 
 def plot_lwe_histograms(df_in, bins=20, alpha=0.5, thres=200):
@@ -464,7 +504,7 @@ def get_wavelength(path_data):
 
     return wvl, bw
 
-def read_sparta_data(path_data, date_obs=None, path_dtts=None, which='last'):
+def read_sparta_data(path_data, date_obs=None, path_dtts=None, which='last', n_subap=1240):
     """
         Read the file SPH_SPARTA_PSFDATA-psf_sparta_data to get the atmospheric parameters.
         if the files exists, this is a [3, npsf+1,4] array
@@ -483,10 +523,10 @@ def read_sparta_data(path_data, date_obs=None, path_dtts=None, which='last'):
         # number of acquisitions during the observation
         nPSF = sparta.shape[1]-1
         # note : nPSF must == nFiles/2 with raw images or im.shape[0]//2 with processed images
-        r0 = np.array(sparta[0, :, :])
-        vspeed = np.array(sparta[1, :, :])
-        SR = np.array(sparta[2, :, :])
-        seeing = np.array(sparta[3, :, :])
+        r0 = sparta[0, :, :]
+        vspeed = sparta[1, :, :]
+        SR = sparta[2, :, :]
+        seeing = sparta[3, :, :]
 
         if which == 'last':
             r0 = r0[nPSF, :]
@@ -504,21 +544,30 @@ def read_sparta_data(path_data, date_obs=None, path_dtts=None, which='last'):
         id_max = np.argmin(abs(df["date"] - date_max))
         return id_min, id_max
 
-    n_ph = -1
+    n_ph = np.nan
+    rate = np.nan
     if path_dtts is not None and date_obs is not None:
-        if os.path.isdir(path_dtts + date_obs):
+        year = date_obs[:4]
+        path_sub = path_dtts + year + "/" + date_obs
+        if os.path.isdir(path_sub):
             # grab the exposure time and the exact date
             hdr = fits.getheader(path_sparta)
             Texp  = hdr['ESO DET SEQ1 DIT'] * hdr['ESO DET NDIT']
             date = pd.to_datetime(hdr["DATE-OBS"])
             # Get the number of photons
-            file_name = "sparta_visible_WFS_" + date_obs + ".csv"
-            df = pd.read_csv(path_dtts + date_obs + "/" + file_name)
-            df_flux = df['flux_VisLoop[#photons/aperture]']
-            id_min, id_max = find_closest(df, date, Texp)
-            n_ph = df_flux[id_min:id_max].median()
+            tmp = [file for file in os.listdir(path_sub) if "sparta_visible_WFS" in file]
+            if len(tmp)>0:
+                file_name = tmp[0]
+                df = pd.read_csv(path_sub + "/" + file_name)
+                if 'flux_VisLoop[#photons/aperture/frame]' in df:
+                    df_flux = df['flux_VisLoop[#photons/aperture/frame]']
+                    id_min, id_max = find_closest(df, date, Texp)
+                    n_ph = df_flux[id_min:id_max+1].median()/n_subap
+                if 'Frame rate [Hz]' in df:
+                    df_rate = df['Frame rate [Hz]']
+                    rate = df_rate[id_min:id_max+1].median()
 
-    return r0, vspeed, SR, seeing, n_ph
+    return r0, vspeed, SR, seeing, n_ph, rate
 
 def get_star_coordinates(hdr):
     """
@@ -532,7 +581,7 @@ def get_star_magnitudes(hdr):
         Query simbad to get the star magnitudes.
     """
 
-    VMAG = RMAG = GMAG = JMAG = HMAG = KMAG = -1
+    VMAG = RMAG = GMAG = JMAG = HMAG = KMAG = RA = DEC = -1
 
     OB_NAME, RA, DEC = get_star_coordinates(hdr)
 
@@ -542,7 +591,7 @@ def get_star_magnitudes(hdr):
                               name=OB_NAME)
 
     if DICT_SIMBAD is None:
-        return VMAG, RMAG, GMAG, JMAG, HMAG, KMAG
+        return VMAG, RMAG, GMAG, JMAG, HMAG, KMAG, RA, DEC
 
     # get magnitudes
     if 'simbad_FLUX_V' in DICT_SIMBAD:
@@ -638,29 +687,6 @@ def get_temperature(hdr):
     idx = [type(tmp) == float for tmp in temp_val]
     NAME = [temp_col[n] for n in range(len(idx)) if idx[n]==True]
     TEMP = [temp_val[n] for n in range(len(idx)) if idx[n]==True]
-
-#    # temperature sensors
-#    TEMP = np.zeros(60)
-#    NAME = [None,]*60
-#    TEMP[0] = float(hdr['ESO TEL AMBI TEMP']) # from the ASM
-#    NAME[0] = "AIR 30m"
-#    TEMP[1] = float(hdr['ESO TEL TH M1 TEMP'])
-#    NAME[1] = "M1"
-#    for t in range(1,6):
-#        TEMP[t+1]   = float(hdr['ESO INS1 TEMP10'+str(t)+' VAL'])
-#        NAME[t+1] = "INS1 TEMP10"+str(t)
-#    INS = 0
-#    for iii in range(4):
-#        if 'ESO INS'+str(iii+1)+' TEMP401 ID' in hdr:
-#            INS = int(iii+1)
-#    if INS>0:
-#        for t in range(3,53):
-#            if t<12 or t>51:
-#                dd = -273 # from Kelvin to degrees Celsius
-#            else:
-#                dd = 0
-#            TEMP[t+4] = float(hdr['ESO INS'+str(INS)+' TEMP4'+str(t+3).zfill(2)+' VAL']) + dd
-#            NAME[t+4] = "INS" + str(INS) + " TEMP4" + str(t+3).zfill(2)
 
     return TEMP, NAME
 
