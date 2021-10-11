@@ -23,7 +23,8 @@ class structtype():
 
 class telemetryKeck:
     def __init__(self, path_trs, path_img, path_calib, path_save='./',
-                 nLayer=1, verbose=False, addNCPA=True, cam_fov = 150):
+                 nLayer=1, verbose=False, addNCPA=True, cam_fov = 150,
+                 decimation=1):
 
         # Check the telemetry path
         self.path_trs = path_trs
@@ -59,7 +60,7 @@ class telemetryKeck:
             self.restoringCalibrationData(nLayer=nLayer)
 
             #4\ CREATE TELEMETRY LEVEL 1 KECK-SPECIFIC
-            self.restoringTelemetry(verbose=verbose)
+            self.restoringTelemetry(verbose=verbose, decimation=decimation)
 
     def instantiatingFields(self):
         """
@@ -337,7 +338,7 @@ class telemetryKeck:
                                                                             np.array(self.atm.Cn2Heights),
                                                                             nLayer)
 
-    def restoringTelemetry(self, verbose=False):
+    def restoringTelemetry(self, decimation=1, verbose=False):
 
 
         # 1\ Restore telemetry data and header
@@ -393,6 +394,7 @@ class telemetryKeck:
         self.tipTilt.com -= np.mean(self.tipTilt.com, axis=0)
         self.tipTilt.nExp = self.tipTilt.slopes.shape[0]
 
+
         # 3\ Get system matrices and reconstructed wavefront
 
         #3.1\ Get DM commands reconstructors from slopes
@@ -421,6 +423,15 @@ class telemetryKeck:
             u = np.zeros((self.wfs.nExp,self.dm.nActuators[0]**2))
             u[:,idG]= self.dm.com
             self.dm.com = u
+
+        # decimation
+        if decimation>1:
+            self.rec.res = self.rec.res[::decimation, :]
+            self.rec.focus = self.rec.focus[::decimation]
+            self.wfs.slopes = self.wfs.slopes[::decimation, :]
+            self.dm.com = self.dm.com[::decimation, :]
+            self.tipTilt.slopes = self.tipTilt.slopes[::decimation, :]
+            self.tipTilt.com = self.tipTilt.com[::decimation, :]
 
         # 4\ Get the loop status and model transfer function
         #4.1. Delays

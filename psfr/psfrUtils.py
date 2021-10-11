@@ -21,6 +21,23 @@ def get_data_file(path_sav,filename):
                                    path_sav + f"{filename}")
 
 #%%  PSF-R FACILITIES
+def compute_psd_from_slopes(trs):
+    """
+    Compute the spatial PSD of the reconstructed phase and the DM influence function.
+    """
+    # get the residual wavefront in the actuator domain
+    com_res = trs.rec.res
+    # get the DM influence function
+    modes = trs.mat.dmIF
+    n_px = int(np.sqrt(modes.shape[0]))
+    n_frames = com_res.shape[0]
+    # get the cube of phase in randian
+    phase = 2*np.pi/trs.wfs.wvl * np.dot(modes, com_res.T).reshape(n_px, n_px, n_frames)
+    phase = FourierUtils.enlargeSupport(phase, 2)
+    # get the psd
+    psd = np.fft.fftshift(np.mean(abs(np.fft.fft2(phase, axes=(0,1)))**2, axis=2))
+    return psd
+
 def getOLslopes(s,u,MI,dt):
     return s + MI*(dt*np.roll(u,(-2,2)) + (1-dt)*np.roll(u,(-1,2)))
 

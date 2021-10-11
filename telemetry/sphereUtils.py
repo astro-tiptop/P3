@@ -485,6 +485,40 @@ def plot_wfe_versus_ngs_mag(df_in, band="G", step_mag=0.5):
     plt.xlabel(band+' magnitude')
     plt.ylabel('Measured wavefront error [nm]')
 
+def plot_mag_versus_flux(df_in, band="G", step_mag=0.5):
+    """
+    Plot the SPHERE wavefront error/H-band SR versus the NGS magnitude.
+    """
+    pd.options.mode.chained_assignment = None
+
+    df = df_in.copy()
+    # Dropping missing mG values or meaningless SRMEAN values
+    df[band+' MAG'][df[band+' MAG']==-1]=np.nan
+    df.dropna(subset=["WFS NPH [#photons/aperture/frame]",
+                      "WFS frame rate [Hz]",
+                      band+" MAG"], inplace=True)
+
+    df["TOTAL FLUX"] = np.log10((df["WFS NPH [#photons/aperture/frame]"] * 1240 * df["WFS frame rate [Hz]"]))
+    # grouping
+    plt.figure()
+    if step_mag:
+        cat = np.arange(2, 15, step_mag)
+        bins = pd.cut(df[band+' MAG'], cat)
+        agg_df = df.groupby(bins)['TOTAL FLUX'].agg(['count', np.nanmedian, np.nanstd])
+        plt.errorbar(agg_df['nanmedian'],
+                     cat[:-1] +np.diff(cat)/2,
+                     yerr=step_mag/2,
+                     xerr=agg_df['nanstd'],
+                     fmt='o', capthick=2)
+    else:
+        plt.scatter(df["TOTAL FLUX"], df[band+' MAG'])
+    plt.ylim([2,15])
+    plt.grid()
+    plt.ylabel(band+' magnitude')
+    plt.xlabel('log10(#photons/s)')
+    #plt.xscale('log', nonposx='clip')
+
+
 #%% READING THE HEADER
 def get_obs_id(file_name, hdr):
     """

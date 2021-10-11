@@ -90,7 +90,8 @@ def psfr_on_database(path_save, year="20130801", fit=False, display=False, tol=1
     df_psfr.to_csv(path_save + df_name + ".csv", index=False)
 
 def run_keck_psfr(path_sav, path_fits, path_p3, path_save="./",
-             display=False, tol=1e-5, verbose=-1, fit=False):
+             display=False, tol=1e-5, verbose=-1, fit=False,
+             decimation=1):
     """
     Run the P3 PSFR by using the telemetry data in the .sav files and compare
     with the NIRC2 frame given in the path_fits file.
@@ -100,7 +101,7 @@ def run_keck_psfr(path_sav, path_fits, path_p3, path_save="./",
     # ------ Get the telemetry
     path_calib = path_p3 + "/aoSystem/data/KECK_CALIBRATION/"
     trs = telemetryKeck(path_sav, path_fits, path_calib, path_save=path_save,
-                        nLayer=1)
+                        nLayer=1, decimation=decimation)
     # ---- Process the telemetry to get the r0 and the noise
     sd = systemDiagnosis(trs)#, Dout=9, Din=2.65, noise=0)
 
