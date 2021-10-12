@@ -302,7 +302,8 @@ def define_database_colnames(fit=False, n_modes=0):
     """
     names=['TARGET', 'OBS ID', 'DATE', 'EXP TIME', "RA", "DEC", 'AIRMASS', 'MEAN WAVELENGTH [µm]',
            'BANDWIDTH [µm]', 'V MAG', 'R MAG', 'G MAG', 'J MAG', 'H MAG', 'K MAG',
-           "WFS NPH [#photons/aperture/frame]", "WFS frame rate [Hz]",
+           "WFS NPH [#photons/aperture/frame]", "WFS frame rate [Hz]", "WFS FILTER", "WFS CENTRAL WAVELENGTH [nm]",
+           "WFS SPECTRAL BANDWIDTH [nm]", "WFS COG WINDOW RADIUS [PX]", "LOOP DELAY [FRAME]", "LOOP GAIN",
            'FWHMLINOBS [as]', 'tau0 [s]', 'wSpeed [m/s]', 'wDir [deg]', 'RHUM [%]','PRESSURE',
            'SRMIN', 'SRMAX', 'SRMEAN', 'FWHM [mas]', 'MIN SEEING SPARTA [as]',
            'MAX SEEING SPARTA [as]', 'MEAN SEEING SPARTA [as]', 'MIN WSPEED SPARTA [m/s]',
@@ -485,7 +486,7 @@ def plot_wfe_versus_ngs_mag(df_in, band="G", step_mag=0.5):
     plt.xlabel(band+' magnitude')
     plt.ylabel('Measured wavefront error [nm]')
 
-def plot_mag_versus_flux(df_in, band="G", step_mag=0.5):
+def plot_mag_versus_flux(df_in, band="G", y_unit="nph/s/nm", step_mag=0.5):
     """
     Plot the SPHERE wavefront error/H-band SR versus the NGS magnitude.
     """
@@ -498,7 +499,13 @@ def plot_mag_versus_flux(df_in, band="G", step_mag=0.5):
                       "WFS frame rate [Hz]",
                       band+" MAG"], inplace=True)
 
-    df["TOTAL FLUX"] = np.log10((df["WFS NPH [#photons/aperture/frame]"] * 1240 * df["WFS frame rate [Hz]"]))
+    if y_unit=="nph/subaperture/frame":
+        flux = df["WFS NPH [#photons/aperture/frame]"]
+    else:
+        flux = df["WFS NPH [#photons/aperture/frame]"]\
+                * 1240 * df["WFS frame rate [Hz]"]/df["WFS SPECTRAL BANDWIDTH [nm]"]
+    df["TOTAL FLUX"] = np.log10(flux)
+
     # grouping
     plt.figure()
     if step_mag:
@@ -515,11 +522,75 @@ def plot_mag_versus_flux(df_in, band="G", step_mag=0.5):
     plt.ylim([2,15])
     plt.grid()
     plt.ylabel(band+' magnitude')
-    plt.xlabel('log10(#photons/s)')
+    if y_unit=="nph/subaperture/frame":
+        plt.xlabel('log10(#photons/subaperture/frame)')
+    else:
+        plt.xlabel('log10(#photons/s/nm)')
     #plt.xscale('log', nonposx='clip')
 
 
 #%% READING THE HEADER
+def grab_wfs_parameters(hdr, g_mag, frame_rate):
+    """
+    Grab the information related to the WFS and loop.
+    """
+    filter_name, wvl, bw = define_wfs_wavelength(hdr)
+    win = define_wfs_window(g_mag)
+    delay = define_loop_delay(frame_rate)
+    gain = define_loop_gain(g_mag)
+
+    return (filter_name, wvl, bw, win, delay, gain)
+
+def define_wfs_wavelength(hdr):
+    """
+    Return the central wavelength and the bandwidth of the spectral filter in front of the WFS.
+    """
+    filter_name = hdr["ESO INS4 FILT3 NAME"]
+    if filter_name=="OPEN":
+        return filter_name, 700, 450
+    elif filter_name=="LP_780":
+        return filter_name, 840, 120
+    elif filter_name=="LP_475":
+        return filter_name, 700, 400
+
+def define_wfs_window(g_mag):
+    """
+    Return the radius in pixels of the Gaussian windowing function for the cog
+    """
+    if g_mag<8:
+        return 3.0
+    elif g_mag<10:
+        return 2.0
+    elif g_mag<10.5:
+        1.5
+    return 1.0
+
+def define_loop_delay(frame_rate):
+    """
+    Return the AO loop delay in number of frame as a function of the frame rate in Hz.
+    """
+    if frame_rate<333:
+        return 1
+    elif frame_rate<667:
+        return 2
+    else:
+        return 3
+
+def define_loop_gain(g_mag):
+    """
+     Return the AO loop gain as a function of the star magnitude
+    """
+    if g_mag <=6.0:
+        return 0.4
+    elif g_mag <8.0:
+        return 0.35
+    elif g_mag<10.0:
+        return 0.25
+    elif g_mag<10.5:
+        return 0.2
+    elif g_mag<11.3:
+        return 0.6
+
 def get_obs_id(file_name, hdr):
     """
     Retrieve the name of the target

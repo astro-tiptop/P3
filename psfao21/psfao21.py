@@ -98,8 +98,9 @@ class psfao21:
         """
         #Cn2/r0 , C , A , ax , p , theta , beta , sx , sy , sxy , F , dx , dy , bg , stat
         # Bounds on r0
-        bounds_down = list(np.ones(self.ao.atm.nL)*1e-3)
-        bounds_up = list(np.inf * np.ones(self.ao.atm.nL))
+        nL = min(self.ao.atm.nL, self.ao.dms.nRecLayers)
+        bounds_down = list(np.ones(nL)*1e-3)
+        bounds_up = list(np.inf * np.ones(nL))
         # PSD Parameters
         bounds_down += [0, 0, 1e-3, 1e-2, -np.pi, 1.01]
         bounds_up += [np.inf, np.inf, np.inf, 1e2, np.pi, 5]
