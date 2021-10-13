@@ -212,8 +212,8 @@ def evaluateFittingQuality(result, psfModelInst):
 
     if np.ndim(result.im_sky) == 2:
         # case fit of a 2D image
-        result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.ao.tel.pupil,psfModelInst.freq.sampRef)
-        result.SR_fit   = FourierUtils.getStrehl(result.im_fit,psfModelInst.ao.tel.pupil,psfModelInst.freq.sampRef)
+        result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.ao.tel.pupil,psfModelInst.freq[0].sampRef)
+        result.SR_fit   = FourierUtils.getStrehl(result.im_fit,psfModelInst.ao.tel.pupil,psfModelInst.freq[0].sampRef)
         result.FWHMx_sky , result.FWHMy_sky = FourierUtils.getFWHM(result.im_sky,psfModelInst.ao.cam.psInMas,nargout=2)
         result.FWHMx_fit , result.FWHMy_fit = FourierUtils.getFWHM(result.im_fit,psfModelInst.ao.cam.psInMas,nargout=2)
         result.mse, result.mae , result.fvu = meanErrors(result.im_sky,result.im_fit)

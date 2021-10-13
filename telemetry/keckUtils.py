@@ -79,7 +79,7 @@ def getPupilMask(hdr):
 def getTelescopeAirmass(hdr):
     el = float(hdr['EL'])
     zenithAngle = 90 - el
-    airmass      = 1/np.cos(zenithAngle*np.pi/180)
+    airmass = 1/np.cos(zenithAngle*np.pi/180)
     return zenithAngle,airmass
 
 def getInstAngle(hdr):

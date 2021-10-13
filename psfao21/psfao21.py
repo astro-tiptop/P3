@@ -59,7 +59,7 @@ class psfao21:
         if self.nwvl > 1:
             self.psfao_19 = []
             self.freq = []
-            src_wvl = self.ao.src.wvl
+            src_wvl = self.wvl
             for n in range(self.nwvl):
                 # CREATING INSTANCES OF THE MAOPPY MODEL
                 self.psfao_19.append(Psfao((self.npix, self.npix),
@@ -221,8 +221,13 @@ class psfao21:
                 wvl_ratio = (self.wvl[0]/self.wvl[n])**2
 
                 # ----------------- SELECTING THE OBJECT PARAMETERS
-                x0_stellar_n = [x0_stellar[0][:, n], x0_stellar[1][:, n],
-                                x0_stellar[2][:, n], x0_stellar[3][n]]
+                if len(self.ao.src.wvl)>1:
+                    x0_stellar_n = [x0_stellar[0][:, n], x0_stellar[1][:, n],
+                                    x0_stellar[2][:, n], x0_stellar[3][n]]
+
+                else:
+                    x0_stellar_n = [x0_stellar[0][:, n], x0_stellar[1][:, n],
+                                    x0_stellar[2][:, n], x0_stellar[3]]
 
                 # ----------------- GETTING THE PHASE STRUCTURE FUNCTION
                 self.psd = self.get_power_spectrum_density([r0]+ x0_dphi,

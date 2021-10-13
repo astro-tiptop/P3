@@ -319,8 +319,9 @@ def sort_params_from_labels(psfModelInst, x0):
     # Astrometry/Photometry/Background
     n_star = psfModelInst.ao.src.nSrc
     n_wvl = psfModelInst.nwvl
+    n_frame = len(psfModelInst.ao.src.wvl)
     n_src = n_star*n_wvl
-    n_stellar = n_tt + n_src*3 + n_wvl
+    n_stellar = n_tt + n_src*3 + n_frame
 
     if len(x0) > n_tt:
         x0_stellar = np.array(xall[n_tt:n_stellar])
