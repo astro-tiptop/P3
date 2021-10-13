@@ -113,7 +113,6 @@ class aoSystem():
                              path_statModes=path_statModes)
 
         #%% ATMOSPHERE
-
         if config.has_option('atmosphere', 'Wavelength'):
             wvlAtm = eval(config['atmosphere']['Wavelength'])
         else:
@@ -337,6 +336,10 @@ class aoSystem():
             NoiseVar = eval(config['sensor_HO']['NoiseVariance'])
         else:
             NoiseVar = [None]
+        if config.has_option('sensor_HO', 'ClockRate'):
+            clock_rate = eval(config['sensor_HO']['ClockRate'])
+        else:
+            clock_rate = [1]
         if config.has_option('sensor_HO', 'Algorithm'):
             algorithm = eval(config['sensor_HO']['Algorithm'])
         else:
@@ -362,7 +365,7 @@ class aoSystem():
                           nph=nph, bandwidth=bw, transmittance=tr, dispersion=disp,
                           gain=Gain, ron=ron, sky=sky, dark=dark, excess=excess,
                           nL=nL, dsub=dsub, wfstype=wfstype, modulation=modu,
-                          noiseVar=NoiseVar, algorithm=algorithm,
+                          noiseVar=NoiseVar, algorithm=algorithm, clock_rate=clock_rate,
                           algo_param=[wr, thr, nv], tag="HO WFS")
 
         #%% TIP-TILT SENSORS

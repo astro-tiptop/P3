@@ -252,15 +252,16 @@ class fourierModel:
             Hs = self.ao.atm.heights * self.strechFactor
             #d = self.freq.pitch[0]
             d_sub = [self.ao.wfs.optics[j].dsub for j in range(self.nGs)]   #sub-aperture size
+            clock_rate = [self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)]
             sampTime = 1/self.ao.rtc.holoop['rate']
 
             self.PbetaDM = []
             for s in range(self.ao.src.nSrc):
-                fx = self.ao.src.direction[0,s]*self.freq.kxAO_
-                fy = self.ao.src.direction[1,s]*self.freq.kyAO_
-                PbetaDM = np.zeros([nK,nK,1,nDm],dtype=complex)
+                fx = self.ao.src.direction[0, s]*self.freq.kxAO_
+                fy = self.ao.src.direction[1, s]*self.freq.kyAO_
+                PbetaDM = np.zeros([nK, nK, 1, nDm], dtype=complex)
                 for j in range(nDm): #loop on DMs
-                    index = k <= self.freq.kc_[j] # note : circular masking
+                    index = k<=self.freq.kc_[j] # note : circular masking
                     PbetaDM[index, 0, j] = np.exp(2*i*np.pi*h_dm[j]*(fx[index] + fy[index]))
                 self.PbetaDM.append(PbetaDM)
 
@@ -272,12 +273,11 @@ class fourierModel:
                 #www = np.sinc(sampTime*self.ao.atm.wSpeed[h]*
                 #              (wDir_x[h]*self.freq.kxAO_ + wDir_y[h]*self.freq.kyAO_))
                 freq_t = wDir_x[h]*self.freq.kxAO_ + wDir_y[h]*self.freq.kyAO_
-                www = np.sinc(sampTime*self.ao.atm.wSpeed[h]*freq_t)
-                www = www * 2*i*np.pi*k
                 for g in range(self.nGs):
                     Alpha = [self.gs.direction[0, g],self.gs.direction[1, g]]
                     fx = Alpha[0]*self.freq.kxAO_
                     fy = Alpha[1]*self.freq.kyAO_
+                    www = 2*i*np.pi*k * np.sinc(sampTime*clock_rate[g]*self.ao.atm.wSpeed[h]*freq_t)
                     #self.MPalphaL[:, :, g, h] =\
                     #    www*2*i*np.pi*k*np.sinc(d*self.freq.kxAO_)*\
                     #    np.sinc(d*self.freq.kyAO_)*np.exp(i*2*np.pi*Hs[h]*(fx+fy))
@@ -307,7 +307,7 @@ class fourierModel:
         elif self.ao.wfs.optics[0].wfstype.upper()=='PYRAMID':
             # forward pyramid filter (continuous) from Conan
             umod = 1/(2*d)/(self.ao.wfs.optics[0].nL/2)*self.ao.wfs.optics[0].modulation
-            Sx = np.zeros((self.freq.resAO,self.freq.resAO),dtype=complex)
+            Sx = np.zeros((self.freq.resAO,self.freq.resAO), dtype=complex)
             idx = abs(self.freq.kxAO_) > umod
             Sx[idx] = i*np.sign(self.freq.kxAO_[idx])
             idx = abs(self.freq.kxAO_) <= umod
@@ -589,7 +589,8 @@ class fourierModel:
         psd = np.zeros((self.freq.resAO,self.freq.resAO))
         i = complex(0,1)
         d = self.ao.wfs.optics[0].dsub
-        T = 1.0/self.ao.rtc.holoop['rate']
+        clock_rate = np.array([self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)])
+        T = np.mean(clock_rate/self.ao.rtc.holoop['rate'])
         td = T * self.ao.rtc.holoop['delay']
         vx = self.ao.atm.wSpeed*np.cos(self.ao.atm.wDir*np.pi/180)
         vy = self.ao.atm.wSpeed*np.sin(self.ao.atm.wDir*np.pi/180)
@@ -715,18 +716,17 @@ class fourierModel:
             else:
                 # tomographic case
                 Beta = [self.ao.src.direction[0,s],self.ao.src.direction[1,s]]
-                PbetaL = np.zeros([nK,nK,1,nH],dtype=complex)
+                PbetaL = np.zeros([nK, nK, 1, nH], dtype=complex)
                 fx = Beta[0]*self.freq.kxAO_
                 fy = Beta[1]*self.freq.kyAO_
                 for j in range(nH):
-                    PbetaL[:,:,0,j] = np.exp(i*2*np.pi*(Hs[j]*\
-                          (fx+fy) - deltaT*self.ao.atm.wSpeed[j]\
-                          *(wDir_x[j]*self.freq.kxAO_+ wDir_y[j]*self.freq.kyAO_)))
+                    freq_t = wDir_x[j]*self.freq.kxAO_+ wDir_y[j]*self.freq.kyAO_
+                    delta_h = Hs[j]*(fx+fy) - deltaT*self.ao.atm.wSpeed[j]*freq_t
+                    PbetaL[: , :, 0, j] = np.exp(i*2*np.pi*delta_h)
 
-
-                proj = PbetaL - np.matmul(self.PbetaDM[s],self.Walpha)
-                proj_t = np.conj(proj.transpose(0,1,3,2))
-                tmp = np.matmul(proj,np.matmul(self.Cphi,proj_t))
+                proj = PbetaL - np.matmul(self.PbetaDM[s], self.Walpha)
+                proj_t = np.conj(proj.transpose(0, 1, 3, 2))
+                tmp = np.matmul(proj,np.matmul(self.Cphi, proj_t))
                 psd[:, :, s] = self.freq.mskInAO_ * tmp[:, :, 0, 0]*self.freq.pistonFilterAO_
         self.t_spatioTemporalPSD = 1000*(time.time() - tstart)
         return psd

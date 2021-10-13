@@ -744,7 +744,7 @@ def interpolateSupport(image, n_out, kind='spline'):
             return fun_real(unew,vnew)
 
 
-def normalizeImage(im,normType=1,param=None):
+def normalizeImage(im, normType=1, param=None):
     ''' Returns the normalized PSF :
         normtype = 0 : no normalization
         normType = 1 : Normalization by the sum of pixels
