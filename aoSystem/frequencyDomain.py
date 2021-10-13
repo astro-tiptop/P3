@@ -225,7 +225,7 @@ class frequencyDomain():
                                                                   self.sampRef,
                                                                   self.ao.dms.nActu1D,
                                                                   msk_in = self.mskIn_,
-                                                                  h_filt=self.Hfilter)
+                                                                  Hfilter=self.Hfilter)
 
                 return (self.dani_ang *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
 
