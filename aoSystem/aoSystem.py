@@ -272,6 +272,17 @@ class aoSystem():
         else:
             raise ValueError("You must provide a value for the science detector\
                              field of view\n")
+
+        if config.has_option('sensor_HO', 'NumberLenslets'):
+            nL = eval(config['sensor_HO']['NumberLenslets'])
+        else:
+            raise ValueError('You must provide a list of number of lenslets for the HO WFS\n')
+
+
+        if config.has_option('sensor_HO', 'SizeLenslets'):
+            dsub = eval(config['sensor_HO']['SizeLenslets'])
+        else:
+            dsub = list(D/np.array(nL))
         if config.has_option('sensor_HO', 'Binning'):
             Binning = eval(config['sensor_HO']['Binning'])
         else:
@@ -320,14 +331,7 @@ class aoSystem():
             wfstype = eval(config['sensor_HO']['WfsType'])
         else:
             wfstype = 'Shack-Hartmann'
-        if config.has_option('sensor_HO', 'NumberLenslets'):
-            nL = eval(config['sensor_HO']['NumberLenslets'])
-        else:
-            nL = [20]
-        if config.has_option('sensor_HO', 'SizeLenslets'):
-            dsub = eval(config['sensor_HO']['SizeLenslets'])
-        else:
-            dsub = list(D/np.array(nL))
+
         if config.has_option('sensor_HO', 'Modulation'):
             modu = eval(config['sensor_HO']['Modulation'])
         else:
@@ -339,7 +343,7 @@ class aoSystem():
         if config.has_option('sensor_HO', 'ClockRate'):
             clock_rate = eval(config['sensor_HO']['ClockRate'])
         else:
-            clock_rate = [1]
+            clock_rate = [1,]*len(nL)
         if config.has_option('sensor_HO', 'Algorithm'):
             algorithm = eval(config['sensor_HO']['Algorithm'])
         else:
@@ -380,6 +384,7 @@ class aoSystem():
             else:
                 raise ValueError("You must provide a value for the science\
                                  detector field of view\n")
+
             if config.has_option('sensor_LO', 'Binning'):
                 Binning = eval(config['sensor_LO']['Binning'])
             else:
@@ -425,12 +430,14 @@ class aoSystem():
                 nL = eval(config['sensor_LO']['NumberLenslets'])
             else:
                 nL = [1]
-
             if config.has_option('sensor_LO', 'NoiseVariance'):
                 NoiseVar = eval(config['sensor_LO']['NoiseVariance'])
             else:
                 NoiseVar = [None]
-
+            if config.has_option('sensor_HO', 'ClockRate'):
+                clock_rate = eval(config['sensor_HO']['ClockRate'])
+            else:
+                clock_rate = [1,]*len(nL)
             if config.has_option('sensor_LO', 'Algorithm'):
                 algorithm = eval(config['sensor_LO']['Algorithm'])
             else:
@@ -451,7 +458,7 @@ class aoSystem():
             self.tts = sensor(psInMas, fov, binning=Binning, spotFWHM=spotFWHM,
                               nph=nph, bandwidth=bw, transmittance=tr,
                               dispersion=disp, gain=Gain, ron=ron, sky=sky,
-                              dark=dark, excess=excess, nL=nL,
+                              dark=dark, excess=excess, nL=nL, clock_rate=clock_rate,
                               dsub=list(D/np.array(nL)), wfstype='Shack-Hartmann',
                               noiseVar=NoiseVar, algorithm=algorithm,
                               algo_param=[wr, thr, nv], tag="TT WFS")
