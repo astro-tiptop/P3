@@ -174,16 +174,11 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
     result.im_dif = result.im_sky - result.im_fit
     # psf
     xpsf = np.copy(result.x)
-    nparam = len(result.x) - 3*psfModelInst.ao.src.nSrc - 1
-    if nparam > 10:
-        nparam -= psfModelInst.ao.tel.nModes
-
-    idF = nparam+1
-    xpsf[idF]  = 1.0 # flux=1
-    xpsf[idF+1:idF+3*psfModelInst.ao.src.nSrc+1]   = 0.0 # dx,dy,bkcg=0
-    result.psf = np.squeeze(psfModelInst(xpsf,nPix=nPix))
-    #if np.ndim(result.psf) > 2:
-    #    result.psf = result.psf.sum(axis=2)
+    n_src = psfModelInst.ao.src.nSrc
+    id_flux = psfModelInst.n_param_atm + psfModelInst.n_param_dphi + 3
+    xpsf[id_flux] = 1.0 # flux=1
+    xpsf[id_flux+1:id_flux+3*n_src+1] = 0.0 # dx,dy,bkcg=0
+    result.psf = np.squeeze(psfModelInst(xpsf, nPix=nPix))
     result = evaluateFittingQuality(result,psfModelInst)
 
     # static map
@@ -212,10 +207,10 @@ def evaluateFittingQuality(result, psfModelInst):
 
     if np.ndim(result.im_sky) == 2:
         # case fit of a 2D image
-        result.SR_sky   = FourierUtils.getStrehl(result.im_sky,psfModelInst.ao.tel.pupil,psfModelInst.freq[0].sampRef)
-        result.SR_fit   = FourierUtils.getStrehl(result.im_fit,psfModelInst.ao.tel.pupil,psfModelInst.freq[0].sampRef)
-        result.FWHMx_sky , result.FWHMy_sky = FourierUtils.getFWHM(result.im_sky,psfModelInst.ao.cam.psInMas,nargout=2)
-        result.FWHMx_fit , result.FWHMy_fit = FourierUtils.getFWHM(result.im_fit,psfModelInst.ao.cam.psInMas,nargout=2)
+        result.SR_sky = FourierUtils.getStrehl(result.im_sky,psfModelInst.ao.tel.pupil,psfModelInst.freq.sampRef)
+        result.SR_fit = FourierUtils.getStrehl(result.im_fit,psfModelInst.ao.tel.pupil,psfModelInst.freq.sampRef)
+        result.FWHMx_sky, result.FWHMy_sky = FourierUtils.getFWHM(result.im_sky,psfModelInst.ao.cam.psInMas,nargout=2)
+        result.FWHMx_fit, result.FWHMy_fit = FourierUtils.getFWHM(result.im_fit,psfModelInst.ao.cam.psInMas,nargout=2)
         result.mse, result.mae , result.fvu = meanErrors(result.im_sky,result.im_fit)
 
     elif (np.ndim(result.im_sky) == 3) and (psfModelInst.nwvl>1):

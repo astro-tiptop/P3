@@ -41,7 +41,7 @@ class psfao21:
         self.ao = aoSys(path_ini, path_root=path_root, coo_stars=coo_stars)
 
         # GETTING INPUTS
-        self.isStatic = self.ao.tel.nModes > 0
+        self.isStatic = self.ao.tel.nModes>0
         self.otfPixel = otfPixel
 
         # INSTANTIATING THE MAOPPY MODEL
