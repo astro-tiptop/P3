@@ -20,9 +20,10 @@ from psfao21.psfao21 import psfao21
 import aoSystem.FourierUtils as FourierUtils
 np.random.seed(1)
 
-def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9,
-                 mag=0, zp=25.44, dit=0.5, ndit=50, sky_mag=13.6, ron=60, norm=1,
-                 save_path=None, nround=7, full_name=False, n_test=0, n_split=10,
+def generate_psf(path_ini, n_inter=10, main_param=["r0", "sig2"], n_psf_folder=3500,
+                 add_static=0, nmodes=None, mag=0, zp=25.44, dit=0.5, ndit=50,
+                 sky_mag=13.6, ron=60, norm=1, save_path=None, nround=5,
+                 full_name=False, n_test=0, n_split=10,
                  bounds=[[0.05, 1e-3, 100, 1e-3, 0.5, 1.1, -0.1],
                          [0.4, 5e-2, 390, 1e-1, 2, 3.0, 0.1]]):
 
@@ -47,19 +48,26 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
     wvl_fact = 2*np.pi*1e-9/wvl
 
     #%% CHECKING THE NUMBER OF MODES
-    if add_static and nmodes > psfao.ao.tel.nModes:
-        print('WARNING : the inputs number of modes is too high and then cropped')
-        nmodes = psfao.ao.tel.nModes
+    if add_static:
+        if nmodes is None:
+            nmodes = psfao.ao.tel.nModes
+        else:
+            if nmodes > psfao.ao.tel.nModes:
+                print('WARNING : the inputs number of modes is too high and then cropped')
+                nmodes = psfao.ao.tel.nModes
 
     #%% DEFINITION OF PARAMETERS DOMAIN
 
     # ------------------ DEFINING FOLDERS
+    if main_param!=["r0", "sig2"] and main_param!=["stat", "sig2"]:
+        raise ValueError("The first main parameter is either r0 or stat")
     n_main = 2 # r0 and A are the primary parameters
     n_sub_folder = n_inter ** n_main
 
     # DEFINING THE DATA FOLDER
     id_noise = 'NO'
     id_static = 'NO'
+    id_mag = ""
     if add_static:
         id_static = ''
     if mag:
@@ -84,73 +92,16 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
             os.mkdir(save_path)
 
     # ------------------- DEFINING BOUNDS
-    if (len(bounds[0]) == 0) or (len(bounds[1]) == 0):
-        raise ValueError('Bounds can not be empty')
-    if len(bounds[0]) != len(bounds[1]):
-        raise ValueError('Bounds must be of same size')
-    if (not add_static) and ((len(bounds[0]) < 6) or (len(bounds[1]) < 6)):
-        raise ValueError('You must provide bounds values of the 6 parameters')
-    if add_static and ((len(bounds[0]) < 7) or (len(bounds[1]) < 7)):
-        raise ValueError('Bounds on static aberrations must be provided as well')
-
-    r0_lb_500nm = bounds[0][0]
-    r0_ub_500nm = bounds[1][0]
-    A_lb_nm = bounds[0][2]
-    A_ub_nm = bounds[1][2]
-    C_lb = bounds[0][1]
-    C_ub = bounds[1][1]
-    ax_lb = bounds[0][3]
-    ax_ub = bounds[1][3]
-    p_lb = bounds[0][4]
-    p_ub = bounds[1][4]
-    beta_lb = bounds[0][5]
-    beta_ub = bounds[1][5]
-    if add_static:
-        stat_lb = bounds[0][6] * wvl*1e9
-        stat_ub = bounds[1][6] * wvl*1e9
-
-    # ------------------- DEFINING R0 AND A DISTRIBUTIONS OVER THE WHOLE DATA SETS
-    # bounds
-    r0_lb = r0_lb_500nm*(wvl/500e-9)**1.2
-    r0_ub = r0_ub_500nm*(wvl/500e-9)**1.2
-    A_lb = (wvl_fact*A_lb_nm)**2
-    A_ub = (wvl_fact*A_ub_nm)**2
-    # intervals
-    r0_int = np.round(np.linspace(r0_lb, r0_ub, n_inter+1), nround)
-    A_int = np.round(np.linspace(A_lb, A_ub, n_inter+1), nround)
-    # uniform distributions
-    t = -1
-    r0 = np.zeros((n_psf_folder, n_sub_folder))
-    A = np.zeros((n_psf_folder, n_sub_folder))
-    idr0 = np.zeros((n_psf_folder, n_sub_folder), dtype='int')
-    idA = np.zeros((n_psf_folder, n_sub_folder), dtype='int')
-
-    for k in range(n_inter):
-        for j in range(n_inter):
-            t = t+1
-            # uniform distribution for each interval
-            r0[:, t] = r0_int[k] + (r0_int[k+1] - r0_int[k])*uniform(size=n_psf_folder)
-            A[:, t] = A_int[j] + (A_int[j+1] - A_int[j])*uniform(size=n_psf_folder)
-            idr0[:, t] = k*np.ones(n_psf_folder)
-            idA[:, t] = j*np.ones(n_psf_folder)
-            # CREATING SUBFOLDERS
-            if save_path:
-                # define subfolders name
-                idsub = 'r0_' + str(r0_int[k]) + '_sig2_' + str(A_int[j])
-                # create subdirectories
-                path_folder = save_path + idsub
-                if not os.path.isdir(path_folder):
-                    os.mkdir(path_folder)
-
+    val, inter, idxs = generate_parameters_values(bounds, wvl_fact, n_inter,
+                                                  n_psf_folder, n_sub_folder,
+                                                  nround, nmodes=nmodes,
+                                                  add_static=add_static,
+                                                  save_path=save_path,
+                                                  main_param=main_param)
+    r0, C, sig2, ax, pe, be, stat = val
+    inter_1, inter_2 = inter
+    id_1, id_2 = idxs
     r053 = r0 **(-5.0/3.0)
-
-    # -------------------  DEFINING SECONDARY PARAMETERS
-    C = uniform(low=C_lb, high=C_ub, size=n_psf_folder)
-    ax = uniform(low=ax_lb, high=ax_ub, size=n_psf_folder)
-    pe = np.linspace(p_lb, p_ub, n_psf_folder)
-    be = uniform(low=beta_lb, high=beta_ub, size=n_psf_folder)
-    if add_static:
-        stat = uniform(low=stat_lb, high=stat_ub, size=(nmodes, n_psf_folder))
 
     #%% LOOPS
     pix2freq = 1/(psfao.ao.tel.D * psfao.freq.sampRef)**2
@@ -162,9 +113,11 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
         # DERIVING THE AO-CORRECTED PSD
         psd_in, _ = psfao.psfao_19.psd([1, 0, 1, ax[j], pe[j], 0, be[j]])
         psd_in -= psfao.psfao_19._vk
+        if main_param[0]=="stat":
+            psd_fit = r053[j]*psfao.freq.psdKolmo_
 
         # DERIVING THE TELESCOPE OTF
-        if add_static:
+        if add_static and main_param[0]=="r0":
             otf_stat, _, _ = FourierUtils.getStaticOTF(psfao.ao.tel,
                                                       psfao.freq.nOtf,
                                                       psfao.freq.sampRef,
@@ -176,11 +129,20 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
 
         for k in range(n_sub_folder):
             # Total PSD
-            psd = r053[j, k] *(psfao.freq.psdKolmo_) + \
-                  psfao.freq.mskIn_ *(C[j] + psd_in * A[j, k])
+            psd = psfao.freq.mskIn_ *(C[j] + psd_in * sig2[j, k])
+            if main_param[0]=="stat":
+                psd += psd_fit
+
             # COMPUTING THE PSF
             Bphi = fft.fft2(fft.fftshift(psd)) * pix2freq
             Dphi = np.real(2*(Bphi.max() - Bphi))
+            if add_static and main_param[0]=="stat":
+                otf_stat, _, _ = FourierUtils.getStaticOTF(psfao.ao.tel,
+                                                          psfao.freq.nOtf,
+                                                          psfao.freq.sampRef,
+                                                          psfao.freq.wvlRef,
+                                                          xStat=stat[:, j, k])
+                otf_stat = fft.fftshift(otf_stat)
             psf_i = np.real(fft.fftshift(fft.ifft2(otf_stat * np.exp(-0.5*Dphi))))
 
             # ADDING THE NOISE
@@ -197,24 +159,31 @@ def generate_psf(path_ini, n_inter=10, n_psf_folder=3500, add_static=0, nmodes=9
             # SAVING
             if save_path:
                 # psf name
-                if add_static:
-                    s = ['_m'+str(nn+1)+'_' + str(round(stat[nn, j], nround))
-                         for nn in range(nmodes)]
-                    str_stat = ''.join(s)
                 if mag:
                     str_mag = '_mag_' + str(mag)
 
-                idpsf = psf_prefix + '_r0_' \
-                            + str(round(r0[j, k], nround))\
-                            + '_bg_' + str(round(C[j], nround))\
-                            + '_s2_' + str(round(A[j, k], nround))\
-                            + '_ax_' + str(round(ax[j], nround))\
-                            + '_pe_' + str(round(pe[j], nround))\
-                            + '_be_' + str(round(be[j], nround))\
-                            + str_stat + str_mag  +  '_norm_'  + str(norm)
+                idpsf = psf_prefix + '_r0_'
+                if main_param[0]=="r0":
+                    idpsf+= str(round(r0[j, k], nround))
+                    if add_static:
+                        s = ['_m'+str(nn+1)+'_' + str(round(stat[nn, j], nround))
+                             for nn in range(nmodes)]
+                        str_stat = ''.join(s)
+                else:
+                    idpsf+= str(round(r0[j], nround))
+                    s = ['_m'+str(nn+1)+'_' + str(round(stat[nn, j, k], nround))
+                             for nn in range(nmodes)]
+                    str_stat = ''.join(s)
+
+                idpsf += '_bg_' + str(round(C[j], nround))\
+                       + '_s2_' + str(round(sig2[j, k], nround))\
+                       + '_ax_' + str(round(ax[j], nround))\
+                       + '_pe_' + str(round(pe[j], nround))\
+                       + '_be_' + str(round(be[j], nround))
+                idpsf += str_stat + str_mag  +  '_norm_'  + str(norm)
 
                 # corresponding subfolders
-                idsub = 'r0_' + str(r0_int[idr0[j, k]]) + '_sig2_' + str(A_int[idA[j, k]])
+                idsub = main_param[0]+'_' + str(inter_1[id_1[j, k]]) + '_sig2_' + str(inter_2[id_2[j, k]])
                 # save
                 hdu = fits.PrimaryHDU(psf_i)
                 hdu.writeto(save_path + idsub + '/' + idpsf + '.fits', overwrite=True)
@@ -316,3 +285,103 @@ def split_test_data(path_folder, n_sub_folder=10, mode=511):
             path_file_old = os.path.join(path_test, file_name)
             path_file_new = os.path.join(path_test_k, file_name)
             os.rename(path_file_old, path_file_new)
+
+def generate_parameters_values(bounds, wvl_fact, n_inter, n_psf_folder, n_sub_folder,
+                               nround, nmodes=None, add_static=False, save_path=None,
+                               main_param=["r0", "sig2"]):
+    """
+    Generate lists of random values for the parameters
+    """
+
+    if (len(bounds[0]) == 0) or (len(bounds[1]) == 0):
+        raise ValueError('Bounds can not be empty')
+    if len(bounds[0]) != len(bounds[1]):
+        raise ValueError('Bounds must be of same size')
+    if (not add_static) and ((len(bounds[0]) < 6) or (len(bounds[1]) < 6)):
+        raise ValueError('You must provide bounds values of the 6 parameters')
+    if add_static and ((len(bounds[0]) < 7) or (len(bounds[1]) < 7)):
+        raise ValueError('Bounds on static aberrations must be provided as well')
+
+    wvl = 2*np.pi*1e-9/wvl_fact
+
+    r0_lb = bounds[0][0]*(wvl/500e-9)**1.2
+    r0_ub = bounds[1][0]*(wvl/500e-9)**1.2
+    sig2_lb_nm = bounds[0][2]
+    sig2_ub_nm = bounds[1][2]
+    C_lb = bounds[0][1]
+    C_ub = bounds[1][1]
+    ax_lb = bounds[0][3]
+    ax_ub = bounds[1][3]
+    p_lb = bounds[0][4]
+    p_ub = bounds[1][4]
+    beta_lb = bounds[0][5]
+    beta_ub = bounds[1][5]
+    if add_static:
+        stat_lb = bounds[0][6] * wvl*1e9
+        stat_ub = bounds[1][6] * wvl*1e9
+
+    # ------------------- DEFINING R0 AND A DISTRIBUTIONS OVER THE WHOLE DATA SETS
+    # bounds
+    if main_param[0]=="r0":
+        x1_lb = r0_lb
+        x1_ub = r0_ub
+        x_1 = np.zeros((n_psf_folder, n_sub_folder))
+    elif main_param[0]=="stat":
+        x1_lb = stat_lb
+        x1_ub = stat_ub
+        x_1 = np.zeros((nmodes, n_psf_folder, n_sub_folder))
+    else:
+        raise ValueError("The first main parameter must be r0 or stat")
+    sig2_lb = (wvl_fact*sig2_lb_nm)**2
+    sig2_ub = (wvl_fact*sig2_ub_nm)**2
+
+    # intervals
+    x_int = np.round(np.linspace(x1_lb, x1_ub, n_inter+1), nround)
+    sig2_int = np.round(np.linspace(sig2_lb, sig2_ub, n_inter+1), nround)
+    # uniform distributions
+    t = -1
+    sig2 = np.zeros((n_psf_folder, n_sub_folder))
+    id_x = np.zeros((n_psf_folder, n_sub_folder), dtype='int')
+    id_sig2 = np.zeros((n_psf_folder, n_sub_folder), dtype='int')
+
+    for k in range(n_inter):
+        for j in range(n_inter):
+            t = t+1
+            # uniform distribution for each interval
+            if main_param[0]=="r0":
+                x_1[:, t] = x_int[k] + (x_int[k+1] - x_int[k])*uniform(size=n_psf_folder)
+            else:
+                x_1[:, :, t] = x_int[k] + (x_int[k+1] - x_int[k])*uniform(size=(nmodes, n_psf_folder))
+            sig2[:, t] = sig2_int[j] + (sig2_int[j+1] - sig2_int[j])*uniform(size=n_psf_folder)
+            id_x[:, t] = k*np.ones(n_psf_folder)
+            id_sig2[:, t] = j*np.ones(n_psf_folder)
+            # CREATING SUBFOLDERS
+            if save_path:
+                # define subfolders name
+                idsub = main_param[0] + '_' + str(x_int[k]) + '_sig2_' + str(sig2_int[j])
+                # create subdirectories
+                path_folder = save_path + idsub
+                if not os.path.isdir(path_folder):
+                    os.mkdir(path_folder)
+
+    # -------------------  DEFINING SECONDARY PARAMETERS
+    stat = None
+    C = uniform(low=C_lb, high=C_ub, size=n_psf_folder)
+    ax = uniform(low=ax_lb, high=ax_ub, size=n_psf_folder)
+    pe = np.linspace(p_lb, p_ub, n_psf_folder)
+    be = uniform(low=beta_lb, high=beta_ub, size=n_psf_folder)
+
+    if main_param[0]=="r0":
+        r0 = x_1
+        if add_static:
+            stat = uniform(low=stat_lb, high=stat_ub, size=(nmodes, n_psf_folder))
+    else:
+        stat = x_1
+        r0 = uniform(low=r0_lb, high=r0_ub, size=n_psf_folder)
+
+
+    val = (r0, C, sig2, ax, pe, be, stat)
+    inter = (x_int, sig2_int)
+    idxs = (id_x, id_sig2)
+
+    return val, inter, idxs

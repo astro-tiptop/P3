@@ -8,7 +8,6 @@ Created on Thu Feb 11 17:50:20 2021
 
 #%% MANAGE PYTHON LIBRAIRIES
 import time
-import sys
 import numpy as np
 import numpy.fft as fft
 from maoppy.psfmodel import Psfao
