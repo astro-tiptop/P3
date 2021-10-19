@@ -46,7 +46,8 @@ def generate_psf(path_ini, n_inter=10, main_param=["r0", "sig2"], n_psf_folder=3
     psfao = psfao21(path_ini)
     wvl = psfao.freq.wvlRef
     wvl_fact = 2*np.pi*1e-9/wvl
-
+    if main_param[0]=="stat":
+        add_static=True
     #%% CHECKING THE NUMBER OF MODES
     if add_static:
         if nmodes is None:
@@ -68,6 +69,7 @@ def generate_psf(path_ini, n_inter=10, main_param=["r0", "sig2"], n_psf_folder=3
     id_noise = 'NO'
     id_static = 'NO'
     id_mag = ""
+    id_instru = "_" + psfao.ao.cam.tag
     if add_static:
         id_static = ''
     if mag:
@@ -86,7 +88,7 @@ def generate_psf(path_ini, n_inter=10, main_param=["r0", "sig2"], n_psf_folder=3
         else:
             psf_prefix = 'psf'
 
-        save_main_folder = 'PSFAO21_' + id_noise + 'NOISE_' + id_static + "STATIC" + id_mag + "/"
+        save_main_folder = 'PSFAO21_' + id_noise + 'NOISE_' + id_static + "STATIC" + id_mag + id_instru + "/"
         save_path = os.path.join(save_path, save_main_folder)
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
@@ -101,7 +103,7 @@ def generate_psf(path_ini, n_inter=10, main_param=["r0", "sig2"], n_psf_folder=3
     r0, C, sig2, ax, pe, be, stat = val
     inter_1, inter_2 = inter
     id_1, id_2 = idxs
-    r053 = r0 **(-5.0/3.0)
+    r053 = r0**(-5.0/3.0)
 
     #%% LOOPS
     pix2freq = 1/(psfao.ao.tel.D * psfao.freq.sampRef)**2
@@ -162,24 +164,24 @@ def generate_psf(path_ini, n_inter=10, main_param=["r0", "sig2"], n_psf_folder=3
                 if mag:
                     str_mag = '_mag_' + str(mag)
 
-                idpsf = psf_prefix + '_r0_'
+                idpsf = psf_prefix
                 if main_param[0]=="r0":
-                    idpsf+= str(round(r0[j, k], nround))
+                    idpsf+=  '_r0_' + str(round(r0[j, k], nround))
                     if add_static:
                         s = ['_m'+str(nn+1)+'_' + str(round(stat[nn, j], nround))
                              for nn in range(nmodes)]
                         str_stat = ''.join(s)
                 else:
-                    idpsf+= str(round(r0[j], nround))
+                    idpsf+=  ('_r0_' + str(round(r0[j], nround)))*(len(np.unique(r0))!=1)
                     s = ['_m'+str(nn+1)+'_' + str(round(stat[nn, j, k], nround))
                              for nn in range(nmodes)]
                     str_stat = ''.join(s)
 
-                idpsf += '_bg_' + str(round(C[j], nround))\
+                idpsf += ('_bg_' + str(round(C[j], nround)))*(len(np.unique(C))!=1)\
                        + '_s2_' + str(round(sig2[j, k], nround))\
-                       + '_ax_' + str(round(ax[j], nround))\
-                       + '_pe_' + str(round(pe[j], nround))\
-                       + '_be_' + str(round(be[j], nround))
+                       + ('_ax_' + str(round(ax[j], nround)))*(len(np.unique(ax))!=1)\
+                       + ('_pe_' + str(round(pe[j], nround)))*(len(np.unique(pe))!=1)\
+                       + ('_be_' + str(round(be[j], nround)))*(len(np.unique(be))!=1)
                 idpsf += str_stat + str_mag  +  '_norm_'  + str(norm)
 
                 # corresponding subfolders
@@ -209,8 +211,6 @@ def generate_psf(path_ini, n_inter=10, main_param=["r0", "sig2"], n_psf_folder=3
             n_test = int(n_test * n_psf_folder * n_sub_folder)
 
         n_test_folder = int(n_test/n_sub_folder) # test data per sub-folders
-        print(n_test)
-        print(n_test_folder)
         for folder in list_folders:
             # list files within the sub-folder
             sub_path = os.path.join(save_path, folder)
@@ -302,23 +302,25 @@ def generate_parameters_values(bounds, wvl_fact, n_inter, n_psf_folder, n_sub_fo
     if add_static and ((len(bounds[0]) < 7) or (len(bounds[1]) < 7)):
         raise ValueError('Bounds on static aberrations must be provided as well')
 
+    def check_bounds(low_bound, high_bound, fact=1):
+        return low_bound*fact, high_bound*fact
+
+    def generate_distribution(low_bound, high_bound, size, type_distribution="uniform"):
+        if type_distribution=="uniform":
+            return uniform(low=low_bound, high=high_bound, size=size)
+        elif type_distribution=="linspace":
+            return np.linspace(low_bound, high_bound, size)
+
     wvl = 2*np.pi*1e-9/wvl_fact
 
-    r0_lb = bounds[0][0]*(wvl/500e-9)**1.2
-    r0_ub = bounds[1][0]*(wvl/500e-9)**1.2
-    sig2_lb_nm = bounds[0][2]
-    sig2_ub_nm = bounds[1][2]
-    C_lb = bounds[0][1]
-    C_ub = bounds[1][1]
-    ax_lb = bounds[0][3]
-    ax_ub = bounds[1][3]
-    p_lb = bounds[0][4]
-    p_ub = bounds[1][4]
-    beta_lb = bounds[0][5]
-    beta_ub = bounds[1][5]
+    r0_lb, r0_ub = check_bounds(bounds[0][0], bounds[1][0], fact=(wvl/500e-9)**1.2)
+    C_lb, C_ub = check_bounds(bounds[0][1], bounds[1][1])
+    sig2_lb_nm, sig2_ub_nm = check_bounds(bounds[0][2], bounds[1][2])
+    ax_lb, ax_ub = check_bounds(bounds[0][3], bounds[1][3])
+    p_lb, p_ub = check_bounds(bounds[0][4], bounds[1][4])
+    beta_lb, beta_ub = check_bounds(bounds[0][5], bounds[1][5])
     if add_static:
-        stat_lb = bounds[0][6] * wvl*1e9
-        stat_ub = bounds[1][6] * wvl*1e9
+        stat_lb, stat_ub = check_bounds(bounds[0][6], bounds[1][6], fact=wvl*1e9)
 
     # ------------------- DEFINING R0 AND A DISTRIBUTIONS OVER THE WHOLE DATA SETS
     # bounds
@@ -366,19 +368,18 @@ def generate_parameters_values(bounds, wvl_fact, n_inter, n_psf_folder, n_sub_fo
 
     # -------------------  DEFINING SECONDARY PARAMETERS
     stat = None
-    C = uniform(low=C_lb, high=C_ub, size=n_psf_folder)
-    ax = uniform(low=ax_lb, high=ax_ub, size=n_psf_folder)
-    pe = np.linspace(p_lb, p_ub, n_psf_folder)
-    be = uniform(low=beta_lb, high=beta_ub, size=n_psf_folder)
+    C = generate_distribution(C_lb, C_ub, n_psf_folder)
+    ax = generate_distribution(ax_lb, ax_ub, n_psf_folder)
+    pe = generate_distribution(p_lb, p_ub, n_psf_folder, type_distribution="linspace")
+    be = generate_distribution(beta_lb, beta_ub, n_psf_folder)
 
     if main_param[0]=="r0":
         r0 = x_1
         if add_static:
-            stat = uniform(low=stat_lb, high=stat_ub, size=(nmodes, n_psf_folder))
+            stat = generate_distribution(stat_lb, stat_ub, (nmodes, n_psf_folder))
     else:
         stat = x_1
-        r0 = uniform(low=r0_lb, high=r0_ub, size=n_psf_folder)
-
+        r0 = generate_distribution(r0_lb, r0_ub, n_psf_folder)
 
     val = (r0, C, sig2, ax, pe, be, stat)
     inter = (x_int, sig2_int)
