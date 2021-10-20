@@ -246,9 +246,9 @@ class telemetryKASP:
         self.wfs.ron = float(self.data_struct['wfs_ron'])
         self.wfs.nSubap = [int(self.data_struct['wfs_nsubap'])]
         self.wfs.nSlopes = int(self.data_struct['wfs_nslopes'])
-        self.wfs.nExp = int(self.data_struct['wfs_nexp'][0])
         self.wfs.slopes = np.squeeze(self.data_struct['wfs_slopes'][0,0]).T
         self.wfs.slopes -= np.mean(self.wfs.slopes,axis=0)
+        self.wfs.nExp = self.wfs.slopes.shape[0]
 
         # DM
         self.dm.com = np.array(np.dot(self.mat.DMTTRem,np.squeeze(self.data_struct['dm_com'][0,0] ))).T
@@ -284,8 +284,12 @@ class telemetryKASP:
         else:
             # NGS CASE : the tip-tilt is extracted from the WFS slopes
             self.tipTilt.nExp = self.wfs.nExp
-            self.tipTilt.tilt2meter = factor*self.wfs.pixel_scale * self.tel.D/1e3/206264.8
-            self.tipTilt.slopes = self.tipTilt.tilt2meter * self.data_struct['tt_slopes'][0, 0].T
+            if self.data_struct['wfs_algo'][0,0][0]=="geometric":
+                self.tipTilt.tilt2meter = 1
+                self.tipTilt.slopes = np.dot(self.wfs.slopes, self.mat.SlopeTTRem.T)
+            else:
+                self.tipTilt.tilt2meter = factor*self.wfs.pixel_scale * self.tel.D/1e3/206264.8
+                self.tipTilt.slopes = self.tipTilt.tilt2meter * self.data_struct['tt_slopes'][0, 0].T
             self.tipTilt.slopes -= self.tipTilt.slopes.mean(axis=0)
 
         self.tipTilt.com = np.array(np.squeeze(self.data_struct['tt_com'][0, 0] )).T

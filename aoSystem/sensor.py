@@ -34,6 +34,10 @@ class sensor:
                               modulation=modulation) for k in range(self.nWfs)]
 
         # detector class
+        if type(nph)==float:
+            nph = [nph]
+        elif nph is None:
+            nph = [np.inf]
         self.detector = [detector(pixel_scale, fov, binning=binning, spotFWHM=spotFWHM,
                                  nph=nph[k], bandwidth=bandwidth, transmittance=transmittance,
                                  dispersion=dispersion, ron=ron, gain=gain,

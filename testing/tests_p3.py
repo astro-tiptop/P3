@@ -371,5 +371,5 @@ def test_configFile(sd):
 test_Fourier_fitting()
 test_psfao21_instantiation()
 test_psfao21_fitting()
-psfr = test_psfr(path_root)
+psfr, res = test_psfr(path_root)
 res  = test_prime(psfr)

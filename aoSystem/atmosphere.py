@@ -49,7 +49,7 @@ class atmosphere:
     @property
     def seeing(self):
         """Seeing value in arcsec at self.wvl"""
-        return 3600*180/np.pi*0.976**self.p_wvl/self.r0
+        return 3600*180/np.pi*0.976*self.p_wvl/self.r0
 
     @property
     def theta0(self):

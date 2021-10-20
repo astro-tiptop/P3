@@ -100,7 +100,7 @@ class psfR:
             self.dphi_ani = self.dani_focang + self.dani_tt
 
         # COMPUTING THE DETECTOR PIXEL TRANSFER FUNCTION
-        if self.trs.tel.name != 'OOMAO':
+        if self.trs.tel.name!='OOMAO':
             self.otfPixel = self.pixel_optical_transfer_function()
         else:
             self.otfPixel = 1.0
@@ -260,7 +260,7 @@ class psfR:
     def __call__(self, x0, nPix=None):
 
         # ----------------- GETTING THE PARAMETERS
-        (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat) = FourierUtils.sort_params_from_labels(self,x0)
+        (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat) = FourierUtils.sort_params_from_labels(self, x0)
 
         # ----------------- GETTING THE PHASE STRUCTURE FUNCTION
         self.SF = self.phase_structure_function(r0, x0_dphi, Cn2=Cn2)
@@ -381,7 +381,10 @@ class psfR:
         self.wfe[self.ao.cam.tag + " SR"] = 1e2*FourierUtils.getStrehl(self.trs.cam.image,
                                                                        self.ao.tel.pupil,
                                                                        self.freq.sampRef)
-        self.psf = self([self.ao.atm.r0,1,1])
+        if self.ao.atm.nL==1:
+            self.psf = self([self.ao.atm.r0, 1, 1])
+        else:
+            self.psf = self(list(self.ao.atm.weights*self.ao.atm.r0**(-5/3)) +  [1, 1])
         self.wfe['PSFR SR OTF'] = self.SR[0]
         self.wfe["PSFR SR PEAK"] = 1e2*FourierUtils.getStrehl(self.psf, self.ao.tel.pupil,
                                                               self.freq.sampRef)

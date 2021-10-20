@@ -281,13 +281,13 @@ def sort_params_from_labels(psfModelInst, x0):
     xall = x0
 
     # ---------- MANAGING THE CN2 PROFILE
-    if psfModelInst.n_param_atm > 0:
+    if psfModelInst.n_param_atm>0:
         # atmospheric parameters are included into the model
-        nL   = psfModelInst.ao.atm.nL
-        if nL > 1 and psfModelInst.ao.dms.nRecLayers > 1:
+        nL = psfModelInst.ao.atm.nL
+        if nL>1 and psfModelInst.ao.dms.nRecLayers>1:
             # N-LAYERS CASE : FIT OF CN2 in METERS**(-5/3)
-            Cn2  = np.asarray(x0[:nL])
-            r0   = np.sum(Cn2)**(-3/5)
+            Cn2 = np.asarray(x0[:nL])
+            r0 = np.sum(Cn2)**(-3/5)
         else:
             # 1-LAYER CASE : FIT OF r0 in METERS
             Cn2= None
