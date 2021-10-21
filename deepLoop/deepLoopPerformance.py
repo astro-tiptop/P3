@@ -7,16 +7,18 @@ Created on Sun Mar  7 10:02:21 2021
 """
 
 #%% IMPORTING LIBRAIRIES
-import numpy as np
+import time
 import os
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
 import matplotlib.ticker as mtick
-import time
+from tqdm import tqdm
+
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import pandas as pd
 from astropy.table import QTable
 from scipy.stats import linregress
-from tqdm import tqdm
 
 import aoSystem.FourierUtils as FourierUtils
 from psfao21.psfao21 import psfao21
@@ -121,18 +123,6 @@ class deepLoopPerformance:
         # managing display configuration
 
         plt.close('all')
-        # format
-        font = {'weight' : 'normal',
-        'size'   : fontsize,
-        'family': fontfamily,
-        'serif': fontserif}
-        mpl.rc('font', **font)
-        # latex
-        usetex = False
-        if find_executable('tex'):
-            usetex = True
-        text = {'usetex': usetex}
-        mpl.rc('text',**text)
 
         #number of axes in scientific notation
         formatter = mtick.ScalarFormatter(useMathText=False)
@@ -589,3 +579,106 @@ class deepLoopPerformance:
             print('... Done in %.2f s ! '%(time.time() - t0))
 
 # 35421.20 for 10k cases, init=0.1
+def measure_accuracy_metrics(path_test_results):
+    """
+    Read the multiple .txt files from the TEST folder of a given simulation to measure
+    the accuracy on predicted parameters.
+    """
+    # grabbing the paths to the files
+    if not os.path.isdir(path_test_results):
+        raise ValueError("The folder does not exist")
+
+    list_txt = os.listdir(path_test_results)
+    list_txt_all = [path_test_results + file for file in list_txt if '_all' in file]
+    list_txt_all.sort()
+    n_tests = len(list_txt_all)
+
+    # running deepLoopPerformance to get metrics in percents
+    dlp = deepLoopPerformance(list_txt_all)
+    metrics_bias = np.array([dlp.metrics_param[n][:,4] for n in range(n_tests)])
+    metrics_std = np.array([dlp.metrics_param[n][:,5] for n in range(n_tests)])
+
+    # save results
+    bias_mean = np.mean(metrics_bias, axis=0)
+    bias_std = np.std(metrics_bias, axis=0)
+    std_mean = np.mean(metrics_std, axis=0)
+    std_std = np.std(metrics_std, axis=0)
+    d = {'label':dlp.labels[0], 'mean bias [%]':bias_mean, 'bias precision [%]':bias_std,
+         'mean std [%]':std_mean, 'std precision [%]':std_std}
+    df = pd.DataFrame(data=d)
+    return df
+
+def measure_accuracy_metrics_multiple_folders(path_folder):
+    """
+    Grab the accuracy on metrics for multiple tests case and concatenate results
+    """
+    if not os.path.isdir(path_folder):
+        raise ValueError("The folder does not exist")
+
+    tmp = os.listdir(path_folder)
+    list_fold = [path_folder+file for file in tmp if os.path.isdir(path_folder+file)]
+    n_psf = [int(fold.split('_')[-1]) for fold in list_fold]
+    idx = np.argsort(n_psf)
+    list_fold = np.take(list_fold, idx)
+    n_psf = np.take(n_psf, idx)
+    # loop
+    df = pd.DataFrame()
+    for fold in list_fold:
+        df = df.append(measure_accuracy_metrics(fold+"/TEST/"))
+
+    return df, n_psf
+
+def display_metrics_accuracy(df, n_psf, fontsize=22, fontfamily='normal', fontserif='Palatino',
+                 figsize=20, constrained_layout=True):
+    """
+    Display metrics accuracy versus number of training data.
+    """
+    plt.close('all')
+    # format
+    font = {'weight' : 'normal',
+    'size'   : fontsize,
+    'family': fontfamily,
+    'serif': fontserif}
+    mpl.rc('font', **font)
+    # latex
+    usetex = False
+    if find_executable('tex'):
+        usetex = True
+    text = {'usetex': usetex}
+    mpl.rc('text',**text)
+
+
+    # extracting and transforming data
+    r0 = df.loc[0];r0["n_psf"] = n_psf
+    bg = df.loc[1];bg["n_psf"] = n_psf
+    s2 = df.loc[2];s2["n_psf"] = n_psf
+    ax = df.loc[3];ax["n_psf"] = n_psf
+    pe = df.loc[4];pe["n_psf"] = n_psf
+    be = df.loc[5];be["n_psf"] = n_psf
+
+    # plot
+    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(figsize,figsize),
+                            constrained_layout=constrained_layout)
+    # bias
+    axs[0].errorbar(n_psf, (r0["mean bias [%]"]), yerr=r0["bias precision [%]"], fmt='bo-', label='r0')
+    axs[0].errorbar(n_psf, (bg["mean bias [%]"]), yerr=bg["bias precision [%]"], fmt='gs-', label='bg')
+    axs[0].errorbar(n_psf, (s2["mean bias [%]"]), yerr=s2["bias precision [%]"], fmt='r8-', label='s2')
+    axs[0].errorbar(n_psf, (ax["mean bias [%]"]), yerr=ax["bias precision [%]"], fmt='cp-', label='ax')
+    axs[0].errorbar(n_psf, (pe["mean bias [%]"]), yerr=pe["bias precision [%]"], fmt='mP-', label='pe')
+    axs[0].errorbar(n_psf, (be["mean bias [%]"]), yerr=be["bias precision [%]"], fmt='yD-', label='be')
+    axs[0].legend()
+    axs[0].set_xlabel("\# training PSF")
+    axs[0].set_ylabel("Relative bias [\%]")
+    axs[0].grid('on')
+
+    axs[1].errorbar(n_psf, (r0["mean std [%]"]), yerr=r0["std precision [%]"], fmt='bo-', label='r0')
+    axs[1].errorbar(n_psf, (bg["mean std [%]"]), yerr=bg["std precision [%]"], fmt='gs-', label='bg')
+    axs[1].errorbar(n_psf, (s2["mean std [%]"]), yerr=s2["std precision [%]"], fmt='r8-', label='s2')
+    axs[1].errorbar(n_psf, (ax["mean std [%]"]), yerr=ax["std precision [%]"], fmt='cp-', label='ax')
+    axs[1].errorbar(n_psf, (pe["mean std [%]"]), yerr=pe["std precision [%]"], fmt='mP-', label='pe')
+    axs[1].errorbar(n_psf, (be["mean std [%]"]), yerr=be["std precision [%]"], fmt='yD-', label='be')
+    axs[1].legend()
+    axs[1].set_xlabel("\# training PSF")
+    axs[1].set_ylabel("Relative precision [\%]")
+    axs[1].set_yscale('log')
+    axs[1].grid('on')

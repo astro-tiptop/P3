@@ -15,6 +15,7 @@ from psfr.psfR import psfR
 from psfFitting.psfFitting import psfFitting
 from psfFitting.psfFitting import displayResults
 from telemetry.telemetryKeck import telemetryKeck
+from telemetry.telemetryKASP import telemetryKASP
 from telemetry.systemDiagnosis import systemDiagnosis
 from telemetry.configFile import configFile
 import tqdm
@@ -234,6 +235,58 @@ def unpack_results(psfr, res):
             PSFWHMX, PSFWHMY, MSE]
 
     return data
+#%% PSFR ON SIMULATED DATA
+def psfr_kasp_simulations(path_save, patterns=None, true_r0=True):
+    """
+    Run the psfr algorithm on all .mat file whose name contains the strings pattern
+    and returns PSF metrics.
+    """
+    # grabbing and filtering the files
+    if not os.path.isdir(path_save):
+        raise ValueError("the folder does not exist")
+
+    list_files = os.listdir(path_save)
+    if patterns is not None and type(patterns)==list:
+        for pattern in patterns:
+            list_files = [file for file in list_files if pattern in file]
+
+    list_files.sort()
+
+    # run psfr
+    def run_psfr_from_kasp(path_mat, path_save, true_r0=True):
+        # grab and transform the data
+        trs = telemetryKASP(path_mat, path_save=path_save)
+        # data processing : r0/noise estimation
+        r0_true = trs.atm.r0
+        L0_true = trs.atm.L0
+        sd = systemDiagnosis(trs, noiseMethod='nonoise')
+        r0_tel = trs.atm.r0_tel
+        L0_tel = trs.atm.L0_tel
+        if true_r0:
+            trs.atm.r0_tel = r0_true
+            trs.atm.r0 = r0_true
+            trs.atm.L0_tel = L0_true
+            trs.atm.L0 = L0_true
+            trs.atm.seeing = 3600*180/np.pi*0.978*trs.atm.wvl/r0_true
+        # write the .ini file
+        configFile(sd)
+        # get the psf
+        psfr = psfR(trs)
+        trs.atm.r0_tel = r0_tel
+        trs.atm.L0_tel = L0_tel
+        return psfr
+
+    metrics=[]
+    for file in tqdm.tqdm(list_files):
+        # run psfr
+        psfr = run_psfr_from_kasp(file, path_save, true_r0=true_r0)
+        # append metrics
+        metrics.append([psfr.SR[0]/1e2], psfr.trs.cam.strehl,
+                       psfr.trs.atm.r0_tel, psfr.trs.L0_tel,
+                       psfr.trs.atm.tau0_tel, psfr.trs.atm.v0_tel)
+
+    return metrics, list_files
+
 #%% PROCESSING
 def merge_dataframe(save_folder, tocsv=False):
     """

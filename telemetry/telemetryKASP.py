@@ -285,8 +285,8 @@ class telemetryKASP:
             # NGS CASE : the tip-tilt is extracted from the WFS slopes
             self.tipTilt.nExp = self.wfs.nExp
             if self.data_struct['wfs_algo'][0,0][0]=="geometric":
-                self.tipTilt.tilt2meter = 1
-                self.tipTilt.slopes = np.dot(self.wfs.slopes, self.mat.SlopeTTRem.T)
+                self.tipTilt.tilt2meter = 1e-9
+                self.tipTilt.slopes = self.tipTilt.tilt2meter * self.data_struct['tt_slopes'][0, 0].T
             else:
                 self.tipTilt.tilt2meter = factor*self.wfs.pixel_scale * self.tel.D/1e3/206264.8
                 self.tipTilt.slopes = self.tipTilt.tilt2meter * self.data_struct['tt_slopes'][0, 0].T

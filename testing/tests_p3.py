@@ -271,7 +271,7 @@ def test_kasp_psfr(path_mat, path_save, true_r0=True, tol=1e-5):
 
     # get the psf
     psfr = psfR(trs)
-    if psfr.ao.atm.nL > 1:
+    if psfr.ao.atm.nL>1:
         Cn2 = list(psfr.ao.atm.weights * psfr.ao.atm.r0**(-5/3))
     else:
         Cn2 = [psfr.ao.atm.r0]
