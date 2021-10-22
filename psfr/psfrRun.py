@@ -279,11 +279,11 @@ def psfr_kasp_simulations(path_save, patterns=None, true_r0=True):
     metrics=[]
     for file in tqdm.tqdm(list_files):
         # run psfr
-        psfr = run_psfr_from_kasp(file, path_save, true_r0=true_r0)
+        psfr = run_psfr_from_kasp(path_save+file, path_save, true_r0=true_r0)
         # append metrics
-        metrics.append([psfr.SR[0]/1e2], psfr.trs.cam.strehl,
-                       psfr.trs.atm.r0_tel, psfr.trs.L0_tel,
-                       psfr.trs.atm.tau0_tel, psfr.trs.atm.v0_tel)
+        metrics.append([psfr.SR[0]/1e2, psfr.trs.cam.strehl,
+                       psfr.trs.atm.r0_tel, psfr.trs.atm.L0_tel,
+                       psfr.trs.atm.tau0_tel, psfr.trs.atm.v0_tel])
 
     return metrics, list_files
 
