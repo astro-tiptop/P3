@@ -633,7 +633,6 @@ def display_metrics_accuracy(df, n_psf, fontsize=22, fontfamily='normal', fontse
     """
     Display metrics accuracy versus number of training data.
     """
-    plt.close('all')
     # format
     font = {'weight' : 'normal',
     'size'   : fontsize,

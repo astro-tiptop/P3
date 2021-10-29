@@ -26,7 +26,8 @@ class psfR:
     """
     """
     # INIT
-    def __init__(self, trs, path_root='', nLayer=None, theta_ext=0):
+    def __init__(self, trs, path_root='', nLayer=None, theta_ext=0,
+                 compute_dphi_jitter=True):
         """
         Instantiating the psf-reconstruction model from a telemetry object
         """
@@ -40,6 +41,7 @@ class psfR:
         self.path_ini = trs.path_ini
         self.trs = trs
         self.theta_ext = theta_ext
+        self.compute_dphi_jitter = compute_dphi_jitter
         self.ao = aoSystem(self.path_ini, path_root=path_root)
 
         # defining the number of model parameters
@@ -82,7 +84,10 @@ class psfR:
         self.t_dalias = 1000*(time.time() - tstart) - self.t_dfit
 
         # INSTANTIATING THE TT RESIDUAL PHASE STRUCTURE FUNCTION IN LGS MODE
-        self.dphi_tt = self.jitter_phase_structure_function()
+        if compute_dphi_jitter:
+            self.dphi_tt = self.jitter_phase_structure_function()
+        else:
+            self.dphi_tt = 0*self.dphi_fit
         self.t_dtt = 1000*(time.time() - tstart) - self.t_dalias
 
         # INSTANTIATING THE AO RESIDUAL PHASE STRUCTURE FUNCTION
@@ -175,7 +180,7 @@ class psfR:
                                                          kind='spline')
         return dphi_alias
 
-    def residual_phase_structure_function(self, method='slopes-based', basis='Vii'):
+    def residual_phase_structure_function(self, method='dm-based', basis='Vii'):
         """
         Computes the phase structure function of the tip-tilt-excluded
         residual phase.
@@ -323,10 +328,15 @@ class psfR:
         self.wfe['SERVO-LAG'] = 1e9*np.sqrt(C.trace()/self.trs.dm.nCom)
 
         #6. RESIDUAL TIP-TILT
-        C = self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt
+        if self.compute_dphi_jitter:
+            C = self.Ctt - (1+self.trs.ttloop.tf.pn)*self.trs.tipTilt.Cn_tt
+            sr_tt = np.sum(otf_dl * np.exp(-0.5*self.dphi_tt))/S
+            self.wfe['TIP-TILT'] = np.sqrt(sr2fwe(sr_tt)**2 - self.wfe['TT NOISE']**2)
+        else:
+            F = self.trs.mat.DMTTRem
+            C = np.dot(F, np.dot(C, F.T))
+            self.wfe['TIP-TILT'] = 0
         self.wfe['TIP-TILT-WFE'] = np.sqrt(C.trace()/2)*1e9
-        sr_tt = np.sum(otf_dl * np.exp(-0.5*self.dphi_tt))/S
-        self.wfe['TIP-TILT'] = np.sqrt(sr2fwe(sr_tt)**2 - self.wfe['TT NOISE']**2)
 
         #7. PIXEL TF
         sr_pixel = np.sum(otf_dl * self.otfPixel)/S

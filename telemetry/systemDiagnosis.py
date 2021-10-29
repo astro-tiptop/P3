@@ -348,7 +348,7 @@ class systemDiagnosis:
 
         # ---- DATA-FITTING WITH A LEVENBERG-MARQUARDT ALGORITHM
         # minimization
-        x0 = np.array([0.2, 25])
+        x0 = np.array([0.2, 50])
         self.res_r0 = least_squares(cost, x0, method='trf', ftol=tol, xtol=tol,
                                     gtol=tol, max_nfev=max_nfev, verbose=max(verbose,0),
                                     bounds=([0.01,1],[1,100]))
@@ -362,7 +362,7 @@ class systemDiagnosis:
 
         # ---- MEASURING THE COHERENCE TIME
         # measuring the windspeed
-        v0, dv0  = self.get_wind_speed(noise=noise,quantile=quantile,nWin=nWin)
+        v0, dv0  = self.get_wind_speed(noise=noise, quantile=quantile, nWin=nWin)
         # computing the coherence time (Roddier+81)
         tau0 = 0.314 * r0/v0
 

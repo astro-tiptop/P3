@@ -236,7 +236,8 @@ def unpack_results(psfr, res):
 
     return data
 #%% PSFR ON SIMULATED DATA
-def psfr_kasp_simulations(path_save, patterns=None, true_r0=True):
+def psfr_kasp_simulations(path_save, patterns=None, true_r0=True,
+                          compute_dphi_jitter=False):
     """
     Run the psfr algorithm on all .mat file whose name contains the strings pattern
     and returns PSF metrics.
@@ -253,13 +254,14 @@ def psfr_kasp_simulations(path_save, patterns=None, true_r0=True):
     list_files.sort()
 
     # run psfr
-    def run_psfr_from_kasp(path_mat, path_save, true_r0=True):
+    def run_psfr_from_kasp(path_mat, path_save, true_r0=True,
+                           compute_dphi_jitter=False):
         # grab and transform the data
         trs = telemetryKASP(path_mat, path_save=path_save)
         # data processing : r0/noise estimation
         r0_true = trs.atm.r0
         L0_true = trs.atm.L0
-        sd = systemDiagnosis(trs, noiseMethod='nonoise')
+        sd = systemDiagnosis(trs, noiseMethod='nonoise', noise=0)
         r0_tel = trs.atm.r0_tel
         L0_tel = trs.atm.L0_tel
         if true_r0:
@@ -271,7 +273,7 @@ def psfr_kasp_simulations(path_save, patterns=None, true_r0=True):
         # write the .ini file
         configFile(sd)
         # get the psf
-        psfr = psfR(trs)
+        psfr = psfR(trs, compute_dphi_jitter=compute_dphi_jitter)
         trs.atm.r0_tel = r0_tel
         trs.atm.L0_tel = L0_tel
         return psfr
@@ -279,13 +281,48 @@ def psfr_kasp_simulations(path_save, patterns=None, true_r0=True):
     metrics=[]
     for file in tqdm.tqdm(list_files):
         # run psfr
-        psfr = run_psfr_from_kasp(path_save+file, path_save, true_r0=true_r0)
+        psfr = run_psfr_from_kasp(path_save+file, path_save, true_r0=true_r0,
+                                  compute_dphi_jitter=compute_dphi_jitter)
         # append metrics
-        metrics.append([psfr.SR[0]/1e2, psfr.trs.cam.strehl,
-                       psfr.trs.atm.r0_tel, psfr.trs.atm.L0_tel,
-                       psfr.trs.atm.tau0_tel, psfr.trs.atm.v0_tel])
+        metrics.append([psfr.trs.cam.strehl, psfr.SR[0]/1e2, psfr.wfe["PSFR SR PEAK"]/1e2,
+                       psfr.trs.atm.r0_tel, psfr.trs.atm.L0_tel, psfr.trs.atm.tau0_tel, psfr.trs.atm.v0_tel,
+                       psfr.trs.atm.r0, psfr.trs.atm.L0, psfr.ao.atm.tau0*1e3, psfr.ao.atm.meanWind])
 
-    return metrics, list_files
+    # get the dataframe
+    df = pd.DataFrame(metrics)
+    df = df.rename(columns={0:'SR CAMERA',1:'SR PSFR OTF', 2:'SR PSFR PEAK',
+                       3:'R0', 4:'L0', 5:'TAU0', 6:'V0',
+                       7:'TRUE R0', 8:'TRUE L0', 9:'TRUE TAU0', 10:'TRUE V0'})
+
+    return df
+
+def plot_kasp_psfr_results(df):
+    """
+    Plot results from PSFR on KASP data
+    """
+    plt.close('all')
+
+    # SR VERSUS TRUE r0
+    plt.figure()
+    plt.scatter(df["TRUE R0"], df["SR CAMERA"], label="CAMERA")
+    plt.scatter(df["TRUE R0"], df["SR PSFR OTF"], label="PSFR")
+    plt.xlabel('Simulation r0 [m]')
+    plt.ylabel('Strehl-ratio')
+    plt.legend()
+    plt.grid('on')
+
+
+    # telemetry 0 VERSUS TRUE r0
+    plt.figure()
+    plt.scatter(df["TRUE R0"], df["R0"])
+    plt.xlabel('Simulation r0 [m]')
+    plt.ylabel('Estimated r0 [m]')
+    r0_min = df[["TRUE R0", "R0"]].min().min()
+    r0_max = df[["TRUE R0", "R0"]].max().max()
+    plt.plot([r0_min, r0_max], [r0_min, r0_max], 'k--')
+    plt.grid('on')
+    ax = plt.gca()
+    ax.set_aspect('equal')
 
 #%% PROCESSING
 def merge_dataframe(save_folder, tocsv=False):

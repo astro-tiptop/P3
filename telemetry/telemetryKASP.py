@@ -246,12 +246,17 @@ class telemetryKASP:
         self.wfs.ron = float(self.data_struct['wfs_ron'])
         self.wfs.nSubap = [int(self.data_struct['wfs_nsubap'])]
         self.wfs.nSlopes = int(self.data_struct['wfs_nslopes'])
+        # the slopes are not TT-filtered
         self.wfs.slopes = np.squeeze(self.data_struct['wfs_slopes'][0,0]).T
-        self.wfs.slopes -= np.mean(self.wfs.slopes,axis=0)
+        self.wfs.slopes -= np.mean(self.wfs.slopes, axis=0)
         self.wfs.nExp = self.wfs.slopes.shape[0]
 
         # DM
-        self.dm.com = np.array(np.dot(self.mat.DMTTRem,np.squeeze(self.data_struct['dm_com'][0,0] ))).T
+        if len(self.data_struct['lgs_azimuth'][0,0]) > 0:
+            self.dm.com = np.array(np.dot(self.mat.DMTTRem,np.squeeze(self.data_struct['dm_com'][0,0] ))).T
+        else:
+            self.dm.com = np.squeeze(self.data_struct['dm_com'][0,0]).T
+
         self.dm.com -= np.mean(self.dm.com,axis=0)
         self.dm.validActuators = self.data_struct['dm_validactu'][0,0]
         self.dm.nActuators = [int(self.data_struct['dm_nactu'])]
@@ -264,7 +269,11 @@ class telemetryKASP:
         self.wfs.dsub = [float(self.data_struct['wfs_dsub'])]
 
         # RESIDUAL WAVEFRONT
-        self.mat.R = np.array(np.dot(self.mat.DMTTRem,np.dot(self.mat.M,self.mat.SlopeTTRem))).T
+        if len(self.data_struct['lgs_azimuth'][0,0]) > 0:
+            self.mat.R = np.array(np.dot(self.mat.DMTTRem,np.dot(self.mat.M,self.mat.SlopeTTRem))).T
+        else:
+            self.mat.R = np.array(self.mat.M).T
+
         self.rec.res = np.dot(self.wfs.slopes, self.mat.R)
         self.rec.res -= np.mean(self.rec.res, axis=0)
         self.rec.wfe = 1e9*np.sqrt((self.rec.res.std(axis=0)**2).sum()/self.dm.nCom)
@@ -285,7 +294,7 @@ class telemetryKASP:
             # NGS CASE : the tip-tilt is extracted from the WFS slopes
             self.tipTilt.nExp = self.wfs.nExp
             if self.data_struct['wfs_algo'][0,0][0]=="geometric":
-                self.tipTilt.tilt2meter = 1e-9
+                self.tipTilt.tilt2meter = 1e-9 #tbd
                 self.tipTilt.slopes = self.tipTilt.tilt2meter * self.data_struct['tt_slopes'][0, 0].T
             else:
                 self.tipTilt.tilt2meter = factor*self.wfs.pixel_scale * self.tel.D/1e3/206264.8
