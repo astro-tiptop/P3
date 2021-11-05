@@ -105,11 +105,12 @@ class deepLoopPerformance:
         if self.path_ini:
             self.fit = fit
             self.psfao = psfao21(path_ini, path_root=path_root)
-            #managing bounds
-            b_low = [-np.inf,]*25
-            b_up = [np.inf,]*25
+                #managing bounds
+            b_low = [-np.inf,]*(self.nParam[0]+1)
+            b_up = [np.inf,]*(self.nParam[0]+1)
             self.psfao.bounds = (b_low, b_up)
             self.psfao.psfao_19.bounds = (b_low, b_up)
+
             self.init_fit = init
             self.get_psf_metrics(nPSF=nPSF, fit=self.fit, init=self.init_fit,
                                  mag=mag, zP=zP, DIT=DIT, nDIT=nDIT,
@@ -579,7 +580,7 @@ class deepLoopPerformance:
             print('... Done in %.2f s ! '%(time.time() - t0))
 
 # 35421.20 for 10k cases, init=0.1
-def measure_accuracy_metrics(path_test_results):
+def measure_accuracy_metrics(path_test_results, path_ini=None, nPSF=100):
     """
     Read the multiple .txt files from the TEST folder of a given simulation to measure
     the accuracy on predicted parameters.
@@ -594,7 +595,7 @@ def measure_accuracy_metrics(path_test_results):
     n_tests = len(list_txt_all)
 
     # running deepLoopPerformance to get metrics in percents
-    dlp = deepLoopPerformance(list_txt_all)
+    dlp = deepLoopPerformance(list_txt_all, path_ini=path_ini, nPSF=nPSF)
     metrics_bias = np.array([dlp.metrics_param[n][:,4] for n in range(n_tests)])
     metrics_std = np.array([dlp.metrics_param[n][:,5] for n in range(n_tests)])
 
@@ -605,10 +606,34 @@ def measure_accuracy_metrics(path_test_results):
     std_std = np.std(metrics_std, axis=0)
     d = {'label':dlp.labels[0], 'mean bias [%]':bias_mean, 'bias precision [%]':bias_std,
          'mean std [%]':std_mean, 'std precision [%]':std_std}
-    df = pd.DataFrame(data=d)
-    return df
+    df_param = pd.DataFrame(data=d)
 
-def measure_accuracy_metrics_multiple_folders(path_folder):
+    df_psf = None
+    if path_ini is not None:
+        def bias_and_std(err):
+            bias = np.mean(err, axis=0)
+            std = np.std(err, axis=0)
+            return bias.mean(), bias.std(), std.mean(), std.std()
+        SR_err = np.array([(dlp.SR[n][0] - dlp.SR[n][1])/dlp.SR[n][0] for n in range(n_tests)])
+        FW_err = np.array([(dlp.FWHM[n][0] - dlp.FWHM[n][1])/dlp.FWHM[n][0] for n in range(n_tests)])
+        mg_err = np.array([dlp.mag_err[n][0] for n in range(n_tests)])
+
+        SR_bias_mean, SR_bias_std, SR_std_mean, SR_std_std = bias_and_std(SR_err)
+        FW_bias_mean, FW_bias_std, FW_std_mean, FW_std_std = bias_and_std(FW_err)
+        mg_bias_mean, mg_bias_std, mg_std_mean, mg_std_std = bias_and_std(mg_err)
+
+
+        d = {'SR bias mean[%]':[SR_bias_mean], 'SR bias std[%]':[SR_bias_std],
+             'SR std mean[%]':[SR_std_mean], 'SR std std[%]':[SR_std_std],
+             'FWHM bias mean[%]':[FW_bias_mean], 'FWHM bias std[%]':[FW_bias_std],
+             'FWHM std mean[%]':[FW_std_mean], 'FWHM std std[%]':[FW_std_std],
+             'mg bias mean[mag]':[mg_bias_mean], 'mg bias std[mag]':[mg_bias_std],
+             'mg std mean[mag]':[mg_std_mean], 'mg std std[mag]':[mg_std_std]}
+        df_psf = pd.DataFrame(data=d)
+
+    return df_param, df_psf
+
+def measure_accuracy_metrics_multiple_folders(path_folder, path_ini=None, nPSF=100):
     """
     Grab the accuracy on metrics for multiple tests case and concatenate results
     """
@@ -622,14 +647,18 @@ def measure_accuracy_metrics_multiple_folders(path_folder):
     list_fold = np.take(list_fold, idx)
     n_psf = np.take(n_psf, idx)
     # loop
-    df = pd.DataFrame()
+    df_param = pd.DataFrame()
+    df_psf = pd.DataFrame()
     for fold in list_fold:
-        df = df.append(measure_accuracy_metrics(fold+"/TEST/"))
+        df_pa, df_ps = measure_accuracy_metrics(fold+"/TEST/", path_ini=path_ini, nPSF=nPSF)
+        df_param = df_param.append(df_pa)
+        df_psf = df_psf.append(df_ps)
 
-    return df, n_psf
+    return df_param, df_psf, n_psf
 
-def display_metrics_accuracy(df, n_psf, fontsize=22, fontfamily='normal', fontserif='Palatino',
-                 figsize=20, constrained_layout=True):
+def display_metrics_accuracy(df_param, n_psf, df_psf=None, fontsize=22,
+                             fontfamily='normal', fontserif='Palatino',
+                             figsize=20, constrained_layout=True):
     """
     Display metrics accuracy versus number of training data.
     """
@@ -647,13 +676,14 @@ def display_metrics_accuracy(df, n_psf, fontsize=22, fontfamily='normal', fontse
     mpl.rc('text',**text)
 
 
+    # ----------- DISPLAYING BIAS AND PRECISION ON PARAMEERS ERRORS
     # extracting and transforming data
-    r0 = df.loc[0];r0["n_psf"] = n_psf
-    bg = df.loc[1];bg["n_psf"] = n_psf
-    s2 = df.loc[2];s2["n_psf"] = n_psf
-    ax = df.loc[3];ax["n_psf"] = n_psf
-    pe = df.loc[4];pe["n_psf"] = n_psf
-    be = df.loc[5];be["n_psf"] = n_psf
+    r0 = df_param.loc[0];r0["n_psf"] = n_psf
+    bg = df_param.loc[1];bg["n_psf"] = n_psf
+    s2 = df_param.loc[2];s2["n_psf"] = n_psf
+    ax = df_param.loc[3];ax["n_psf"] = n_psf
+    pe = df_param.loc[4];pe["n_psf"] = n_psf
+    be = df_param.loc[5];be["n_psf"] = n_psf
 
     # plot
     fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(figsize,figsize),
@@ -676,6 +706,24 @@ def display_metrics_accuracy(df, n_psf, fontsize=22, fontfamily='normal', fontse
     axs[1].errorbar(n_psf, (ax["mean std [%]"]), yerr=ax["std precision [%]"], fmt='cp-', label='ax')
     axs[1].errorbar(n_psf, (pe["mean std [%]"]), yerr=pe["std precision [%]"], fmt='mP-', label='pe')
     axs[1].errorbar(n_psf, (be["mean std [%]"]), yerr=be["std precision [%]"], fmt='yD-', label='be')
+    axs[1].legend()
+    axs[1].set_xlabel("\# training PSF")
+    axs[1].set_ylabel("Relative precision [\%]")
+    axs[1].set_yscale('log')
+    axs[1].grid('on')
+
+    # ----------- DISPLAYING BIAS AND PRECISION ON PSF METRICS
+    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(figsize,figsize),
+                            constrained_layout=constrained_layout)
+    axs[0].errorbar(n_psf, df_psf["SR bias mean[%]"], yerr=df_psf["SR bias std[%]"], fmt='bo-', label='Strehl-ratio')
+    axs[0].errorbar(n_psf, df_psf["FWHM bias mean[%]"], yerr=df_psf["FWHM bias std[%]"], fmt='r8-', label='FWHM')
+    axs[0].legend()
+    axs[0].set_xlabel("\# training PSF")
+    axs[0].set_ylabel("Relative bias [\%]")
+    axs[0].grid('on')
+
+    axs[1].errorbar(n_psf, df_psf["SR std mean[%]"], yerr=df_psf["SR std std[%]"], fmt='bo-', label='Strehl-ratio')
+    axs[1].errorbar(n_psf, df_psf["FWHM std mean[%]"], yerr=df_psf["FWHM std std[%]"], fmt='r8-', label='FWHM')
     axs[1].legend()
     axs[1].set_xlabel("\# training PSF")
     axs[1].set_ylabel("Relative precision [\%]")
