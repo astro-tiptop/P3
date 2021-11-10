@@ -360,29 +360,32 @@ def remove_tiptilt_from_phase(phase, H_filter, phase_to_coeffs=None):
 
     return phase_filtered.reshape(n_pup, n_pup),  coeffs_filtered
 
-def compute_lwe_wavefront_error(df, path_ini, path_root="", remove_tiptilt=True):
+def compute_lwe_wavefront_error(df, path_ini, path_root=None, remove_tiptilt=True):
     """
     Computes the LWE wavefront error in nm from dataframe df.
     """
     if "FIT MODE0" not in df:
         raise ValueError("There is no LWE data in the data frame")
 
-    # list the columns
+    # subsetting the data frame to get the static coefficients only
     mode_col =  [col for col in df.columns if "FIT MODE" in col]
     df_sub = df[mode_col]
 
-    # grab the modal basis
+    # grab the modal basis as a n_px**2 x n_modes matrix
     psfao = psfao21(path_ini, path_root=path_root)
     n_pup = psfao.ao.tel.resolution
     mat_modes = psfao.ao.tel.statModes.reshape(n_pup**2, psfao.ao.tel.nModes)
     pupil = psfao.ao.tel.pupil
     mat_modes = mat_modes*pupil.reshape(n_pup**2)[:, np.newaxis]
-    # get the phase
+
+    # Computting the filtering matrix to remove the tip-tilt component
     lwe_col = []
     if remove_tiptilt:
         coeffs_col = []
         H_filter, P2C, _ = compute_tiptilt_filtering_matrix(pupil, mat_modes=mat_modes)
-    for n in range(df_sub.shape[0]):
+
+    # looping on rows to get the tip-tilt-free coefficients
+    for n in tqdm.tqdm(range(df_sub.shape[0])):
         tmp = np.array(df_sub.loc[n])
         if tmp.any():
             opd = np.reshape(np.sum(mat_modes*tmp, axis=1), (n_pup, n_pup))
@@ -391,6 +394,9 @@ def compute_lwe_wavefront_error(df, path_ini, path_root="", remove_tiptilt=True)
                 coeffs_col.append(coeffs)
             # compute the LWE wavefront error
             lwe_err = np.std(opd[opd!=0])
+        else:
+            coeffs_col.append([-1,]*psfao.ao.tel.nModes)
+            lwe_err = -1
         lwe_col.append(lwe_err)
 
     # update the data frame
@@ -398,7 +404,7 @@ def compute_lwe_wavefront_error(df, path_ini, path_root="", remove_tiptilt=True)
     if remove_tiptilt:
         coeffs_col = np.array(coeffs_col)
         for n in range(psfao.ao.tel.nModes):
-            df["FIT MODE"+str(n) + " TT REMOVED"] = coeffs_col[:, n]
+            df["FIT MODE" + str(n) + " TT REMOVED"] = coeffs_col[:, n]
     return df
 
 def plot_lwe_histograms(df_in, bins=20, alpha=0.5, thres=200):

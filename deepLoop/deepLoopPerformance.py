@@ -713,19 +713,20 @@ def display_metrics_accuracy(df_param, n_psf, df_psf=None, fontsize=22,
     axs[1].grid('on')
 
     # ----------- DISPLAYING BIAS AND PRECISION ON PSF METRICS
-    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(figsize,figsize),
-                            constrained_layout=constrained_layout)
-    axs[0].errorbar(n_psf, df_psf["SR bias mean[%]"], yerr=df_psf["SR bias std[%]"], fmt='bo-', label='Strehl-ratio')
-    axs[0].errorbar(n_psf, df_psf["FWHM bias mean[%]"], yerr=df_psf["FWHM bias std[%]"], fmt='r8-', label='FWHM')
-    axs[0].legend()
-    axs[0].set_xlabel("\# training PSF")
-    axs[0].set_ylabel("Relative bias [\%]")
-    axs[0].grid('on')
+    if df_psf is not None:
+        fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(figsize,figsize),
+                                constrained_layout=constrained_layout)
+        axs[0].errorbar(n_psf, df_psf["SR bias mean[%]"], yerr=df_psf["SR bias std[%]"], fmt='bo-', label='Strehl-ratio')
+        axs[0].errorbar(n_psf, df_psf["FWHM bias mean[%]"], yerr=df_psf["FWHM bias std[%]"], fmt='r8-', label='FWHM')
+        axs[0].legend()
+        axs[0].set_xlabel("\# training PSF")
+        axs[0].set_ylabel("Relative bias [\%]")
+        axs[0].grid('on')
 
-    axs[1].errorbar(n_psf, df_psf["SR std mean[%]"], yerr=df_psf["SR std std[%]"], fmt='bo-', label='Strehl-ratio')
-    axs[1].errorbar(n_psf, df_psf["FWHM std mean[%]"], yerr=df_psf["FWHM std std[%]"], fmt='r8-', label='FWHM')
-    axs[1].legend()
-    axs[1].set_xlabel("\# training PSF")
-    axs[1].set_ylabel("Relative precision [\%]")
-    axs[1].set_yscale('log')
-    axs[1].grid('on')
+        axs[1].errorbar(n_psf, df_psf["SR std mean[%]"], yerr=df_psf["SR std std[%]"], fmt='bo-', label='Strehl-ratio')
+        axs[1].errorbar(n_psf, df_psf["FWHM std mean[%]"], yerr=df_psf["FWHM std std[%]"], fmt='r8-', label='FWHM')
+        axs[1].legend()
+        axs[1].set_xlabel("\# training PSF")
+        axs[1].set_ylabel("Relative precision [\%]")
+        axs[1].set_yscale('log')
+        axs[1].grid('on')

@@ -27,6 +27,8 @@ def commandLine():
     # INI FILE
     parser.add_argument('--ini', help='Path to the .ini file for instantiating the model',
                         default=path_file+'nirc2_monochromatic.ini', type=str)
+    parser.add_argument('--main_first', help='first parameter to be considered to sort the data',
+                        default='r0', type=str)
     # FOLDERS ARCHITECTURE
     parser.add_argument('--nIntervals', help='Number of intervals per primary parameters',
                         default=10, type=int)
@@ -73,4 +75,5 @@ if __name__=='__main__':
                  add_static=args.addStatic, nmodes=args.nmodes, mag=args.mag,
                  zp=args.zP, dit=args.DIT, ndit=args.nDIT, sky_mag=args.skyMag,
                  ron=args.ron, norm=args.normType, save_path=args.savePath,
-                 bounds=args.bounds, n_test=args.ntest, n_split=args.nsplit)
+                 bounds=args.bounds, n_test=args.ntest, n_split=args.nsplit,
+                 main_param=[args.main_first, 'sig2'])
