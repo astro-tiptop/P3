@@ -229,7 +229,7 @@ def generate_psf(path_ini, n_inter=10, main_param=["r0", "sig2"], n_psf_folder=3
         # put the test data in the main folder
         path = Path(save_path)
         path_parent = str(path.parent.absolute())
-        new_name = "/PSFAO21_TESTDATA_" + id_noise + 'NOISE_' + id_static + "STATIC" + id_mag + "/"
+        new_name = "/PSFAO21_TESTDATA_" + id_noise + 'NOISE_' + id_static + "STATIC" + id_mag + id_instru + "/"
         os.rename(test_path, path_parent + new_name)
 
 
@@ -280,11 +280,13 @@ def split_test_data(path_folder, n_sub_folder=10, mode=511):
             os.mkdir(path_test_k, mode=mode)
 
         # moving the files
+        print(n_files_per_sub)
         for j in range(n_files_per_sub):
             file_name = list_file[arr_of_index[k][j]]
             path_file_old = os.path.join(path_test, file_name)
             path_file_new = os.path.join(path_test_k, file_name)
             os.rename(path_file_old, path_file_new)
+            print("done")
 
 def generate_parameters_values(bounds, wvl_fact, n_inter, n_psf_folder, n_sub_folder,
                                nround, nmodes=None, add_static=False, save_path=None,
