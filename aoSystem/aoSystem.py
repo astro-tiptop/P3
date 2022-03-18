@@ -67,7 +67,7 @@ class aoSystem():
             nPup = eval(config['telescope']['Resolution'])
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the pupil resolution\n')
+            print('You must provide a value for the pupil (telescope) resolution\n')
             self.error = True
             return
             
@@ -136,7 +136,7 @@ class aoSystem():
             r0 = 0.976*wvlAtm/eval(config['atmosphere']['Seeing'])*3600*180/np.pi 
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the seeing\n')
+            print('You must provide a value for the atmosphere seeing\n')
             self.error = True
             return
         
@@ -179,7 +179,7 @@ class aoSystem():
             wvlGs     = np.unique(np.array(eval(config['sources_HO']['Wavelength'])))
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the wavelength of the science source\n')
+            print('You must provide a value for the wavelength of the HO source (sources_HO)\n')
             return 0
         
         if config.has_option('sources_HO','Zenith'):
@@ -218,7 +218,7 @@ class aoSystem():
                     wvlGs = np.unique(np.array(eval(config['sources_LO']['Wavelength'])))
                 else:
                     print('%%%%%%%% ERROR %%%%%%%%')
-                    print('You must provide a value for the wavelength of the science source\n')
+                    print('You must provide a value for the wavelength of the LO source (sources_LO)\n')
                     self.error = True
                     return
         
@@ -239,7 +239,7 @@ class aoSystem():
             wvlSrc     = np.array(eval(config['sources_science']['Wavelength']))
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the wavelength of the science source\n')
+            print('You must provide a value for the wavelength of the science source (sources_science)\n')
             self.error = True
             return
         
@@ -279,7 +279,7 @@ class aoSystem():
             psInMas = eval(config['sensor_HO']['PixelScale'])
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the HO detector pixel scale\n')
+            print('You must provide a value for the HO detector (sensor_HO) pixel scale\n')
             self.error = True
             return
         
@@ -287,7 +287,7 @@ class aoSystem():
             fov = eval(config['sensor_HO']['FieldOfView'])
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the science detector field of view\n')
+            print('You must provide a value for the HO detector (sensor_HO) field of view\n')
             self.error = True
             return
         
@@ -406,7 +406,7 @@ class aoSystem():
                 psInMas = eval(config['sensor_LO']['PixelScale'])
             else:
                 print('%%%%%%%% ERROR %%%%%%%%')
-                print('You must provide a value for the HO detector pixel scale\n')
+                print('You must provide a value for the LO detector (sensor_LO) pixel scale\n')
                 self.error = True
                 return
             
@@ -414,7 +414,7 @@ class aoSystem():
                 fov = eval(config['sensor_LO']['FieldOfView'])
             else:
                 print('%%%%%%%% ERROR %%%%%%%%')
-                print('You must provide a value for the science detector field of view\n')
+                print('You must provide a value for the LO detector (sensor_LO) field of view\n')
                 self.error = True
                 return
             
@@ -550,7 +550,7 @@ class aoSystem():
             nActu = eval(config['DM']['NumberActuators'])
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the Dm actuators pitch\n')
+            print('You must provide a value for the Dm number of actuators (NumberActuators)\n')
             self.error = True
             return
         
@@ -558,7 +558,7 @@ class aoSystem():
             DmPitchs = np.array(eval(config['DM']['DmPitchs']))
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the Dm actuators pitch\n')
+            print('You must provide a value for the Dm actuators pitch (DmPitchs)\n')
             self.error = True
             return
         
@@ -630,7 +630,7 @@ class aoSystem():
             psInMas = eval(config['sensor_science']['PixelScale'])
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the science detector pixel scale\n')
+            print('You must provide a value for the science detector (sensor_science) pixel scale\n')
             self.error = True
             return
         
@@ -638,7 +638,7 @@ class aoSystem():
             fov = eval(config['sensor_science']['FieldOfView'])
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the science detector field of view\n')
+            print('You must provide a value for the science detector (sensor_science) field of view\n')
             self.error = True
             return
         
