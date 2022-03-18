@@ -58,11 +58,11 @@ class frequencyDomain():
     @samp.setter
     def samp(self,val):
         self.k_      = np.ceil(2.0/val).astype('int') # works for oversampling
-        self.__samp  = self.k_ * val     
+        self.__samp  = self.k_ * val
         if np.any(self.k_ > 2):
-            self.PSDstep= np.min(1/self.ao.tel.D/self.__samp)      
+            self.PSDstep= np.min(1/self.ao.tel.D/self.__samp)
         else:
-            self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)      
+            self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)
             
     @property
     def sampCen(self):
@@ -70,7 +70,7 @@ class frequencyDomain():
     @sampCen.setter
     def sampCen(self,val):
         self.kCen_      = np.ceil(2.0/val).astype(int)# works for oversampling
-        self.__sampCen  = self.kCen_ * val  
+        self.__sampCen  = self.kCen_ * val
     @property
     def sampRef(self):
         return self.__sampRef
@@ -100,7 +100,7 @@ class frequencyDomain():
             #return 1/(2*max(self.pitchs_dm.min(),self.pitchs_wfs.min()))
             self.kc_ =  1/(2*val)
             #self.kc_= (val-1)/(2.0*self.ao.tel.D)
-        self.kcMin_ =  np.min(self.kc_)
+        self.kcMax_ =  np.max(self.kc_)
         #kc2         = self.kc_**2
         self.resAO  = int(np.max(2*self.kc_/self.PSDstep))
         
@@ -113,16 +113,16 @@ class frequencyDomain():
         self.pistonFilterAO_[self.resAO//2,self.resAO//2] = 0
         # ---- DEFINING MASKS
         if self.ao.dms.AoArea == 'circle':
-            self.mskOut_  = (self.k2_ >= self.kcMin_**2)
-            self.mskIn_   = (self.k2_ < self.kcMin_**2)
-            self.mskOutAO_= self.k2AO_ >= self.kcMin_**2
-            self.mskInAO_ = self.k2AO_ < self.kcMin_**2      
+            self.mskOut_  = (self.k2_ >= self.kcMax_**2)
+            self.mskIn_   = (self.k2_ < self.kcMax_**2)
+            self.mskOutAO_= self.k2AO_ >= self.kcMax_**2
+            self.mskInAO_ = self.k2AO_ < self.kcMax_**2
             
         else:
-            self.mskIn_    = np.logical_and(abs(self.kx_) < self.kcMin_, abs(self.ky_) < self.kcMin_)
-            self.mskOut_   = np.logical_or(abs(self.kx_) >= self.kcMin_, abs(self.ky_) >= self.kcMin_)
-            self.mskInAO_  = np.logical_and(abs(self.kxAO_) < self.kcMin_, abs(self.kyAO_) < self.kcMin_)
-            self.mskOutAO_ = np.logical_or(abs(self.kxAO_) >= self.kcMin_, abs(self.kyAO_) >= self.kcMin_)
+            self.mskIn_    = np.logical_and(abs(self.kx_) < self.kcMax_, abs(self.ky_) < self.kcMax_)
+            self.mskOut_   = np.logical_or(abs(self.kx_) >= self.kcMax_, abs(self.ky_) >= self.kcMax_)
+            self.mskInAO_  = np.logical_and(abs(self.kxAO_) < self.kcMax_, abs(self.kyAO_) < self.kcMax_)
+            self.mskOutAO_ = np.logical_or(abs(self.kxAO_) >= self.kcMax_, abs(self.kyAO_) >= self.kcMax_)
 
         self.psdKolmo_     = 0.0229 * self.mskOut_* ((1.0 /self.ao.atm.L0**2) + self.k2_) ** (-11.0/6.0)
         self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,self.kx_[:,0]),self.kx_[:,0]))

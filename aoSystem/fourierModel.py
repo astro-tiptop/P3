@@ -118,7 +118,7 @@ class fourierModel:
             if self.ao.wfs.processing.noiseVar == [None]:
                 self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0 ,self.ao.atm.wvl)
             
-            self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMin_)**2
+            self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMax_)**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
             
             # DEFINE THE RECONSTRUCTOR
@@ -453,7 +453,7 @@ class fourierModel:
         """
         tstart  = time.time()
         
-        dk     = 2*self.freq.kcMin_/self.freq.resAO
+        dk     = 2*self.freq.kcMax_/self.freq.resAO
         rad2nm = self.ao.atm.wvl*1e9/2/np.pi
         
         if self.ao.rtc.holoop['gain'] == 0:            
@@ -569,7 +569,7 @@ class fourierModel:
         if self.ao.wfs.processing.noiseVar[0] > 0:
             if self.nGs < 2:        
                 psd = abs(self.Rx**2 + self.Ry**2)
-                psd = psd/(2*self.freq.kcMin_)**2
+                psd = psd/(2*self.freq.kcMax_)**2
                 psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_
             else:  
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),dtype=complex)
@@ -764,7 +764,7 @@ class fourierModel:
         
         if self.ao.rtc.holoop['gain'] != 0:
             # Derives wavefront error
-            rad2nm      = (2*self.freq.kcMin_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
+            rad2nm      = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
             
             if np.any(self.ao.tel.opdMap_on):
                 self.wfeNCPA= np.std(self.ao.tel.opdMap_on[self.ao.tel.pupil!=0])
