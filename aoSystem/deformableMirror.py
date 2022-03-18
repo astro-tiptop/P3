@@ -42,8 +42,8 @@ class deformableMirror:
         # influence function
         self.mechCoupling = np.array(mechCoupling)
         if len(self.mechCoupling) < self.nDMs:
-            self.mechCoupling = self.mechCoupling[0]*self.nDMs
-            print("The first value of mechanical coupling is set for all DMs")
+            self.mechCoupling = np.full(shape=self.nDMs,fill_value=self.mechCoupling[0],dtype=type(self.mechCoupling))
+            print("The first value of mechanical coupling ", self.mechCoupling[0] ," is set for all DMs")
         
         elif len(self.mechCoupling) > self.nDMs:
             self.mechCoupling = self.mechCoupling[0:self.nDMs]
