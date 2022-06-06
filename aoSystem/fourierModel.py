@@ -681,9 +681,9 @@ class fourierModel:
                 A = np.zeros((self.freq.resAO,self.freq.resAO))
                 for l in range(self.ao.atm.nL):
                     A   = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*(self.freq.kx*th[1] + self.freq.ky*th[0])))             
-                psd[:,:,s] = A*Watm
+                psd[:,:,s] = self.freq.mskInAO_ * A*Watm
         self.t_anisoplanatismPSD = 1000*(time.time() - tstart)
-        return self.freq.mskInAO_ * np.real(psd)
+        return np.real(psd)
     
     def differentialRefractionPSD(self):
         def refractionIndex(wvl,nargout=1):
