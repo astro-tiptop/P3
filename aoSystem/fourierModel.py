@@ -312,8 +312,8 @@ class fourierModel:
             Sx[idx] = i*np.sign(self.freq.kxAO_[idx])
             idx = abs(self.freq.kxAO_) <= umod
             Sx[idx] = 2*i/np.pi*np.arcsin(self.freq.kxAO_[idx]/umod)
-            Av = np.sinc(self.ao.wfs.detector.binning*d*self.freq.kxAO_)\
-                * np.sinc(self.ao.wfs.detector.binning*d*self.freq.kxAO_).T
+            Av = np.sinc(self.ao.wfs.detector[0].binning*d*self.freq.kxAO_)\
+                * np.sinc(self.ao.wfs.detector[0].binning*d*self.freq.kxAO_).T
             Sy = Sx.T
         else:
             raise ValueError("The WFS type is not supported; must be Shack-Hartmann or Pyramid.")
