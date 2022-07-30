@@ -118,75 +118,80 @@ class fourierModel:
                                    max(self.ao.atm.wDir),
                                    num=self.ao.dms.nRecLayers)
             if self.ao.lgs:
-                self.strechFactor_mod = 1.0/(1.0 - heights_mod/self.gs.height[0])
-        else:
-            weights_mod = self.ao.atm.weights
-            heights_mod = self.ao.atm.heights
-            wSpeed_mod = self.ao.atm.wSpeed
-            wDir_mod = self.ao.atm.wDir
-            self.strechFactor_mod = self.strechFactor
-
-        self.atm_mod = atmosphere(self.ao.atm.wvl,
-                                  self.ao.atm.r0,
-                                  weights_mod,
-                                  heights_mod,
-                                  wSpeed_mod,
-                                  wDir_mod,
-                                  self.ao.atm.L0)
-
-        #updating the atmosphere wavelength !
-        self.ao.atm.wvl = self.freq.wvlRef
-        self.atm_mod.wvl = self.freq.wvlRef
-        self.t_initFreq = 1000*(time.time() - tstart)
-
-        if (2*self.freq.kcInMas/self.freq.psInMas)[0]>self.freq.nOtf:
-            raise ValueError("Error : the PSF field of view is too small\
-                             to simulate the AO correction area\n")
-
-        # DEFINING THE NOISE AND ATMOSPHERE PSD
-        if self.ao.wfs.processing.noiseVar==[None]:
-            self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0,
-                                                                        self.ao.atm.wvl)
-
-        self.Wn = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMin_)**2
-        self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
-
-        # DEFINE THE RECONSTRUCTOR
-        self.spatialReconstructor(MV=MV)
-
-        # DEFINE THE CONTROLLER
-        self.controller(display=self.display)
-
-        # COMPUTE THE PSD
-        wfe = None
-        if normalizePSD:
-            wfe = self.ao.rtc.holoop['wfe']
-
-        self.PSD = self.powerSpectrumDensity(wfe=wfe)
-
-        # COMPUTE THE PHASE STRUCTURE FUNCTION
-        self.SF = self.phaseStructureFunction()
-
-        # COMPUTE THE PSF
-        if calcPSF:
-            self.PSF, self.SR = self.point_spread_function(verbose=verbose,
-                                                           fftphasor=fftphasor,
-                                                           addOtfPixel=self.addOtfPixel)
-
-            # GETTING METRICS
-            if self.get_metrics:
-                self.getPsfMetrics(getEnsquaredEnergy=getEnsquaredEnergy,
-                                   getEncircledEnergy=getEncircledEnergy,
-                                   getFWHM=getFWHM)
-
-            # DISPLAYING THE PSFS
-            if display:
-                self.displayResults(displayContour=displayContour)
-
-        # COMPUTE THE ERROR BREAKDOWN
-        if self.getErrorBreakDown:
-            self.errorBreakDown(verbose=self.verbose)
-
+                self.gs  = self.ao.lgs
+                self.nGs = self.ao.lgs.nSrc
+                self.strechFactor = 1.0/(1.0 - self.ao.atm.heights/self.gs.height[0])
+            else:
+                self.gs  = self.ao.ngs
+                self.nGs = self.ao.ngs.nSrc
+                self.strechFactor = 1.0
+                           
+            # DEFINING THE MODELED ATMOSPHERE 
+            if (self.ao.dms.nRecLayers!=None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
+                weights_mod,heights_mod = FourierUtils.eqLayers(self.ao.atm.weights,self.ao.atm.heights,self.ao.dms.nRecLayers)
+                if self.ao.dms.nRecLayers == 1:
+                    heights_mod = [0.0]
+                wSpeed_mod = np.linspace(min(self.ao.atm.wSpeed),max(self.ao.atm.wSpeed),num=self.ao.dms.nRecLayers)
+                wDir_mod   = np.linspace(min(self.ao.atm.wDir),max(self.ao.atm.wDir),num=self.ao.dms.nRecLayers)
+                if self.ao.lgs:
+                    self.strechFactor_mod = 1.0/(1.0 - heights_mod/self.gs.height[0])
+            else:
+                weights_mod    = self.ao.atm.weights
+                heights_mod    = self.ao.atm.heights
+                wSpeed_mod     = self.ao.atm.wSpeed
+                wDir_mod       = self.ao.atm.wDir
+                self.strechFactor_mod = self.strechFactor
+            
+            self.atm_mod = atmosphere(self.ao.atm.wvl,self.ao.atm.r0,weights_mod,heights_mod,wSpeed_mod,wDir_mod,self.ao.atm.L0)
+            
+            #updating the atmosphere wavelength !
+            self.ao.atm.wvl  = self.freq.wvlRef
+            self.atm_mod.wvl = self.freq.wvlRef
+            self.t_initFreq = 1000*(time.time() - tstart)
+            
+            if (2*self.freq.kcInMas/self.freq.psInMas)[0] > self.freq.nOtf:
+                raise ValueError('Error : the PSF field of view is too small to simulate the AO correction area\n')
+            
+            # DEFINING THE NOISE AND ATMOSPHERE PSD
+            if self.ao.wfs.processing.noiseVar == [None]:
+                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0 ,self.ao.atm.wvl)
+            
+            self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMax_)**2
+            self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
+            
+            # DEFINE THE RECONSTRUCTOR
+            self.spatialReconstructor(MV=MV)
+                
+            # DEFINE THE CONTROLLER
+            self.controller(display=self.display)
+                
+            # COMPUTE THE PSD
+            if normalizePSD == True:
+                wfe = self.ao.rtc.holoop['wfe']
+            else:
+                wfe = None
+            self.PSD = self.powerSpectrumDensity(wfe=wfe)
+            
+            # COMPUTE THE PHASE STRUCTURE FUNCTION
+            self.SF  = self.phaseStructureFunction()
+            
+            # COMPUTE THE PSF
+            if calcPSF:
+                self.PSF, self.SR = self.point_spread_function(verbose=verbose,fftphasor=fftphasor,addOtfPixel=self.addOtfPixel)
+                
+                # GETTING METRICS
+                if getFWHM == True or getEnsquaredEnergy==True or getEncircledEnergy==True:
+                    self.getPsfMetrics(getEnsquaredEnergy=getEnsquaredEnergy,\
+                        getEncircledEnergy=getEncircledEnergy,getFWHM=getFWHM)
+    
+                # DISPLAYING THE PSFS
+                if display:
+                    self.displayResults(displayContour=displayContour)
+                
+            # COMPUTE THE ERROR BREAKDOWN
+            if self.getErrorBreakDown:
+                self.errorBreakDown(verbose=self.verbose)
+                    
         # DEFINING BOUNDS
         self.bounds = self.define_bounds()
 
@@ -515,8 +520,8 @@ class fourierModel:
         """ Total power spectrum density in nm^2.m^2
         """
         tstart  = time.time()
-
-        dk = 2*self.freq.kcMin_/self.freq.resAO
+        
+        dk     = 2*self.freq.kcMax_/self.freq.resAO
         rad2nm = self.ao.atm.wvl*1e9/2/np.pi
 
         if self.ao.rtc.holoop['gain']==0:
@@ -635,7 +640,7 @@ class fourierModel:
         if self.ao.wfs.processing.noiseVar[0] > 0:
             if self.nGs < 2:
                 psd = abs(self.Rx**2 + self.Ry**2)
-                psd = psd/(2*self.freq.kcMin_)**2
+                psd = psd/(2*self.freq.kcMax_)**2
                 psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_
             else:
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),dtype=complex)
@@ -745,11 +750,11 @@ class fourierModel:
             if any(th):
                 A = np.zeros((self.freq.resAO,self.freq.resAO))
                 for l in range(self.ao.atm.nL):
-                    A   = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*(self.freq.kx*th[1] + self.freq.ky*th[0])))
-                psd[:,:,s] = A*Watm
+                    A   = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*(self.freq.kx*th[1] + self.freq.ky*th[0])))             
+                psd[:,:,s] = self.freq.mskInAO_ * A*Watm
         self.t_anisoplanatismPSD = 1000*(time.time() - tstart)
-        return self.freq.mskInAO_ * np.real(psd)
-
+        return np.real(psd)
+    
     def differentialRefractionPSD(self):
         def refractionIndex(wvl,nargout=1):
             ''' Refraction index -1 as a fonction of the wavelength.
@@ -829,8 +834,8 @@ class fourierModel:
 
         if self.ao.rtc.holoop['gain'] != 0:
             # Derives wavefront error
-            rad2nm      = (2*self.freq.kcMin_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
-
+            rad2nm      = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
+            
             if np.any(self.ao.tel.opdMap_on):
                 self.wfeNCPA= np.std(self.ao.tel.opdMap_on[self.ao.tel.pupil!=0])
             else:
@@ -1115,35 +1120,36 @@ class fourierModel:
         # total
         print("Required time for total calculation (ms)\t : {:f}".format(self.t_init))
         print("Required time for AO system model init (ms)\t : {:f}".format(self.t_initAO))
-        print("Required time for frequency domain init (ms)\t : {:f}".format(self.t_initFreq))
-        print("Required time for final PSD calculation (ms)\t : {:f}".format(self.t_powerSpectrumDensity))
+        if self.ao.error == False:
+            print("Required time for frequency domain init (ms)\t : {:f}".format(self.t_initFreq))
+            print("Required time for final PSD calculation (ms)\t : {:f}".format(self.t_powerSpectrumDensity))
 
-        # Reconstructors
-        if self.ao.rtc.holoop['gain'] > 0:
-            print("Required time for WFS reconstructors init (ms)\t : {:f}".format(self.t_reconstructor))
-            if self.nGs > 1:
-                print("Required time for optimization init (ms)\t : {:f}".format(self.t_finalReconstructor))
-                print("Required time for tomography init (ms)\t\t : {:f}".format(self.t_tomo))
-                print("Required time for optimization init (ms)\t : {:f}".format(self.t_opt))
-            # Controller
-            print("Required time for controller instantiation (ms)\t : {:f}".format(self.t_controller))
-            # PSD
-            print("Required time for fitting PSD calculation (ms)\t : {:f}".format(self.t_fittingPSD))
-            print("Required time for aliasing PSD calculation (ms)\t : {:f}".format(self.t_aliasingPSD))
-            print("Required time for noise PSD calculation (ms)\t : {:f}".format(self.t_noisePSD))
-            print("Required time for ST PSD calculation (ms)\t : {:f}".format(self.t_spatioTemporalPSD))
-
-            # Error breakdown
-            if hasattr(self,'t_errorBreakDown'):
-                print("Required time for error calculation (ms)\t : {:f}".format(self.t_errorBreakDown))
-
-            # PSF metrics
-            if hasattr(self,'t_getPsfMetrics'):
-                print("Required time for get PSF metrics (ms)\t\t : {:f}".format(self.t_getPsfMetrics))
-
-            # Display
-            if self.display and self.calcPSF:
-                print("Required time for displaying figures (ms)\t : {:f}".format(self.t_displayResults))
-
-        if self.calcPSF:
-            print("Required time for all PSFs calculation (ms)\t : {:f}".format(self.t_getPSF))
+            # Reconstructors
+            if self.ao.rtc.holoop['gain'] > 0:
+                print("Required time for WFS reconstructors init (ms)\t : {:f}".format(self.t_reconstructor))
+                if self.nGs > 1:
+                    print("Required time for optimization init (ms)\t : {:f}".format(self.t_finalReconstructor))
+                    print("Required time for tomography init (ms)\t\t : {:f}".format(self.t_tomo))
+                    print("Required time for optimization init (ms)\t : {:f}".format(self.t_opt))
+                # Controller
+                print("Required time for controller instantiation (ms)\t : {:f}".format(self.t_controller))
+                # PSD
+                print("Required time for fitting PSD calculation (ms)\t : {:f}".format(self.t_fittingPSD))
+                print("Required time for aliasing PSD calculation (ms)\t : {:f}".format(self.t_aliasingPSD))
+                print("Required time for noise PSD calculation (ms)\t : {:f}".format(self.t_noisePSD))
+                print("Required time for ST PSD calculation (ms)\t : {:f}".format(self.t_spatioTemporalPSD))
+                
+                # Error breakdown
+                if hasattr(self,'t_errorBreakDown'):
+                    print("Required time for error calculation (ms)\t : {:f}".format(self.t_errorBreakDown))
+                    
+                # PSF metrics
+                if hasattr(self,'t_getPsfMetrics'):
+                    print("Required time for get PSF metrics (ms)\t\t : {:f}".format(self.t_getPsfMetrics))
+                
+                # Display
+                if self.display and self.calcPSF:
+                    print("Required time for displaying figures (ms)\t : {:f}".format(self.t_displayResults))
+                    
+            if self.calcPSF:
+                print("Required time for all PSFs calculation (ms)\t : {:f}".format(self.t_getPSF))

@@ -22,7 +22,9 @@ class sensor:
                  ron=0.0, gain=1.0, dark=0.0, sky=0.0, excess=1.0, wfstype='Shack-Hartmann',
                  nL=[1], dsub=[1], nSides=4, modulation=None, clock_rate=[1],
                  algorithm='wcog', algo_param=[5,0,0], noiseVar=[None], tag='WAVEFRONT SENSOR'):
-
+        
+                
+        self.wfstype = wfstype
         self.nWfs = len(nL)
         self.tag = tag
 
@@ -73,21 +75,26 @@ class sensor:
             nph = np.array(self.detector[k].nph)
             nPix = self.detector[k].fovInPix/np.array(self.optics[k].nL)
             dsub = self.optics[k].dsub
+            
+            if self.wfstype.upper() == 'SHACK-HARTMANN':
+                # read-out noise calculation
+                nD      = max(1,rad2arcsec * wvl/dsub /pixelScale) #spot FWHM in pixels and without turbulence
+                varRON  = np.pi**2/3*(ron**2 /nph[k]**2) * (nPix**2/nD)**2
+            
+                if varRON.any() > 3:
+                    print('The read-out noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varRON))
+                    varRON = 0
+             
+                # photo-noise calculation
+                nT  = max(1,np.hypot(max(self.detector.spotFWHM[0][0:2])/1e3,rad2arcsec*wvl/r0)/pixelScale)
+                varShot  = np.pi**2/(2*nph[k])*(nT/nD)**2
+                if varShot.any() > 3:
+                    print('The shot noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varShot))
+                    varShot = 0
+            if self.wfstype.upper() == 'PYRAMID':
+                varRON  = 4*ron**2/np.mean(nph)**2
+                varShot = nph[k]/np.mean(nph)**2
 
-            # read-out noise calculation
-            nD = max(1,rad2arcsec * wvl/dsub /pixelScale) #spot FWHM in pixels and without turbulence
-            varRON = np.pi**2/3*(ron**2 /nph**2) * (nPix**2/nD)**2
-
-            if varRON.any()>3:
-                print('The read-out noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varRON))
-                varRON = 0
-
-            # photo-noise calculation
-            nT = max(1,np.hypot(max(self.detector[k].spotFWHM[0][0:2])/1e3,rad2arcsec*wvl/r0)/pixelScale)
-            varShot = np.pi**2/(2*nph)*(nT/nD)**2
-            if varShot.any()>3:
-                print('The shot noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varShot))
-                varShot = 0
-            varNoise[k] = self.detector[k].excess * (varRON + varShot)
-
+            varNoise[k] = varRON + self.detector.excess * varShot
+        
         return varNoise

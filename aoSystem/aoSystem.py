@@ -64,8 +64,11 @@ class aoSystem():
         if config.has_option('telescope', 'Resolution'):
             nPup = eval(config['telescope']['Resolution'])
         else:
-            raise ValueError('You must provide a value for the pupil resolution\n')
-
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the pupil (telescope) resolution\n')
+            self.error = True
+            return
+            
         #----- PUPIL
         if config.has_option('telescope', 'PathPupil'):
             path_pupil = path_root + eval(config['telescope']['PathPupil'])
@@ -117,14 +120,17 @@ class aoSystem():
             wvlAtm = eval(config['atmosphere']['Wavelength'])
         else:
             wvlAtm = 500e-9
-
-        if config.has_option('atmosphere', 'Seeing'):
-            r0 = 0.976*wvlAtm/eval(config['atmosphere']['Seeing'])*3600*180/np.pi
+        
+        if config.has_option('atmosphere','Seeing'):
+            r0 = 0.976*wvlAtm/eval(config['atmosphere']['Seeing'])*3600*180/np.pi 
         else:
-            raise ValueError('You must provide a value for the seeing\n')
-
-        if config.has_option('atmosphere', 'L0'):
-            L0 = eval(config['atmosphere']['L0'])
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the atmosphere seeing\n')
+            self.error = True
+            return
+        
+        if config.has_option('atmosphere','L0'):
+            L0 = eval(config['atmosphere']['L0']) 
         else:
             L0 = 25
         if config.has_option('atmosphere', 'Cn2Weights'):
@@ -150,6 +156,7 @@ class aoSystem():
                              consistent in the parameters file\n")
 
         #----- class definition
+
         self.atm = atmosphere(wvlAtm,
                               r0*airmass**(-3.0/5.0),
                               weights,
@@ -157,16 +164,17 @@ class aoSystem():
                               wSpeed=wSpeed,
                               wDir=wDir,
                               L0=L0)
-
-         #%%  GUIDE STARS
-        if config.has_option('sources_HO', 'Wavelength'):
-            wvlGs = np.unique(np.array(eval(config['sources_HO']['Wavelength'])))
+        
+        #%%  GUIDE STARS 
+        if config.has_option('sources_HO','Wavelength'):
+            wvlGs     = np.unique(np.array(eval(config['sources_HO']['Wavelength'])))
         else:
-            raise ValueError("You must provide a value for the wavelength of\
-                             the science source\n")
-
-        if config.has_option('sources_HO', 'Zenith'):
-            zenithGs = eval(config['sources_HO']['Zenith'])
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the wavelength of the HO source (sources_HO)\n')
+            return 0
+        
+        if config.has_option('sources_HO','Zenith'):
+            zenithGs = eval(config['sources_HO']['Zenith']) 
         else:
             zenithGs = [0.0]
         if config.has_option('sources_HO', 'Azimuth'):
@@ -207,12 +215,13 @@ class aoSystem():
                 if config.has_option('sources_LO', 'Wavelength'):
                     wvlGs = np.unique(np.array(eval(config['sources_LO']['Wavelength'])))
                 else:
-                    raise ValueError("You must provide a value for the\
-                                     wavelength of the science source\n")
-
-                zenithGs = np.array(eval(config['sources_LO']['Zenith']))
-                azimuthGs = np.array(eval(config['sources_LO']['Azimuth']))
-
+                    print('%%%%%%%% ERROR %%%%%%%%')
+                    print('You must provide a value for the wavelength of the LO source (sources_LO)\n')
+                    self.error = True
+                    return
+        
+                zenithGs   = np.array(eval(config['sources_LO']['Zenith']))
+                azimuthGs  = np.array(eval(config['sources_LO']['Azimuth']))
                 # ----- verification
                 if len(zenithGs) != len(azimuthGs):
                     raise ValueError("The number of guide stars for high-order\
@@ -225,14 +234,17 @@ class aoSystem():
                                   verbose=verbose)
 
         #%%  SCIENCE SOURCES
-
-        if config.has_option('sources_science', 'Wavelength'):
-            wvlSrc = np.array(eval(config['sources_science']['Wavelength']))
+        
+        if config.has_option('sources_science','Wavelength'):
+            wvlSrc     = np.array(eval(config['sources_science']['Wavelength']))
         else:
-            raise ValueError("You must provide a value for the wavelength of\
-                             the science source\n")
-        if config.has_option('sources_science', 'Zenith'):
-            zenithSrc = eval(config['sources_science']['Zenith'])
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the wavelength of the science source (sources_science)\n')
+            self.error = True
+            return
+        
+        if config.has_option('sources_science','Zenith'):
+            zenithSrc = eval(config['sources_science']['Zenith']) 
         else:
             zenithSrc = [0.0]
         if config.has_option('sources_science', 'Azimuth'):
@@ -265,19 +277,23 @@ class aoSystem():
         if config.has_option('sensor_HO', 'PixelScale'):
             psInMas = eval(config['sensor_HO']['PixelScale'])
         else:
-            raise ValueError('You must provide a value for the HO detector pixel scale\n')
-
-        if config.has_option('sensor_HO', 'FieldOfView'):
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the HO detector (sensor_HO) pixel scale\n')
+            self.error = True
+            return
+        
+        if config.has_option('sensor_HO','FieldOfView'):
             fov = eval(config['sensor_HO']['FieldOfView'])
         else:
-            raise ValueError("You must provide a value for the science detector\
-                             field of view\n")
-
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the HO detector (sensor_HO) field of view\n')
+            self.error = True
+            return
+            
         if config.has_option('sensor_HO', 'NumberLenslets'):
             nL = eval(config['sensor_HO']['NumberLenslets'])
         else:
             raise ValueError('You must provide a list of number of lenslets for the HO WFS\n')
-
 
         if config.has_option('sensor_HO', 'SizeLenslets'):
             dsub = eval(config['sensor_HO']['SizeLenslets'])
@@ -377,15 +393,20 @@ class aoSystem():
             if config.has_option('sensor_LO', 'PixelScale'):
                 psInMas = eval(config['sensor_LO']['PixelScale'])
             else:
-                raise ValueError("You must provide a value for the HO detector\
-                                 pixel scale\n")
-            if config.has_option('sensor_LO', 'FieldOfView'):
+                print('%%%%%%%% ERROR %%%%%%%%')
+                print('You must provide a value for the LO detector (sensor_LO) pixel scale\n')
+                self.error = True
+                return
+            
+            if config.has_option('sensor_LO','FieldOfView'):
                 fov = eval(config['sensor_LO']['FieldOfView'])
             else:
-                raise ValueError("You must provide a value for the science\
-                                 detector field of view\n")
-
-            if config.has_option('sensor_LO', 'Binning'):
+                print('%%%%%%%% ERROR %%%%%%%%')
+                print('You must provide a value for the LO detector (sensor_LO) field of view\n')
+                self.error = True
+                return
+            
+            if config.has_option('sensor_LO','Binning'):
                 Binning = eval(config['sensor_LO']['Binning'])
             else:
                 Binning = 1
@@ -507,13 +528,21 @@ class aoSystem():
         if config.has_option('DM', 'NumberActuators'):
             nActu = eval(config['DM']['NumberActuators'])
         else:
-            raise ValueError("You must provide a value for the DM actuators pitch\n")
-        if config.has_option('DM', 'DmPitchs'):
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the Dm number of actuators (NumberActuators)\n')
+            self.error = True
+            return
+        
+        if config.has_option('DM','DmPitchs'):
             DmPitchs = np.array(eval(config['DM']['DmPitchs']))
         else:
-            raise ValueError("You must provide a value for the Dm actuators pitch\n")
-        if config.has_option('DM', 'InfModel'):
-            InfModel = eval(config['DM']['InfModel'])
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the Dm actuators pitch (DmPitchs)\n')
+            self.error = True
+            return
+        
+        if config.has_option('DM','InfModel'):
+            InfModel = eval(config['DM']['InfModel']) 
         else:
             InfModel = 'gaussian'
         if config.has_option('DM', 'InfCoupling'):
@@ -575,14 +604,20 @@ class aoSystem():
         if config.has_option('sensor_science', 'PixelScale'):
             psInMas = eval(config['sensor_science']['PixelScale'])
         else:
-            raise ValueError("You must provide a value for the science\
-                             detector pixel scale\n")
-        if config.has_option('sensor_science', 'FieldOfView'):
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the science detector (sensor_science) pixel scale\n')
+            self.error = True
+            return
+        
+        if config.has_option('sensor_science','FieldOfView'):
             fov = eval(config['sensor_science']['FieldOfView'])
         else:
-            raise ValueError("You must provide a value for the science detector\
-                             field of view\n")
-        if config.has_option('sensor_science', 'Binning'):
+            print('%%%%%%%% ERROR %%%%%%%%')
+            print('You must provide a value for the science detector (sensor_science) field of view\n')
+            self.error = True
+            return
+        
+        if config.has_option('sensor_science','Binning'):
             Binning = eval(config['sensor_science']['Binning'])
         else:
             Binning = 1
@@ -777,3 +812,4 @@ class aoSystem():
 
         nm2rad = (2*np.pi*1e-9/self.src.wvl[0])
         self.wfe['Strehl'] = np.exp(-self.wfe['Total']**2 *nm2rad**2)
+        
