@@ -7,7 +7,6 @@ Created on Fri Apr 23 17:37:49 2021
 """
 
 #%% IMPORTING LIBRARIES
-import sys
 import time
 import pathlib
 import aoSystem as aoSystemMain
@@ -30,7 +29,7 @@ def MakeKeckPupil(nargout=0):
     t0 = time.time()
     spiRef   = spiders([0,60,120], 0.0254, symetric=True, D=10.5) 
     keckPup  = pupil(segClass=segment(6,0.9,200), segCoord=path_txt, D=10.5,
-                     cobs=0.2311, spiderClass=spiRef)
+                     cobs=0.2311, spiderClass=spiRef, fill_gap=False)
     print("Pupil creation in %.2f s  "%(time.time() - t0))
     keckPup.displayPupil()
     if nargout ==1:
@@ -41,8 +40,8 @@ def MakeELTPupil(nargout=0):
     
     t0 = time.time()
     spiRef   = spiders([0,60,120],0.5,symetric=True,D=39) 
-    eltPup   = pupil(segClass=segment(6,1.3/2,25), segCoord=path_txt, D=39,
-                     cobs=0.2375, spiderClass=spiRef)
+    eltPup   = pupil(segClass=segment(6, 1.42/2,50), segCoord=path_txt, D=39,
+                     cobs=0.2375, spiderClass=spiRef, fill_gap=True)
     print("Pupil creation in %.2f s  "%(time.time() - t0))
     eltPup.displayPupil()
     if nargout ==1:
