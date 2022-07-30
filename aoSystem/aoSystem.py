@@ -10,7 +10,6 @@ Created on Mon Apr  5 14:42:49 2021
 import os.path as ospath
 from configparser import ConfigParser
 import numpy as np
-import sys
 
 # IMPORTING P3 MODULES
 from aoSystem.telescope import telescope
@@ -73,7 +72,7 @@ class aoSystem():
             
         #----- PUPIL
         if config.has_option('telescope','PathPupil'):
-            path_pupil = path_root + eval(config['telescope']['PathPupil'])
+            path_pupil = path_root + eval("r"+config['telescope']['PathPupil'])
         else:
             path_pupil = ''
                   
@@ -83,47 +82,43 @@ class aoSystem():
             pupilAngle = 0.0
         
         if config.has_option('telescope','PathStaticOn'):
-            path_static_on = path_root + eval(config['telescope']['PathStaticOn'])
+            path_static_on = path_root + eval("r"+config['telescope']['PathStaticOn'])
         else:
             path_static_on = None       
         
         if config.has_option('telescope','PathStaticOff'):
-            path_static_off = path_root + eval(config['telescope']['PathStaticOff'])
+            path_static_off = path_root + eval("r"+config['telescope']['PathStaticOff'])
         else:
             path_static_off = None
         
         if config.has_option('telescope','PathStaticPos'):
-            path_static_pos = path_root + eval(config['telescope']['PathStaticPos'])
+            path_static_pos = path_root + eval("r"+config['telescope']['PathStaticPos'])
         else:
             path_static_pos = None
             
         #----- APODIZER
         if config.has_option('telescope','PathApodizer'):
-            path_apodizer = path_root + eval(config['telescope']['PathApodizer'])
+            path_apodizer = path_root + eval("r"+config['telescope']['PathApodizer'])
         else:
             path_apodizer = ''
                 
         #----- TELESCOPE ABERRATIONS
         if config.has_option('telescope', 'PathStatModes'):
-            path_statModes = path_root + eval(config['telescope']['PathStatModes'])
+            path_statModes = path_root + eval("r"+config['telescope']['PathStatModes'])
         else:
             path_statModes = ''
             
-            
-        # ----- managing paths for Windows OS
-        if sys.platform[0:3] == 'win':
-            path_pupil     = path_pupil.replace('/','\\')
-            path_static_on = path_static_on.replace('/','\\')
-            path_static_off= path_static_off.replace('/','\\')
-            path_static_pos= path_static_pos.replace('/','\\')
-            path_apodizer  = path_apodizer.replace('/','\\')
-            path_statModes = path_statModes.replace('/','\\')
-
         # ----- class definition     
-        self.tel = telescope(D,nPup,zenith_angle=zenithAngle,obsRatio=obsRatio,pupilAngle=pupilAngle,\
-                             path_pupil=path_pupil,path_static_on=path_static_on,\
-                             path_static_off=path_static_off,path_static_pos=path_static_pos,\
-                             path_apodizer=path_apodizer,path_statModes=path_statModes)                     
+        self.tel = telescope(D, nPup,
+                             zenith_angle=zenithAngle,
+                             obsRatio=obsRatio,
+                             pupilAngle=pupilAngle,
+                             path_pupil=path_pupil,
+                             path_static_on=path_static_on,
+                             path_static_off=path_static_off,
+                             path_static_pos=path_static_pos,
+                             path_apodizer=path_apodizer,
+                             path_statModes=path_statModes)                     
 
         #%% ATMOSPHERE
         
@@ -172,7 +167,12 @@ class aoSystem():
             self.error = True
             return
         #----- class definition
-        self.atm = atmosphere(wvlAtm,r0*airmass**(-3.0/5.0),weights,np.array(heights)*airmass,wSpeed,wDir,L0)            
+        self.atm = atmosphere(wvlAtm, r0*airmass**(-3.0/5.0),
+                              weights,
+                              np.array(heights)*airmass,
+                              wSpeed,
+                              wDir,
+                              L0)            
         
          #%%  GUIDE STARS 
         if config.has_option('sources_HO','Wavelength'):
@@ -205,10 +205,16 @@ class aoSystem():
             return
         # ----- creating the source class
         if heightGs == 0:
-            self.ngs = source(wvlGs,zenithGs,azimuthGs,tag="NGS",verbose=True)   
+            self.ngs = source(wvlGs,
+                              zenithGs,azimuthGs,
+                              tag="NGS",verbose=True)   
             self.lgs = None
         else:
-            self.lgs = source(wvlGs,zenithGs,azimuthGs,height=heightGs*airmass,tag="LGS",verbose=True)   
+            self.lgs = source(wvlGs,
+                              zenithGs,azimuthGs,
+                              height=heightGs*airmass,
+                              tag="LGS",verbose=True)  
+            
             if (not config.has_section('sources_LO')) | (not config.has_section('sources_LO')):
                 print('%%%%%%%% WARNING %%%%%%%%')
                 print('No information about the tip-tilt star can be retrieved\n')
@@ -236,7 +242,7 @@ class aoSystem():
         #%%  SCIENCE SOURCES
         
         if config.has_option('sources_science','Wavelength'):
-            wvlSrc     = np.array(eval(config['sources_science']['Wavelength']))
+            wvlSrc = np.array(eval(config['sources_science']['Wavelength']))
         else:
             print('%%%%%%%% ERROR %%%%%%%%')
             print('You must provide a value for the wavelength of the science source (sources_science)\n')
@@ -265,12 +271,14 @@ class aoSystem():
             return
         
         if self.getPSDatNGSpositions and config.has_option('sources_LO','Wavelength'):
-            zenithSrc   = zenithSrc +  (eval(config['sources_LO']['Zenith']))
-            azimuthSrc  = azimuthSrc + (eval(config['sources_LO']['Azimuth']))
+            zenithSrc = zenithSrc +  (eval(config['sources_LO']['Zenith']))
+            azimuthSrc = azimuthSrc + (eval(config['sources_LO']['Azimuth']))
             
             
         #----- class definition
-        self.src  = source(wvlSrc,zenithSrc,azimuthSrc,tag="SCIENCE",verbose=True)   
+        self.src = source(wvlSrc,
+                          zenithSrc, azimuthSrc,
+                          tag="SCIENCE",verbose=True)   
  
        
 #%% HIGH-ORDER WAVEFRONT SENSOR
@@ -394,11 +402,13 @@ class aoSystem():
         else:
             excess = 1.0
             
-        self.wfs = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
-                   nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
-                   gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,\
-                   nL=nL,dsub=dsub,wfstype=wfstype,modulation=modu,\
-                   noiseVar=NoiseVar,algorithm=algorithm,algo_param=[wr,thr,nv],tag="HO WFS")
+        self.wfs = sensor(psInMas, fov,
+                          binning=Binning, spotFWHM=spotFWHM,
+                          nph=nph, bandwidth=bw, transmittance=tr, dispersion=disp,
+                          gain=Gain, ron=ron, sky=sky, dark=dark, excess=excess,
+                          nL=nL, dsub=dsub, wfstype=wfstype, modulation=modu,
+                          noiseVar=NoiseVar, algorithm=algorithm,
+                          algo_param=[wr,thr,nv], tag="HO WFS")
 #%% TIP-TILT SENSORS
         if config.has_section('sensor_LO'):
             
@@ -497,11 +507,13 @@ class aoSystem():
                 nv = 0.0
                 
                 
-            self.tts = sensor(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,\
-                   nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
-                   gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,\
-                   nL=nL,dsub=list(D/np.array(nL)),wfstype='Shack-Hartmann',noiseVar=NoiseVar,\
-                   algorithm=algorithm,algo_param=[wr,thr,nv],tag="TT WFS")
+            self.tts = sensor(psInMas, fov,
+                              binning=Binning, spotFWHM=spotFWHM,
+                              nph=nph, bandwidth=bw, transmittance=tr, dispersion=disp,
+                              gain=Gain, ron=ron, sky=sky, dark=dark, excess=excess,
+                              nL=nL, dsub=list(D/np.array(nL)),
+                              wfstype='Shack-Hartmann', noiseVar=NoiseVar,
+                              algorithm=algorithm, algo_param=[wr,thr,nv], tag="TT WFS")
         else:
             self.tts = None
 
@@ -542,8 +554,8 @@ class aoSystem():
         else:
             wfe = None
             
-        self.rtc = rtc(LoopGain_HO, frameRate_HO, delay_HO, wfe=wfe,\
-                 loopGainLO=LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
+        self.rtc = rtc(LoopGain_HO, frameRate_HO, delay_HO, wfe=wfe,
+                       loopGainLO=LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
                
 #%% DEFORMABLE MIRRORS
         if config.has_option('DM','NumberActuators'):
@@ -615,9 +627,13 @@ class aoSystem():
             AoArea = 'circle'
         
         # ----- creating the dm class
-        self.dms = deformableMirror(nActu,DmPitchs,heights=DmHeights,mechCoupling=InfCoupling,modes=InfModel,\
-                   opt_dir=[opt_zen,opt_az],opt_weights=opt_w,\
-                   opt_cond=cond,n_rec = nrec,AoArea=AoArea)
+        self.dms = deformableMirror(nActu, DmPitchs,
+                                    heights=DmHeights, mechCoupling=InfCoupling,
+                                    modes=InfModel,
+                                    opt_dir=[opt_zen,opt_az],
+                                    opt_weights=opt_w,
+                                    opt_cond=cond,n_rec = nrec,
+                                    AoArea=AoArea)
       
 #%% SCIENCE DETECTOR
         
@@ -700,9 +716,11 @@ class aoSystem():
         else:
             excess = 1.0
         
-        self.cam = detector(psInMas,fov,binning=Binning,spotFWHM=spotFWHM,saturation=saturation,\
-                            nph=nph,bandwidth=bw,transmittance=tr,dispersion=disp,\
-                       gain=Gain,ron=ron,sky=sky,dark=dark,excess=excess,tag=camName)
+        self.cam = detector(psInMas, fov,
+                            binning=Binning, spotFWHM=spotFWHM, saturation=saturation,
+                            nph=nph, bandwidth=bw, transmittance=tr, dispersion=disp,
+                            gain=Gain, ron=ron, sky=sky, dark=dark, excess=excess,
+                            tag=camName)
         
     #%% AO mode
         self.aoMode = 'SCAO'

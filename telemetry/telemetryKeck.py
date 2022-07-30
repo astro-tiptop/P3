@@ -173,7 +173,10 @@ class telemetryKeck:
     def restoringInstrumentData(self,cam_fov=None):
         """
         """
-        hdr = fits.getheader(self.path_img, ignore_missing_end=True)
+
+        hdr = fits.getheader(self.path_img,
+                             ignore_missing_end=True,
+                             ignore_missing_simple=True)
         
         #1\ Dates
         self.obsdate = hdr['DATE-OBS'].replace('-','')
@@ -186,10 +189,10 @@ class telemetryKeck:
         self.tel.pupilMaskName= keckUtils.getPupilMask(hdr)
         _,self.aoMode         = keckUtils.getStagePositionWFS(hdr)   
         if self.tel.pupilMaskName.upper() == 'LARGEHEX':
-            self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_largeHex_272px.fits'
+            self.tel.path_pupil   = self.path_calib + 'NIRC2_MASK/keck_pupil_largeHex_272px.fits'
         else:
-            self.tel.path_pupil   = self.path_calib + '/NIRC2_MASK/keck_pupil_open2_240px.fits'
-        self.tel.path_telstat = self.path_calib + '/KECK_STAT/keck_piston_modes_200px.fits'
+            self.tel.path_pupil   = self.path_calib + 'NIRC2_MASK/keck_pupil_open2_240px.fits'
+        self.tel.path_telstat = self.path_calib + 'KECK_STAT/keck_piston_modes_200px.fits'
         
         # 3\ Restore the instrument configuration
         self.cam.name = keckUtils.getInstName(hdr)
@@ -201,7 +204,9 @@ class telemetryKeck:
             raise ValueError('THE NIRSPEC CASE IS NOT YET IMPLEMENTED\n')
         else:
             # image
-            self.cam.image = fits.getdata(self.path_img, ignore_missing_end=True) #in DN
+            self.cam.image = fits.getdata(self.path_img,
+                                          ignore_missing_end=True,
+                                          ignore_missing_simple=True) #in DN
             
             if cam_fov and (cam_fov < min(self.cam.image.shape)) :
                 self.cam.fov   = cam_fov
@@ -326,7 +331,9 @@ class telemetryKeck:
         
         # 1\ Restore telemetry data and header
         trsData = readsav(self.path_trs,verbose=verbose)
-        hdr     = fits.getheader(self.path_img, ignore_missing_end=True)
+        hdr = fits.getheader(self.path_img,
+                             ignore_missing_end=True,
+                             ignore_missing_simple=True)
         
         # 2\ Get AO control loop data                 
     
