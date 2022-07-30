@@ -300,7 +300,7 @@ class zernike:
 
     def tiltsAngularCovariance(self,tel,atm,src,gs,tilt='Z',lag=0):
         
-        def sumLayers(f,j,i):
+        def sumLayers(f,j,i, ax, ay):
             g = np.pi*( (-1)**i + (-1)**j - 2 )/4
             h = np.pi*( (-1)**i - (-1)**j )/4
             outSumLayers = 0;
@@ -319,24 +319,27 @@ class zernike:
         D  = tel.D
         R  = D/2
         psdCst = (24*ssp.gamma(6./5)/5)**(5./6) * (ssp.gamma(11./6)**2/(2*np.pi**(11./3))) * atm.r0 ** (-5./3)
-        cov = np.zeros((2,2))            
-        ax = src.direction[0] - gs.direction[0]
-        ay = src.direction[1] - gs.direction[1]
-        
+        axs = src.direction[0] - gs.direction[0]
+        ays = src.direction[1] - gs.direction[1]
+        cov = np.zeros((len(axs),2,2))            
+
         if tilt == 'Z':
-                tiltsFilter = lambda f: (2.*ssp.jn(2,np.pi*f*D)/(np.pi*f*R))**2
+                tiltsFilter = lambda f: f*(2.*ssp.jn(2,np.pi*f*D)/(np.pi*f*R))**2
         elif tilt == 'G':
-                tiltsFilter = lambda f: (ssp.j1(np.pi*f*D))**2
+                tiltsFilter = lambda f: f*(ssp.j1(np.pi*f*D))**2
         elif tilt =='ZG':
-                tiltsFilter = lambda f: 2*ssp.jn(2,np.pi*f*D) * ssp.j1(np.pi*f*D)/(np.pi*f*R)
+                tiltsFilter = lambda f: f*2*ssp.jn(2,np.pi*f*D) * ssp.j1(np.pi*f*D)/(np.pi*f*R)
         else:
             print('tilts filters are either Z, G or ZG')
             
         # integration
-        cov[0,0] = integrate.quad( lambda f: f*sumLayers(f,2,2)*tiltsFilter(f) , 0 , np.inf)[0]
-        cov[0,1] = integrate.quad( lambda f: f*sumLayers(f,2,3)*tiltsFilter(f) , 0 , np.inf)[0]
-        cov[1,0] = integrate.quad( lambda f: f*sumLayers(f,3,2)*tiltsFilter(f) , 0 , np.inf)[0]
-        cov[1,1] = integrate.quad( lambda f: f*sumLayers(f,3,3)*tiltsFilter(f) , 0 , np.inf)[0]
+        for s in range(len(axs)):
+            ax=axs[s]
+            ay=ays[s]
+            cov[s,0,0] = integrate.quad( lambda f: sumLayers(f,2,2,ax,ay)*tiltsFilter(f) , 0 , np.inf)[0]
+            cov[s,0,1] = integrate.quad( lambda f: sumLayers(f,2,3,ax,ay)*tiltsFilter(f) , 0 , np.inf)[0]
+            cov[s,1,0] = integrate.quad( lambda f: sumLayers(f,3,2,ax,ay)*tiltsFilter(f) , 0 , np.inf)[0]
+            cov[s,1,1] = integrate.quad( lambda f: sumLayers(f,3,3,ax,ay)*tiltsFilter(f) , 0 , np.inf)[0]
 
         return cov
     
@@ -346,5 +349,5 @@ class zernike:
         C2 = self.tiltsAngularCovariance(tel,atm,gs,gs,tilt='Z',lag=0)
         C3 = self.tiltsAngularCovariance(tel,atm,src,gs,tilt='Z',lag=0)
         
-        return C1 + C2 - C3 - C3.T
+        return C1 + C2 - 2*C3
             
