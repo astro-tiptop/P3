@@ -9,7 +9,7 @@ Created on Fri Apr 23 17:37:49 2021
 #%% IMPORTING LIBRARIES
 import sys
 import time
-
+import pathlib
 import aoSystem as aoSystemMain
 
 from aoSystem.aoSystem import aoSystem
@@ -20,34 +20,29 @@ from aoSystem.frequencyDomain import frequencyDomain
 from aoSystem.fourierModel import fourierModel
 
 
-path_p3 = '/'.join(aoSystemMain.__file__.split('/')[0:-2])
+path_ao = str(pathlib.Path(aoSystemMain.__file__).parent.absolute())
+path_p3 = str(pathlib.Path(aoSystemMain.__file__).parent.parent.absolute())
 
 #%% TEST THE PUPIL MAKER
 def MakeKeckPupil(nargout=0):
-    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
-    if sys.platform[0:3] == 'win':
-        path_txt = path_mod + '\_txtFile\Keck_segmentVertices.txt'
-    else:
-        path_txt = path_mod + '/_txtFile/Keck_segmentVertices.txt'
+    path_txt = path_ao + '/_txtFile/Keck_segmentVertices.txt'
     
     t0 = time.time()
-    spiRef   = spiders([0,60,120],0.0254,symetric=True,D=10.5) 
-    keckPup  = pupil(segClass=segment(6,0.9,200),segCoord=path_txt,D=10.5,cobs=0.2311,spiderClass=spiRef)
+    spiRef   = spiders([0,60,120], 0.0254, symetric=True, D=10.5) 
+    keckPup  = pupil(segClass=segment(6,0.9,200), segCoord=path_txt, D=10.5,
+                     cobs=0.2311, spiderClass=spiRef)
     print("Pupil creation in %.2f s  "%(time.time() - t0))
     keckPup.displayPupil()
     if nargout ==1:
         return keckPup
     
 def MakeELTPupil(nargout=0):
-    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
-    if sys.platform[0:3] == 'win':
-        path_txt = path_mod + '\_txtFile\ELT_segmentVertices.txt'
-    else:
-        path_txt = path_mod + '/_txtFile/ELT_segmentVertices.txt'
+    path_txt = path_ao + '/_txtFile/ELT_segmentVertices.txt'
     
     t0 = time.time()
     spiRef   = spiders([0,60,120],0.5,symetric=True,D=39) 
-    eltPup   = pupil(segClass=segment(6,1.3/2,25),segCoord=path_txt,D=39,cobs=0.2375,spiderClass=spiRef)
+    eltPup   = pupil(segClass=segment(6,1.3/2,25), segCoord=path_txt, D=39,
+                     cobs=0.2375, spiderClass=spiRef)
     print("Pupil creation in %.2f s  "%(time.time() - t0))
     eltPup.displayPupil()
     if nargout ==1:
@@ -55,21 +50,14 @@ def MakeELTPupil(nargout=0):
     
     
 #%% TEST THE AOSYSTEM CALL
-def InitSys(sysName,nargout=0):
+def InitSys(sysName, nargout=0):
     
     # RETIEVING THE .INI FILE
-    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
-    if sys.platform[0:3] == 'win':
-        path_ini = path_mod + '\parFiles\\' + sysName + '.ini'
-        path_p3 = '\\'.join(aoSystemMain.__file__.split('/')[0:-2])
-    else:
-        path_ini = path_mod + '/parFiles/' + sysName + '.ini'
-        path_p3 = '/'.join(aoSystemMain.__file__.split('/')[0:-2])
-
+    path_ini = path_ao + '/parFiles/' + sysName + '.ini'
         
     # INIT THE AO SYSTEM
     t0 = time.time()
-    ao = aoSystem(path_ini,path_root=path_p3)
+    ao = aoSystem(path_ini, path_root=path_p3)
     print(sysName + " system instantiation in %.2f ms  "%(1000*(time.time() - t0)))
     print(ao.__repr__())
     
@@ -106,11 +94,7 @@ def TestInitSys():
 def TestFourierModel(sysName,calcPSF=False,getMetrics=False,nargout=0):
 
     # RETIEVING THE .INI FILE
-    path_mod = '/'.join(aoSystemMain.__file__.split('/')[0:-1])
-    if sys.platform[0:3] == 'win':
-        path_ini = path_mod + '\parFiles\\' + sysName + '.ini'
-    else:
-        path_ini = path_mod + '/parFiles/' + sysName + '.ini'
+    path_ini = path_ao + '/parFiles/' + sysName + '.ini'
         
     # INIT THE fourierModel object
     typeData = 'PSD'
@@ -118,8 +102,13 @@ def TestFourierModel(sysName,calcPSF=False,getMetrics=False,nargout=0):
         typeData = 'PSF'
         
     t0 = time.time()
-    fao = fourierModel(path_ini,calcPSF=calcPSF,verbose=True,display=False,path_root=path_p3,getErrorBreakDown=True,\
-        getFWHM=getMetrics,getEncircledEnergy=getMetrics,getEnsquaredEnergy=getMetrics,displayContour=getMetrics)
+    fao = fourierModel(path_ini, path_root=path_p3, calcPSF=calcPSF,
+                       verbose=True, display=False,
+                       getErrorBreakDown=True,
+                       getFWHM=getMetrics,
+                       getEncircledEnergy=getMetrics,
+                       getEnsquaredEnergy=getMetrics,
+                       displayContour=getMetrics)
     print(sysName +  ' ' + typeData +  ' model computation %.2f ms\n '%(1000*(time.time() - t0)))
     
     if nargout == 1:
