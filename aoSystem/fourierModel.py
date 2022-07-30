@@ -52,22 +52,23 @@ class fourierModel:
     """
     
     # CONTRUCTOR
-    def __init__(self,path_ini,calcPSF=True,verbose=False,display=True,path_root='',\
-                 normalizePSD=False,displayContour=False,getPSDatNGSpositions=False,\
-                 getErrorBreakDown=False,getFWHM=False,getEnsquaredEnergy=False,\
-                 getEncircledEnergy=False,fftphasor=False,MV=0,nyquistSampling=False,addOtfPixel=False):
+    def __init__(self, path_ini, calcPSF=True, verbose=False, display=True, path_root='',
+                 normalizePSD=False, displayContour=False, getPSDatNGSpositions=False,
+                 getErrorBreakDown=False, getFWHM=False, getEnsquaredEnergy=False,
+                 getEncircledEnergy=False, fftphasor=False, MV=0, nyquistSampling=False,
+                 addOtfPixel=False):
         
         tstart = time.time()
         
         # PARSING INPUTS
-        self.verbose           = verbose
-        self.path_ini          = path_ini  
-        self.display           = display
+        self.verbose = verbose
+        self.path_ini = path_ini  
+        self.display = display
         self.getErrorBreakDown = getErrorBreakDown
-        self.getPSFmetrics     = getFWHM or getEnsquaredEnergy or getEncircledEnergy
-        self.calcPSF           = calcPSF
-        self.tag               = 'TIPTOP'
-        self.addOtfPixel       = addOtfPixel
+        self.getPSFmetrics = getFWHM or getEnsquaredEnergy or getEncircledEnergy
+        self.calcPSF = calcPSF
+        self.tag = 'TIPTOP'
+        self.addOtfPixel = addOtfPixel
 
         # GRAB PARAMETERS
         self.ao = aoSystem(path_ini,path_root=path_root,getPSDatNGSpositions=getPSDatNGSpositions)
@@ -176,17 +177,17 @@ class fourierModel:
     def defineBounds(self):
           
         # Photometry
-        bounds_down  = [-np.inf,-np.inf,-np.inf]
-        bounds_up    = [np.inf,np.inf,np.inf]
+        bounds_down = [-np.inf,-np.inf,-np.inf]
+        bounds_up = [np.inf,np.inf,np.inf]
         # Photometry
         bounds_down += list(np.zeros(self.ao.src.nSrc))
-        bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc))
+        bounds_up += list(np.inf*np.ones(self.ao.src.nSrc))
         # Astrometry
         bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
-        bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
+        bounds_up += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc))
         # Background
         bounds_down += [-np.inf]
-        bounds_up   += [np.inf]
+        bounds_up += [np.inf]
         
         return (bounds_down,bounds_up)
       

@@ -165,7 +165,7 @@ def anisokinetism_phase_structure_function(tel,atm,src,gs,nOtf,samp):
         thy = ay[iSrc]
         if thx !=0 or thy !=0:
             for l in range(nLayer):
-                zl    = Hs[l]
+                zl = Hs[l]
                 if zl !=0: 
                     # update the atmosphere
                     atm_l = atm.slab(l)
@@ -173,5 +173,8 @@ def anisokinetism_phase_structure_function(tel,atm,src,gs,nOtf,samp):
                     # get the 2x2 anisokinetism covariance matrix
                     covAniso = zern.anisokinetism(tel,atm_l,src,gs)
                     # defining the Gaussian kernel
-                    Dani_l[iSrc,l] = 0.1*(covAniso[0,0] * X2 + covAniso[1,1]*Y2 + covAniso[0,1]*XY + covAniso[1,0]*YX)/fr0
+                    Dani_l[iSrc,l] = (covAniso[iSrc,0,0]*X2 +
+                                      covAniso[iSrc,1,1]*Y2 +
+                                      covAniso[iSrc,0,1]*XY +
+                                      covAniso[iSrc,1,0]*YX)/fr0
     return Dani_l
