@@ -65,10 +65,6 @@ def angular_focal_anisoplanatism_phase_structure_function(tel,atm,src,gs,nOtf,sa
     
     #2\ SF Calculation
     
-    # !!!!! #HACKING FOR TESTING !!!
-    gs.height = 0 
-    # !!!!
-    
     nOtf_hr = nOtf
     if gs.height:
         # Must reduce nOtf to decrease the computationnal power and memory; causes Python crash otherwise
