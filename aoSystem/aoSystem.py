@@ -105,7 +105,7 @@ class aoSystem():
             
         #----- PUPIL
         if self.check_config_key('telescope','PathPupil'):
-            path_pupil = path_root + eval("r"+self.get_config_value('telescope','PathPupil'))
+            path_pupil = path_root + self.get_config_value('telescope','PathPupil')
         else:
             path_pupil = ''
                   
@@ -115,29 +115,29 @@ class aoSystem():
             pupilAngle = 0.0
         
         if self.check_config_key('telescope','PathStaticOn'):
-            path_static_on = path_root + eval("r"+self.get_config_value('telescope','PathStaticOn'))
+            path_static_on = path_root + self.get_config_value('telescope','PathStaticOn')
         else:
             path_static_on = None       
         
         if self.check_config_key('telescope','PathStaticOff'):
-            path_static_off = path_root + eval("r"+self.get_config_value('telescope','PathStaticOff'))
+            path_static_off = path_root +self.get_config_value('telescope','PathStaticOff')
         else:
             path_static_off = None
         
         if self.check_config_key('telescope','PathStaticPos'):
-            path_static_pos = path_root + eval("r"+self.get_config_value('telescope','PathStaticPos'))
+            path_static_pos = path_root + self.get_config_value('telescope','PathStaticPos')
         else:
             path_static_pos = None
             
         #----- APODIZER
         if self.check_config_key('telescope','PathApodizer'):
-            path_apodizer = path_root + eval("r"+self.get_config_value('telescope','PathApodizer'))
+            path_apodizer = path_root + self.get_config_value('telescope','PathApodizer')
         else:
             path_apodizer = ''
                 
         #----- TELESCOPE ABERRATIONS
         if self.check_config_key('telescope', 'PathStatModes'):
-            path_statModes = path_root + eval("r"+self.get_config_value('telescope','PathStatModes'))
+            path_statModes = path_root + self.get_config_value('telescope','PathStatModes')
         else:
             path_statModes = ''
             
