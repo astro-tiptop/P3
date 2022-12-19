@@ -895,8 +895,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     # anisoplanatic PSF. Prefer the coutour function in such a
     # case. The cutting method is not compliant to PSF not oriented
     #along x or y-axis.
-            
-           
+
     #Interpolation            
     Ny,Nx = psf.shape
     if rebin > 1:
@@ -904,16 +903,26 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     else:
         im_hr = psf
         
+    ss = im_hr.shape
+    sbx, sby = [[0,ss[1]],[0,ss[0]]]
+
+    peak_val = np.max(im_hr)
+    # initial guess of PSF center
+    y_peak, x_peak = np.where(im_hr == peak_val)
+    x00 = sbx[0]
+    y00 = sby[0]
+    x_peak += x00
+    y_peak += y00
+    
     if method == 'cutting':
         # Brutal approach when the PSF is centered and aligned x-axis FWHM
-        imy     = im_hr[:,int(Ny*rebin/2)]        
-        w       = np.where(imy >= imy.max()/2)[0]
-        FWHMy   = pixelScale*(w.max() - w.min())/rebin
+        imy     = im_hr[:,y_peak]
+        wy      = np.where(imy >= imy.max()/2)[0]
+        FWHMy   = (wy.max() - wy.min())/rebin*pixelScale
         #y-axis FWHM
-        imx     = im_hr[int(Nx*rebin/2),:]
-        w       = np.where(imx >= imx.max()/2)[0]
-        FWHMx   = (w.max() - w.min())/rebin*pixelScale
-        aRatio  = 1
+        imx     = im_hr[x_peak,:]
+        wx      = np.where(imx >= imx.max()/2)[1]
+        FWHMx   = (wx.max() - wx.min())/rebin*pixelScale
         theta   = 0
 
     elif method == 'contour':
@@ -949,27 +958,38 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
             theta = -1
         mpl.interactive(True)   
     elif method == 'gaussian':
-        # Prepare array r with radius in arcseconds
-        y, x = np.indices(psf.shape, dtype=float)
-        if center is None:
-            # Normalize
-            psf = psf/psf.max()
-            # get exact center of image
-            center = tuple((a - 1) / 2.0 for a in psf.shape[::-1])
-            x -= center[0]
-            y -= center[1]
-            Y, X = np.mgrid[:Ny, :Nx]*pixelScale
-            std_guess = std_guess*pixelScale
-           # Define the model
-            g_init = models.Gaussian2D(amplitude=1., x_mean=0, y_mean = 0,x_stddev=std_guess,y_stddev=std_guess)
-            g_init.x_mean.fixed = True
-            g_init.y_mean.fixed = True
-            fit_g = fitting.LevMarLSQFitter()
-            # fit x axis
-            g = fit_g(g_init, X-center[0], Y-center[1], psf)
-            FWHMx = 2 * np.sqrt(2 * np.log(2)) * np.abs(g.x_stddev)
-            FWHMy = 2 * np.sqrt(2 * np.log(2)) * np.abs(g.y_stddev)
-            
+        # initial guess of the FWHM
+        fwhm_guess = 2*np.sqrt((im_hr > peak_val/2).sum()/np.pi)
+        
+        stddev_guess = fwhm_guess/(2*np.sqrt(2*np.log(2)))
+        p_init = models.Gaussian2D(amplitude=peak_val, x_mean=x_peak[0], y_mean=y_peak[0],
+                                   x_stddev=stddev_guess, y_stddev=stddev_guess)
+        
+        fit_p = fitting.LevMarLSQFitter()
+    
+        y,x = np.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
+        g = fit_p(p_init, x, y, im_hr)
+        
+        FWHMx = 2 * np.sqrt(2 * np.log(2)) * np.abs(g.x_stddev.value*pixelScale)
+        FWHMy = 2 * np.sqrt(2 * np.log(2)) * np.abs(g.y_stddev.value*pixelScale)
+        theta = g.theta.value*180/np.pi
+    elif method == 'moffat':      
+        # initial guess of the FWHM
+        fwhm_guess = 2*np.sqrt((im_hr > peak_val/2).sum()/np.pi)
+        
+        beta = 4.765    # expected beta value  for Seeing limited PSF
+        p_init = models.Moffat2D(amplitude=peak_val, x_0=x_peak[0], y_0=y_peak[0],
+                                 gamma=fwhm_guess/(2*np.sqrt(2**(1/beta)-1)))
+        
+        fit_p = fitting.LevMarLSQFitter()
+    
+        y,x = np.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
+        g = fit_p(p_init, x, y, im_hr)
+        
+        FWHMx = g.fwhm*pixelScale
+        FWHMy = g.fwhm*pixelScale
+        theta   = 0
+        
     # Get Ellipticity
     aRatio      = np.max([FWHMx/FWHMy,FWHMy/FWHMx])
     
