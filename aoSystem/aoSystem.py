@@ -40,7 +40,10 @@ class aoSystem():
         if self.configType == 'ini':
             return self.config.has_option(primary, secondary)
         elif self.configType == 'yml':
-            return secondary in self.my_yaml_dict[primary].keys()
+            if primary in self.my_yaml_dict.keys():
+                return secondary in self.my_yaml_dict[primary].keys()
+            else:
+                return False
 
 
     def get_config_value(self, primary, secondary):

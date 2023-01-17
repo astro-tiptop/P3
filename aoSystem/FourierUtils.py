@@ -916,13 +916,13 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     
     if method == 'cutting':
         # Brutal approach when the PSF is centered and aligned x-axis FWHM
-        imy     = im_hr[:,y_peak]
-        wy      = np.where(imy >= imy.max()/2)[0]
-        FWHMy   = (wy.max() - wy.min())/rebin*pixelScale
-        #y-axis FWHM
-        imx     = im_hr[x_peak,:]
-        wx      = np.where(imx >= imx.max()/2)[1]
+        imx     = im_hr[:,y_peak]
+        wx      = np.where(imx >= imx.max()/2)[0]
         FWHMx   = (wx.max() - wx.min())/rebin*pixelScale
+        #y-axis FWHM
+        imy     = im_hr[x_peak,:]
+        wy      = np.where(imy >= imy.max()/2)[1]
+        FWHMy   = (wy.max() - wy.min())/rebin*pixelScale
         theta   = 0
 
     elif method == 'contour':
