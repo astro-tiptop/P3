@@ -139,7 +139,7 @@ class frequencyDomain():
         return min(4,max(2,int(np.ceil(self.nOtf/self.resAO/2))))
     
     
-    def __init__(self,aoSys,kcExt=None,nyquistSampling=False):
+    def __init__(self,aoSys,kcExt=None,nyquistSampling=False,computeFocalAnisoCov=True):
         
         # PARSING INPUTS TO GET THE SAMPLING VALUES
         self.ao     = aoSys
@@ -186,7 +186,7 @@ class frequencyDomain():
         # ANISOPLANATISM PHASE STRUCTURE FUNCTION
         t0 = time.time()
         if (self.ao.aoMode == 'SCAO') or (self.ao.aoMode == 'SLAO'):
-            self.dphi_ani = self.anisoplanatismPhaseStructureFunction()
+            self.dphi_ani = self.anisoplanatismPhaseStructureFunction(computeFocalAnisoCov=computeFocalAnisoCov)
         else:
             self.isAniso = False
             self.dphi_ani = None
@@ -206,12 +206,12 @@ class frequencyDomain():
         return s
         
         
-    def anisoplanatismPhaseStructureFunction(self):
+    def anisoplanatismPhaseStructureFunction(self,computeFocalAnisoCov=True):
         
         # compute th Cn2 profile in m^(-5/3)
         Cn2 = self.ao.atm.weights * self.ao.atm.r0**(-5/3)
 
-        if self.ao.aoMode == 'SCAO':
+        if self.ao.aoMode == 'SCAO' or computeFocalAnisoCov == False:
             # NGS case : angular-anisoplanatism only
             if np.all(self.ao.src.direction == self.ao.ngs.direction):
                 self.isAniso = False

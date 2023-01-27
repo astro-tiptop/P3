@@ -56,7 +56,7 @@ class fourierModel:
                  normalizePSD=False, displayContour=False, getPSDatNGSpositions=False,
                  getErrorBreakDown=False, getFWHM=False, getEnsquaredEnergy=False,
                  getEncircledEnergy=False, fftphasor=False, MV=0, nyquistSampling=False,
-                 addOtfPixel=False):
+                 addOtfPixel=False, computeFocalAnisoCov=True):
         
         tstart = time.time()
         
@@ -77,7 +77,7 @@ class fourierModel:
         if self.ao.error==False:
             
             # DEFINING THE FREQUENCY DOMAIN
-            self.freq = frequencyDomain(self.ao,nyquistSampling=nyquistSampling)
+            self.freq = frequencyDomain(self.ao,nyquistSampling=nyquistSampling,computeFocalAnisoCov=computeFocalAnisoCov)
 
             # DEFINING THE GUIDE STAR AND THE STRECHING FACTOR
             if self.ao.lgs:
@@ -493,6 +493,12 @@ class fourierModel:
             self.psdSpatioTemporal = np.real(self.spatioTemporalPSD())
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdSpatioTemporal
            
+            # Cone effect
+            if self.nGs == 1 and self.gs.height[0] != 0:
+                print('SLAO case adding cone effect')
+                self.psdCone = self.focalAnisoplanatismPSD()
+                psd += np.repeat(self.psdCone[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
+            
             # NORMALIZATION
             if wfe !=None:
                 psd *= (dk * rad2nm)**2
@@ -756,6 +762,57 @@ class fourierModel:
        '''
        cov = fft.fftshift(fft.fftn(fft.fftshift(self.PSD,axes=(0,1)),axes=(0,1)),axes=(0,1))
        return 2*np.real(cov.max(axis=(0,1)) - cov)
+
+    def focalAnisoplanatismPSD(self):
+        """%% Focal Anisoplanatism power spectrum density
+        """
+        tstart  = time.time()
+        
+        #Instantiate the function output
+        psd      = np.zeros((self.freq.nOtf,self.freq.nOtf))
+        # atmo PSD 
+        psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))    
+        
+        nPoints = 1001
+        x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
+        h = self.ao.atm.heights
+        h_laser = self.gs.height[0]
+        ratio = (h_laser-h)/h_laser
+        nCn2 = len(h)
+        freqs = self.freq.kx_[int(np.ceil(self.freq.nOtf/2)-1):,0]
+        if freqs[0] < 0:
+            freqs = freqs[1:]
+        nf0 = len(freqs)
+        coeff = np.zeros((nf0,nCn2))
+        
+        if self.verbose:
+            print('h_laser',h_laser)
+            print('h',h)
+            print('nf0',nf0)
+            print('ratio',ratio)
+        
+        for j in range(nCn2):
+            for i in range(nf0):
+                if freqs[i]*ratio[j] > self.freq.kc_:
+                    coeff[i,j] = 0.0
+                else:
+                    sin_ref = np.sin(2*np.pi*freqs[i]*x)
+                    sin_temp = np.sin(2*np.pi*freqs[i]*ratio[j]*x)
+                    sin_res = sin_ref - sin_temp
+                    if freqs[i] < 1e-5:
+                        coeff[i,j] = 1-ratio[j]
+                    else:
+                        coeff[i,j] = np.sqrt(np.mean(abs(sin_res)**2.)) / np.sqrt(np.mean(abs(sin_ref)**2.))
+            coeff_temp = coeff[:,j]
+            coeff2 = np.concatenate((-np.flip(coeff_temp),coeff_temp), axis=0)
+            coeff_x = np.tile(coeff2,(self.freq.nOtf,1))
+            coeff_y = np.transpose(coeff_x)
+            coeff_tot = coeff_x**2.+coeff_y**2.
+            psd += coeff_tot*psd_atmo*self.ao.atm.weights[j]
+        
+        self.t_focalAnisoplanatism = 1000*(time.time() - tstart)
+        
+        return np.real(psd)
        
 #%% AO ERROR BREAKDOWN
     def errorBreakDown(self,verbose=True):
@@ -1078,6 +1135,7 @@ class fourierModel:
                 print("Required time for aliasing PSD calculation (ms)\t : {:f}".format(self.t_aliasingPSD))
                 print("Required time for noise PSD calculation (ms)\t : {:f}".format(self.t_noisePSD))
                 print("Required time for ST PSD calculation (ms)\t : {:f}".format(self.t_spatioTemporalPSD))
+                print("Required time for focal Aniso PSD calculation (ms)\t : {:f}".format(self.t_focalAnisoplanatism))
                 
                 # Error breakdown
                 if hasattr(self,'t_errorBreakDown'):
