@@ -497,7 +497,7 @@ class fourierModel:
             if self.nGs == 1 and self.gs.height[0] != 0:
                 print('SLAO case adding cone effect')
                 self.psdCone = self.focalAnisoplanatismPSD()
-                psd = np.repeat(self.psdCone[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
+                psd += np.repeat(self.psdCone[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
             
             # NORMALIZATION
             if wfe !=None:
