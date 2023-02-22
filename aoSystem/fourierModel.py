@@ -803,11 +803,13 @@ class fourierModel:
                         coeff[i,j] = 1-ratio[j]
                     else:
                         coeff[i,j] = np.sqrt(np.mean(abs(sin_res)**2.)) / np.sqrt(np.mean(abs(sin_ref)**2.))
-            coeff_temp = coeff[:,j]
-            coeff2 = np.concatenate((-np.flip(coeff_temp),coeff_temp), axis=0)
-            coeff_x = np.tile(coeff2,(self.freq.nOtf,1))
-            coeff_y = np.transpose(coeff_x)
-            coeff_tot = coeff_x**2.+coeff_y**2.
+                         
+            coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff[:,j])**2
+            
+            #fig, ax1 = plt.subplots(1,1)
+            #im = ax1.imshow(coeff_tot, cmap='hot')
+            #ax1.set_title('cone effect filter coefficients', color='black')
+            
             psd += coeff_tot*psd_atmo*self.ao.atm.weights[j]
         
         self.t_focalAnisoplanatism = 1000*(time.time() - tstart)
