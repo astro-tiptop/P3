@@ -8,7 +8,7 @@ Created on Sat Aug 18 22:20:28 2018
 #%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
 import time
-import sys as sys
+import sys
 import numpy.fft as fft
 
 from p3.aoSystem.aoSystem import p3.aoSystem

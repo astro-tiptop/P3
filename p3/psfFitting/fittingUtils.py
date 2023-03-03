@@ -10,7 +10,7 @@ Created on Mon May 3 13:30:49 2021
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-import math as math
+import math
 from random import random
 from configparser import ConfigParser
 import os
