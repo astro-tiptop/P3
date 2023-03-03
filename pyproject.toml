@@ -17,6 +17,7 @@ dependencies = [
     "matplotlib",
     "numpy",
     "scipy",
+    "pyyaml",
 ]
 dynamic = ["version"]
 
