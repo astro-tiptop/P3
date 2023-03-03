@@ -18,12 +18,12 @@ import os
 from astropy.io import fits
 from astropy.table import QTable
 
-from psfao21.psfao21 import psfao21
-from psfFitting.psfFitting import psfFitting
-import aoSystem.FourierUtils as FourierUtils
-import telemetry.keckUtils as keckUtils
-from psfFitting.psfFitting import displayResults
-from psfFitting.imageModel import imageModel
+from p3.psfao21.psfao21 import psfao21
+from p3.psfFitting.psfFitting import psfFitting
+import p3.aoSystem.FourierUtils as FourierUtils
+import p3.telemetry.keckUtils as keckUtils
+from p3.psfFitting.psfFitting import displayResults
+from p3.psfFitting.imageModel import imageModel
 
 mpl.rcParams['font.size'] = 12
 usetex = False

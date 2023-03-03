@@ -17,12 +17,12 @@ import numpy as np
 import yaml
 
 # IMPORTING P3 MODULES
-import aoSystem.FourierUtils as FourierUtils
-from aoSystem.telescope import telescope
-from aoSystem.atmosphere import atmosphere
-from aoSystem.source import source
-from aoSystem.deformableMirror import deformableMirror
-from aoSystem.detector import detector
+import p3.aoSystem.FourierUtils as FourierUtils
+from p3.aoSystem.telescope import telescope
+from p3.aoSystem.atmosphere import atmosphere
+from p3.aoSystem.source import source
+from p3.aoSystem.deformableMirror import deformableMirror
+from p3.aoSystem.detector import detector
 
 #INIT 
 

@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from distutils.spawn import find_executable
-from aoSystem.FourierUtils import inpolygon
+from p3.aoSystem.FourierUtils import inpolygon
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
 

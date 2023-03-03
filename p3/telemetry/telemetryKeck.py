@@ -11,10 +11,10 @@ import numpy as np
 import os
 from scipy.io import readsav
 from astropy.io import fits
-from aoSystem.deformableMirror import deformableMirror
-import aoSystem.FourierUtils as FourierUtils
-import telemetry.keckUtils as keckUtils
-from telemetry.massdimm import fetch_data, DIMM, MASS, MASSPROF, CombineMASSandDIMM
+from p3.aoSystem.deformableMirror import deformableMirror
+import p3.aoSystem.FourierUtils as FourierUtils
+import p3.telemetry.keckUtils as keckUtils
+from p3.telemetry.massdimm import fetch_data, DIMM, MASS, MASSPROF, CombineMASSandDIMM
 from scipy.signal import medfilt2d
 
 #%%

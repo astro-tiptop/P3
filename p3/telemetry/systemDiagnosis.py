@@ -9,10 +9,10 @@ Created on Fri Apr  9 16:04:21 2021
 #%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
 import numpy.fft as fft
-import aoSystem.FourierUtils as FourierUtils
-from aoSystem.zernike import zernike
+import p3.aoSystem.FourierUtils as FourierUtils
+from p3.aoSystem.zernike import zernike
 from scipy.optimize import least_squares
-from psfFitting.confidenceInterval import confidence_interval
+from p3.psfFitting.confidenceInterval import confidence_interval
 
 # 
 # TO DO : 

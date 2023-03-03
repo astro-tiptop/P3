@@ -23,10 +23,10 @@ import scipy.special as spc
 import time
 from distutils.spawn import find_executable
 
-import aoSystem.FourierUtils as FourierUtils
-from aoSystem.aoSystem import aoSystem
-from aoSystem.atmosphere import atmosphere
-from aoSystem.frequencyDomain import frequencyDomain
+import p3.aoSystem.FourierUtils as FourierUtils
+from p3.aoSystem.aoSystem import p3.aoSystem
+from p3.aoSystem.atmosphere import atmosphere
+from p3.aoSystem.frequencyDomain import frequencyDomain
 
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16

@@ -11,13 +11,13 @@ import pathlib
 import numpy as np
 from astropy.io import fits
 
-import aoSystem as aoSystemMain
-from aoSystem.pupil import pupil
-from aoSystem.segment import segment
-from aoSystem.zernike import zernike
-from aoSystem.spiders import spiders
+import p3.aoSystem as aoSystemMain
+from p3.aoSystem.pupil import pupil
+from p3.aoSystem.segment import segment
+from p3.aoSystem.zernike import zernike
+from p3.aoSystem.spiders import spiders
 import matplotlib.pyplot as plt
-import aoSystem.FourierUtils as FourierUtils
+import p3.aoSystem.FourierUtils as FourierUtils
 path_ao = str(pathlib.Path(aoSystemMain.__file__).parent.absolute())
 
 #%% CREATING ELT PETALLING MODES 

@@ -9,7 +9,7 @@ Created on Fri Jun 15 14:57:49 2018
 # Libraries
 import numpy as np
 import numpy.fft as fft
-import aoSystem.FourierUtils as FourierUtils
+import p3.aoSystem.FourierUtils as FourierUtils
 import urllib.request
 import os
 

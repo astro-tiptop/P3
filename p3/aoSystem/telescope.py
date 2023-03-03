@@ -10,7 +10,7 @@ from astropy.io import fits
 import os.path as ospath
 import re
 from scipy.ndimage import rotate
-import aoSystem.FourierUtils as FourierUtils
+import p3.aoSystem.FourierUtils as FourierUtils
 
 class Attribute(object):
     pass

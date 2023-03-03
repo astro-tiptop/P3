@@ -9,14 +9,14 @@ Created on Fri Apr 23 17:37:49 2021
 #%% IMPORTING LIBRARIES
 import time
 import pathlib
-import aoSystem as aoSystemMain
+import p3.aoSystem as aoSystemMain
 
-from aoSystem.aoSystem import aoSystem
-from aoSystem.pupil import pupil
-from aoSystem.segment import segment
-from aoSystem.spiders import spiders
-from aoSystem.frequencyDomain import frequencyDomain
-from aoSystem.fourierModel import fourierModel
+from p3.aoSystem.aoSystem import p3.aoSystem
+from p3.aoSystem.pupil import pupil
+from p3.aoSystem.segment import segment
+from p3.aoSystem.spiders import spiders
+from p3.aoSystem.frequencyDomain import frequencyDomain
+from p3.aoSystem.fourierModel import fourierModel
 
 
 path_ao = str(pathlib.Path(aoSystemMain.__file__).parent.absolute())

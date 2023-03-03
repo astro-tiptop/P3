@@ -14,14 +14,14 @@ import numpy as np
 import yaml
 
 # IMPORTING P3 MODULES
-from aoSystem.telescope import telescope
-from aoSystem.atmosphere import atmosphere
-from aoSystem.source import source
-from aoSystem.deformableMirror import deformableMirror
-from aoSystem.detector import detector
-from aoSystem.sensor import sensor
-from aoSystem.rtc import rtc
-import aoSystem.anisoplanatismModel as anisoplanatismModel
+from p3.aoSystem.telescope import telescope
+from p3.aoSystem.atmosphere import atmosphere
+from p3.aoSystem.source import source
+from p3.aoSystem.deformableMirror import deformableMirror
+from p3.aoSystem.detector import detector
+from p3.aoSystem.sensor import sensor
+from p3.aoSystem.rtc import rtc
+import p3.aoSystem.anisoplanatismModel as anisoplanatismModel
 
 #%%
 class aoSystem():

@@ -9,9 +9,9 @@ Created on Wed Feb 17 10:33:19 2021
 #%% MANAGE PYTHON LIBRAIRIES
 import numpy as np
 from scipy.optimize import least_squares
-import aoSystem.FourierUtils as FourierUtils
-from psfFitting.confidenceInterval import confidence_interval
-from psfFitting.imageModel import imageModel
+import p3.aoSystem.FourierUtils as FourierUtils
+from p3.psfFitting.confidenceInterval import confidence_interval
+from p3.psfFitting.imageModel import imageModel
 
 import matplotlib.pyplot as plt
 

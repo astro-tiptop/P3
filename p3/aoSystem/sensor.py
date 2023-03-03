@@ -7,9 +7,9 @@ Created on Sat Apr 17 13:57:21 2021
 """
 
 import numpy as np
-from aoSystem.optics import optics
-from aoSystem.detector import detector
-from aoSystem.processing import processing
+from p3.aoSystem.optics import optics
+from p3.aoSystem.detector import detector
+from p3.aoSystem.processing import processing
 
 class sensor:
     """

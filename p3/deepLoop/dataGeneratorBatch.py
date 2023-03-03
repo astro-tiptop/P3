@@ -10,7 +10,7 @@ from dataGenerator import generate_psf
 import sys
 
 # grab the path
-import aoSystem as aoSystemMain
+import p3.aoSystem as aoSystemMain
 
 if sys.platform[0:3] == 'win':
     path_mod = '\\'.join(aoSystemMain.__file__.split('\\')[0:-1])

@@ -10,14 +10,14 @@ Created on Fri Mar 18 11:00:00 2022
 import sys
 import time
 
-import aoSystem as aoSystemMain
+import p3.aoSystem as aoSystemMain
 
-from aoSystem.aoSystem import aoSystem
-from aoSystem.pupil import pupil
-from aoSystem.segment import segment
-from aoSystem.spiders import spiders
-from aoSystem.frequencyDomain import *
-from aoSystem.fourierModel import *
+from p3.aoSystem.aoSystem import p3.aoSystem
+from p3.aoSystem.pupil import pupil
+from p3.aoSystem.segment import segment
+from p3.aoSystem.spiders import spiders
+from p3.aoSystem.frequencyDomain import *
+from p3.aoSystem.fourierModel import *
 
 import numpy as np
 

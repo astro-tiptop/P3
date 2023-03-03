@@ -14,10 +14,10 @@ import numpy.fft as fft
 import time
 import sys as sys
 
-import aoSystem.FourierUtils as FourierUtils
-from aoSystem.aoSystem import aoSystem as aoSys
-from aoSystem.zernike import zernike
-from aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
+import p3.aoSystem.FourierUtils as FourierUtils
+from p3.aoSystem.aoSystem import p3.aoSystem as aoSys
+from p3.aoSystem.zernike import zernike
+from p3.aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
 
 #%%
 rad2mas = 3600 * 180 * 1000 / np.pi

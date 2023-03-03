@@ -6,7 +6,7 @@ Created on Mon Apr  5 14:54:57 2021
 @author: omartin
 """
 import numpy as np
-import aoSystem.FourierUtils as FourierUtils
+import p3.aoSystem.FourierUtils as FourierUtils
 
 
 
@@ -143,7 +143,7 @@ def anisokinetism_phase_structure_function(tel,atm,src,gs,nOtf,samp):
     nSrc    = len(ax)
     
     #2\ defining tip-tilt modes 
-    from aoSystem.zernike import zernike
+    from p3.aoSystem.zernike import zernike
 
     zern = zernike([2,3],nOtf)
     X    = zern.modes[0]/4
