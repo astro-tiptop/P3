@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "astro-p3"
 authors = [
-    {name = "Olivier Beltramo-Martin", email = ""},
+    {name = "Olivier Beltramo-Martin"},
 ]
 description = ""
 readme = "README.md"
@@ -21,8 +21,9 @@ dependencies = [
 ]
 dynamic = ["version"]
 
-[tool.setuptools.packages]
-find = {namespaces = false}
+[tool.setuptools.packages.find]
+namespaces = true
+exclude = ["data"]
 
 [tool.setuptools_scm]
 write_to = "p3/_version.py"
