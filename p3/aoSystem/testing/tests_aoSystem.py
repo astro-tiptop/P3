@@ -11,7 +11,7 @@ import time
 import pathlib
 import p3.aoSystem as aoSystemMain
 
-from p3.aoSystem.aoSystem import p3.aoSystem
+from p3.aoSystem.aoSystem import aoSystem
 from p3.aoSystem.pupil import pupil
 from p3.aoSystem.segment import segment
 from p3.aoSystem.spiders import spiders

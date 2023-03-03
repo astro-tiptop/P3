@@ -15,7 +15,7 @@ import time
 import sys
 
 import p3.aoSystem.FourierUtils as FourierUtils
-from p3.aoSystem.aoSystem import p3.aoSystem as aoSys
+from p3.aoSystem.aoSystem import aoSystem as aoSys
 from p3.aoSystem.zernike import zernike
 from p3.aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
 

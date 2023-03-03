@@ -11,7 +11,7 @@ import time
 import sys
 import numpy.fft as fft
 
-from p3.aoSystem.aoSystem import p3.aoSystem
+from p3.aoSystem.aoSystem import aoSystem
 from p3.aoSystem.fourierModel import fourierModel
 import p3.aoSystem.FourierUtils as FourierUtils
 import p3.psfr.psfrUtils as psfrUtils

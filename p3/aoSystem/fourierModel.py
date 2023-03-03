@@ -24,7 +24,7 @@ import time
 from distutils.spawn import find_executable
 
 import p3.aoSystem.FourierUtils as FourierUtils
-from p3.aoSystem.aoSystem import p3.aoSystem
+from p3.aoSystem.aoSystem import aoSystem
 from p3.aoSystem.atmosphere import atmosphere
 from p3.aoSystem.frequencyDomain import frequencyDomain
 
