@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64", "wheel", "setuptools_scm[toml]>=3.4"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astro-p3"
+authors = [
+    {name = "Olivier Beltramo-Martin"},
+]
+description = ""
+readme = "README.md"
+urls = {repository = "https://github.com/astro-tiptop/P3"}
+requires-python = ">=3.7"
+license = {text = "MIT License"}
+dependencies = [
+    "astropy",
+    "matplotlib",
+    "numpy",
+    "scipy",
+    "pyyaml",
+]
+dynamic = ["version"]
+
+[tool.setuptools.packages.find]
+namespaces = true
+exclude = ["data"]
+
+[tool.setuptools_scm]
+write_to = "p3/_version.py"
