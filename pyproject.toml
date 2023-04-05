@@ -11,7 +11,7 @@ description = ""
 readme = "README.md"
 urls = {repository = "https://github.com/astro-tiptop/P3"}
 requires-python = ">=3.7"
-license = {text = "MIT License"}
+license = {text = "BSD-3-Clause"}
 dependencies = [
     "astropy",
     "matplotlib",
