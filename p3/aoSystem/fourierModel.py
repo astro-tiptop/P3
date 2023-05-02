@@ -729,13 +729,13 @@ class fourierModel:
             Hs   = self.ao.atm.heights * self.strechFactor
             Ws   = self.ao.atm.weights
             Watm = self.Wphi * self.freq.pistonFilterAO_     
-            A    = 0
             k    = np.sqrt(self.freq.k2AO_)
             arg_k= np.arctan2(self.freq.kyAO_,self.freq.kxAO_)
             azimuth = self.ao.src.azimuth
         
             theta = differentialRefractiveAnisoplanatism(self.ao.tel.zenith_angle*np.pi/180,self.gs.wvl[0], self.freq.wvlRef)
             for s in range(self.ao.src.nSrc):
+                A    = 0
                 for l in range(self.ao.atm.nL):
                     A   = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*k*np.tan(theta)*np.cos(arg_k-azimuth[s])))            
                 psd[:,:,s] = self.freq.mskInAO_ *A*Watm
