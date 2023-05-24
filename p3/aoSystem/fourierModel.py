@@ -56,7 +56,7 @@ class fourierModel:
                  normalizePSD=False, displayContour=False, getPSDatNGSpositions=False,
                  getErrorBreakDown=False, getFWHM=False, getEnsquaredEnergy=False,
                  getEncircledEnergy=False, fftphasor=False, MV=0, nyquistSampling=False,
-                 addOtfPixel=False, computeFocalAnisoCov=True):
+                 addOtfPixel=False, computeFocalAnisoCov=True, TiltFilter=False):
         
         tstart = time.time()
         
@@ -69,7 +69,7 @@ class fourierModel:
         self.calcPSF = calcPSF
         self.tag = 'TIPTOP'
         self.addOtfPixel = addOtfPixel
-
+        
         # GRAB PARAMETERS
         self.ao = aoSystem(path_ini,path_root=path_root,getPSDatNGSpositions=getPSDatNGSpositions)
         self.t_initAO = 1000*(time.time() - tstart)
@@ -127,7 +127,10 @@ class fourierModel:
                 
             # DEFINE THE CONTROLLER
             self.controller(display=self.display)
-                
+                            
+            #set tilt filter key before computing the PSD
+            self.applyTiltFilter = TiltFilter
+            
             # COMPUTE THE PSD
             if normalizePSD == True:
                 wfe = self.ao.rtc.holoop['wfe']
@@ -508,6 +511,12 @@ class fourierModel:
             self.psdFit = np.real(self.fittingPSD())
             psd += np.repeat(self.psdFit[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
             
+            # Tilt filter
+            if self.applyTiltFilter == True:
+                tiltFilter = self.TiltFilter()                      
+                for i in range(self.ao.src.nSrc):
+                    psd[:,:,i] *= tiltFilter
+            
         self.t_powerSpectrumDensity = 1000*(time.time() - tstart)
             
         # Return the 3D PSD array in nm^2
@@ -815,6 +824,37 @@ class fourierModel:
         self.t_focalAnisoplanatism = 1000*(time.time() - tstart)
         
         return np.real(psd)
+    
+    def TiltFilter(self):
+        """%% Spatial filter to remove tilt related errors
+        """
+        
+        nPoints = 1001
+        x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
+        freqs = self.freq.kx_[int(np.ceil(self.freq.nOtf/2)-1):,0]
+        if freqs[0] < 0:
+            freqs = freqs[1:]
+        nf0 = len(freqs)
+        coeff = np.zeros(nf0)
+               
+        for i in range(nf0):
+            sin_ref = np.sin(2*np.pi*freqs[i]*x)
+            coeff_lin = np.polyfit(x,sin_ref,1)
+            sin_temp = coeff_lin[0]*x
+            sin_res = sin_ref - sin_temp
+            coeff[i] = np.sqrt(np.mean(abs(sin_res)**2.)) / np.sqrt(np.mean(abs(sin_ref)**2.))
+            coeff[i] = np.clip(coeff[i],0,np.max([coeff[i],1]))
+               
+        coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff)**2
+        
+        #fig, ax1 = plt.subplots(1,1)
+        #im = ax1.plot(coeff)      
+        #fig, ax2 = plt.subplots(1,1)
+        #from matplotlib import colors
+        #im = ax2.imshow(coeff_tot, cmap='hot', norm=colors.LogNorm())
+        #ax2.set_title('tilt filter coefficients', color='black')
+            
+        return np.real(coeff_tot)
        
 #%% AO ERROR BREAKDOWN
     def errorBreakDown(self,verbose=True):
