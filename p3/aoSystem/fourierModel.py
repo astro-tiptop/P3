@@ -807,19 +807,21 @@ class fourierModel:
                     coeff[i,j] = 0.0
                 else:
                     if freqs[i] < 1e-5:
-                        coeff[i,j] = 1-ratio[j]
+                        coeff[i,j] = 0
                     else:
                         for k in range(nPhase):
                             sin_ref = np.sin(2*np.pi*freqs[i]*x+2*np.pi*k/nPhase)
                             sin_temp = np.sin(2*np.pi*freqs[i]*ratio[j]*x+2*np.pi*k/nPhase)
-                            sin_res = sin_ref - sin_temp
+                            sin_res = sin_ref - np.std(sin_ref)/np.std(sin_temp)*sin_temp
                             coeff[i,j] += np.std(sin_res) / np.std(sin_ref) * 1/nPhase
                          
             coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff[:,j])**2
             
             #fig, ax1 = plt.subplots(1,1)
-            #im = ax1.imshow(coeff_tot, cmap='hot')
-            #ax1.set_title('cone effect filter coefficients', color='black')
+            #im = ax1.plot(coeff)
+            #fig, ax2 = plt.subplots(1,1)
+            #im = ax2.imshow(coeff_tot, cmap='hot')
+            #ax2.set_title('cone effect filter coefficients', color='black')
             
             psd += coeff_tot*psd_atmo*self.ao.atm.weights[j]
         
