@@ -388,7 +388,7 @@ class fourierModel:
             Ts          = 1.0/self.ao.rtc.holoop['rate']#samplingTime
             delay       = self.ao.rtc.holoop['delay']#latency        
             loopGain    = self.ao.rtc.holoop['gain']
-            #delay       = np.floor(td/Ts)
+            #delay       = np.floor(delay/Ts)
                        
             # Instantiation
             h1          = np.zeros((nPts,nPts),dtype=complex)
@@ -783,6 +783,7 @@ class fourierModel:
         psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))    
         
         nPoints = 1001
+        nPhase = 5 # number of phase shift cases
         x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
         h = self.ao.atm.heights
         h_laser = self.gs.height[0]
@@ -805,13 +806,14 @@ class fourierModel:
                 if freqs[i]*ratio[j] > self.freq.kc_:
                     coeff[i,j] = 0.0
                 else:
-                    sin_ref = np.sin(2*np.pi*freqs[i]*x)
-                    sin_temp = np.sin(2*np.pi*freqs[i]*ratio[j]*x)
-                    sin_res = sin_ref - sin_temp
                     if freqs[i] < 1e-5:
                         coeff[i,j] = 1-ratio[j]
                     else:
-                        coeff[i,j] = np.sqrt(np.mean(abs(sin_res)**2.)) / np.sqrt(np.mean(abs(sin_ref)**2.))
+                        for k in range(nPhase):
+                            sin_ref = np.sin(2*np.pi*freqs[i]*x+2*np.pi*k/nPhase)
+                            sin_temp = np.sin(2*np.pi*freqs[i]*ratio[j]*x+2*np.pi*k/nPhase)
+                            sin_res = sin_ref - sin_temp
+                            coeff[i,j] += np.std(sin_res) / np.std(sin_ref) * 1/nPhase
                          
             coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff[:,j])**2
             
@@ -830,6 +832,7 @@ class fourierModel:
         """
         
         nPoints = 1001
+        nPhase = 10 # number of phase shift cases
         x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
         freqs = self.freq.kx_[int(np.ceil(self.freq.nOtf/2)-1):,0]
         if freqs[0] < 0:
@@ -838,17 +841,23 @@ class fourierModel:
         coeff = np.zeros(nf0)
                
         for i in range(nf0):
-            sin_ref = np.sin(2*np.pi*freqs[i]*x)
-            coeff_lin = np.polyfit(x,sin_ref,1)
-            sin_temp = coeff_lin[0]*x
-            sin_res = sin_ref - sin_temp
-            coeff[i] = np.sqrt(np.mean(abs(sin_res)**2.)) / np.sqrt(np.mean(abs(sin_ref)**2.))
-            coeff[i] = np.clip(coeff[i],0,np.max([coeff[i],1]))
+            if freqs[i] == 0:
+                coeff[i] = 0
+            elif 1/freqs[i] < 0.1*self.ao.tel.D:
+                coeff[i] = 1
+            else:
+                for k in range(nPhase):
+                    sin_ref = np.sin(2*np.pi*freqs[i]*x+2*np.pi*k/nPhase)
+                    coeff_lin = np.polyfit(x,sin_ref,1)
+                    sin_temp = coeff_lin[0]*x+coeff_lin[1]
+                    sin_res = sin_ref - sin_temp
+                    coeff[i] += np.std(sin_res) / np.std(sin_ref) * 1/nPhase
                
         coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff)**2
         
         #fig, ax1 = plt.subplots(1,1)
         #im = ax1.plot(coeff)      
+        #plt.xlim([0, 20])
         #fig, ax2 = plt.subplots(1,1)
         #from matplotlib import colors
         #im = ax2.imshow(coeff_tot, cmap='hot', norm=colors.LogNorm())
