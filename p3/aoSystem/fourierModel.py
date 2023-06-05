@@ -56,7 +56,7 @@ class fourierModel:
                  normalizePSD=False, displayContour=False, getPSDatNGSpositions=False,
                  getErrorBreakDown=False, getFWHM=False, getEnsquaredEnergy=False,
                  getEncircledEnergy=False, fftphasor=False, MV=0, nyquistSampling=False,
-                 addOtfPixel=False, computeFocalAnisoCov=True):
+                 addOtfPixel=False, computeFocalAnisoCov=True, TiltFilter=False):
         
         tstart = time.time()
         
@@ -69,7 +69,7 @@ class fourierModel:
         self.calcPSF = calcPSF
         self.tag = 'TIPTOP'
         self.addOtfPixel = addOtfPixel
-
+        
         # GRAB PARAMETERS
         self.ao = aoSystem(path_ini,path_root=path_root,getPSDatNGSpositions=getPSDatNGSpositions)
         self.t_initAO = 1000*(time.time() - tstart)
@@ -127,7 +127,10 @@ class fourierModel:
                 
             # DEFINE THE CONTROLLER
             self.controller(display=self.display)
-                
+                            
+            #set tilt filter key before computing the PSD
+            self.applyTiltFilter = TiltFilter
+            
             # COMPUTE THE PSD
             if normalizePSD == True:
                 wfe = self.ao.rtc.holoop['wfe']
@@ -385,7 +388,7 @@ class fourierModel:
             Ts          = 1.0/self.ao.rtc.holoop['rate']#samplingTime
             delay       = self.ao.rtc.holoop['delay']#latency        
             loopGain    = self.ao.rtc.holoop['gain']
-            #delay       = np.floor(td/Ts)
+            #delay       = np.floor(delay/Ts)
                        
             # Instantiation
             h1          = np.zeros((nPts,nPts),dtype=complex)
@@ -507,6 +510,12 @@ class fourierModel:
             # Fitting
             self.psdFit = np.real(self.fittingPSD())
             psd += np.repeat(self.psdFit[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
+            
+            # Tilt filter
+            if self.applyTiltFilter == True:
+                tiltFilter = self.TiltFilter()                      
+                for i in range(self.ao.src.nSrc):
+                    psd[:,:,i] *= tiltFilter
             
         self.t_powerSpectrumDensity = 1000*(time.time() - tstart)
             
@@ -774,6 +783,7 @@ class fourierModel:
         psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))    
         
         nPoints = 1001
+        nPhase = 5 # number of phase shift cases
         x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
         h = self.ao.atm.heights
         h_laser = self.gs.height[0]
@@ -796,25 +806,66 @@ class fourierModel:
                 if freqs[i]*ratio[j] > self.freq.kc_:
                     coeff[i,j] = 0.0
                 else:
-                    sin_ref = np.sin(2*np.pi*freqs[i]*x)
-                    sin_temp = np.sin(2*np.pi*freqs[i]*ratio[j]*x)
-                    sin_res = sin_ref - sin_temp
                     if freqs[i] < 1e-5:
-                        coeff[i,j] = 1-ratio[j]
+                        coeff[i,j] = 0
                     else:
-                        coeff[i,j] = np.sqrt(np.mean(abs(sin_res)**2.)) / np.sqrt(np.mean(abs(sin_ref)**2.))
+                        for k in range(nPhase):
+                            sin_ref = np.sin(2*np.pi*freqs[i]*x+2*np.pi*k/nPhase)
+                            sin_temp = np.sin(2*np.pi*freqs[i]*ratio[j]*x+2*np.pi*k/nPhase)
+                            sin_res = sin_ref - np.std(sin_ref)/np.std(sin_temp)*sin_temp
+                            coeff[i,j] += np.std(sin_res) / np.std(sin_ref) * 1/nPhase
                          
             coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff[:,j])**2
             
             #fig, ax1 = plt.subplots(1,1)
-            #im = ax1.imshow(coeff_tot, cmap='hot')
-            #ax1.set_title('cone effect filter coefficients', color='black')
+            #im = ax1.plot(coeff)
+            #fig, ax2 = plt.subplots(1,1)
+            #im = ax2.imshow(coeff_tot, cmap='hot')
+            #ax2.set_title('cone effect filter coefficients', color='black')
             
             psd += coeff_tot*psd_atmo*self.ao.atm.weights[j]
         
         self.t_focalAnisoplanatism = 1000*(time.time() - tstart)
         
         return np.real(psd)
+    
+    def TiltFilter(self):
+        """%% Spatial filter to remove tilt related errors
+        """
+        
+        nPoints = 1001
+        nPhase = 10 # number of phase shift cases
+        x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
+        freqs = self.freq.kx_[int(np.ceil(self.freq.nOtf/2)-1):,0]
+        if freqs[0] < 0:
+            freqs = freqs[1:]
+        nf0 = len(freqs)
+        coeff = np.zeros(nf0)
+               
+        for i in range(nf0):
+            if freqs[i] == 0:
+                coeff[i] = 0
+            elif 1/freqs[i] < 0.1*self.ao.tel.D:
+                coeff[i] = 1
+            else:
+                for k in range(nPhase):
+                    sin_ref = np.sin(2*np.pi*freqs[i]*x+2*np.pi*k/nPhase)
+                    coeff_lin = np.polyfit(x,sin_ref,1)
+                    sin_temp = coeff_lin[0]*x+coeff_lin[1]
+                    sin_res = sin_ref - sin_temp
+                    coeff[i] += np.std(sin_res) / np.std(sin_ref) * 1/nPhase
+               
+        coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff)**2
+        
+        #fig, ax1 = plt.subplots(1,1)
+        #im = ax1.plot(coeff)      
+        #plt.xlim([0, 20])
+        #fig, ax2 = plt.subplots(1,1)
+        #from matplotlib import colors
+        #im = ax2.imshow(coeff_tot, cmap='hot', norm=colors.LogNorm())
+        #ax2.set_title('tilt filter coefficients', color='black')
+            
+        return np.real(coeff_tot)
        
 #%% AO ERROR BREAKDOWN
     def errorBreakDown(self,verbose=True):
