@@ -643,7 +643,7 @@ class fourierModel:
         nH  = self.ao.atm.nL
         Hs  = self.ao.atm.heights * self.strechFactor
         Ws  = self.ao.atm.weights
-        deltaT  = (1 + self.ao.rtc.holoop['delay'])/self.ao.rtc.holoop['rate']
+        deltaT  = self.ao.rtc.holoop['delay']/self.ao.rtc.holoop['rate']
         wDir_x  = np.cos(self.ao.atm.wDir*np.pi/180)
         wDir_y  = np.sin(self.ao.atm.wDir*np.pi/180)
         Watm    = self.Wphi * self.freq.pistonFilterAO_      
