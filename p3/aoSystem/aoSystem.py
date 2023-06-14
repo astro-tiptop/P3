@@ -571,7 +571,11 @@ class aoSystem():
             delay_HO = 2
                      
         if self.check_config_key('RTC','LoopGain_LO'):
-            LoopGain_LO = self.get_config_value('RTC','LoopGain_LO')
+            temp = self.get_config_value('RTC','LoopGain_LO')
+            if temp != 'optimize':
+                LoopGain_LO = temp
+            else:
+                LoopGain_LO = None
         else:
             LoopGain_LO = None
             
