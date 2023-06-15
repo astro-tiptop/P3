@@ -517,6 +517,15 @@ class fourierModel:
                 for i in range(self.ao.src.nSrc):
                     psd[:,:,i] *= tiltFilter
             
+            # Extra error
+            if self.verbose:
+                print('extra error in nm RMS: ',self.ao.tel.extraErrorNm)
+                print('extra error spatial frequency exponent: ',self.ao.tel.extraErrorExp)
+            if self.ao.tel.extraErrorNm > 0:
+                self.psdExtra = np.real(self.extraErrorPSD())
+                for i in range(self.ao.src.nSrc):
+                    psd[:,:,i] += self.psdExtra
+            
         self.t_powerSpectrumDensity = 1000*(time.time() - tstart)
             
         # Return the 3D PSD array in nm^2
@@ -829,6 +838,28 @@ class fourierModel:
         
         return np.real(psd)
     
+    def extraErrorPSD(self):
+    
+        k   = np.sqrt(self.freq.k2_)
+        psd = k**self.ao.tel.extraErrorExp
+        pf  = FourierUtils.pistonFilter(self.ao.tel.D,k)
+        psd = psd * pf
+        if self.ao.tel.extraErrorMin>0:
+            psd[np.where(k<self.ao.tel.extraErrorMin)] = 0
+        
+        psd = psd * self.ao.tel.extraErrorNm**2/np.sum(psd)
+        
+        fig, ax1 = plt.subplots(1,1)
+        im = ax1.imshow(np.log(np.abs(psd)), cmap='hot')
+        ax1.set_title('extra error PSD', color='black') 
+        
+        # Derives wavefront error
+        rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi 
+        
+        psd = psd * 1/rad2nm**2
+    
+        return np.real(psd)
+    
     def TiltFilter(self):
         """%% Spatial filter to remove tilt related errors
         """
@@ -889,11 +920,12 @@ class fourierModel:
             self.wfeDiffRef= np.sqrt(self.psdDiffRef.sum(axis=(0,1)))* rad2nm
             self.wfeChrom  = np.sqrt(self.psdChromatism.sum(axis=(0,1)))* rad2nm
             self.wfeJitter = 1e9*self.ao.tel.D*np.mean(self.ao.cam.spotFWHM[0][0:2])/rad2mas/4
+            self.wfeExtra  = self.ao.tel.extraErrorNm
             
             # Total wavefront error
             self.wfeTot = np.sqrt(self.wfeNCPA**2 + self.wfeFit**2 + self.wfeAl**2\
                                   + self.wfeST**2 + self.wfeN**2 + self.wfeDiffRef**2\
-                                  + self.wfeChrom**2 + self.wfeJitter**2)
+                                  + self.wfeChrom**2 + self.wfeJitter**2 + self.wfeExtra**2)
             
             # Maréchal appoximation to get the Strehl-ratio
             self.SRmar  = 100*np.exp(-(self.wfeTot*2*np.pi*1e-9/self.freq.wvlRef)**2)
@@ -937,6 +969,7 @@ class fourierModel:
                 else:
                     print('.Sole tomographic error:\t%4.2fnm'%self.wfeTomo[idCenter])
                 print('-------------------------------------------')
+                print('.Extra error:\t%4.2fnm'%self.wfeExtra)
                 
         self.t_errorBreakDown = 1000*(time.time() - tstart)
     

@@ -53,7 +53,8 @@ class telescope:
     # CONSTRUCTOR
     def __init__(self,D,resolution, zenith_angle=0.0,obsRatio=0.0,pupilAngle = 0.0,\
                  path_pupil='', path_static_on='', path_static_off='', path_static_pos='',\
-                 path_apodizer='', path_statModes='', verbose=True):
+                 path_apodizer='', path_statModes='', extraErrorNm=0.0, extraErrorExp=-2, \
+                 extraErrorMin=0.0, verbose=True):
         
         # PARSING INPUTS
         self.D               = D            # primary mirror diameter in meters
@@ -67,6 +68,9 @@ class telescope:
         self.path_static_pos = path_static_off
         self.path_apodizer   = path_apodizer
         self.path_statModes  = path_statModes
+        self.extraErrorNm    = extraErrorNm
+        self.extraErrorExp   = extraErrorExp
+        self.extraErrorMin   = extraErrorMin
         
         #----- PUPIL DEFINITION        
         
