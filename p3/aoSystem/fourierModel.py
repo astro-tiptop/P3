@@ -849,9 +849,9 @@ class fourierModel:
         
         psd = psd * self.ao.tel.extraErrorNm**2/np.sum(psd)
         
-        fig, ax1 = plt.subplots(1,1)
-        im = ax1.imshow(np.log(np.abs(psd)), cmap='hot')
-        ax1.set_title('extra error PSD', color='black') 
+        #fig, ax1 = plt.subplots(1,1)
+        #im = ax1.imshow(np.log(np.abs(psd)), cmap='hot')
+        #ax1.set_title('extra error PSD', color='black') 
         
         # Derives wavefront error
         rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi 
@@ -960,6 +960,7 @@ class fourierModel:
                     print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[idCenter])
                 print('.Spatio-temporal error:\t\t%4.2fnm'%self.wfeST[idCenter])
                 print('.Additionnal jitter:\t\t%4.2fmas / %4.2fnm'%(np.mean(self.ao.cam.spotFWHM[0][0:2]),self.wfeJitter))
+                print('.Extra error:\t\t\t%4.2fnm'%self.wfeExtra)
                 print('-------------------------------------------')
                 print('.Sole servoLag error:\t\t%4.2fnm'%self.wfeS)
                 print('.Sole reconstruction error:\t%4.2fnm'%self.wfeR)
@@ -969,7 +970,6 @@ class fourierModel:
                 else:
                     print('.Sole tomographic error:\t%4.2fnm'%self.wfeTomo[idCenter])
                 print('-------------------------------------------')
-                print('.Extra error:\t%4.2fnm'%self.wfeExtra)
                 
         self.t_errorBreakDown = 1000*(time.time() - tstart)
     
@@ -1221,7 +1221,8 @@ class fourierModel:
                 print("Required time for aliasing PSD calculation (ms)\t : {:f}".format(self.t_aliasingPSD))
                 print("Required time for noise PSD calculation (ms)\t : {:f}".format(self.t_noisePSD))
                 print("Required time for ST PSD calculation (ms)\t : {:f}".format(self.t_spatioTemporalPSD))
-                print("Required time for focal Aniso PSD calculation (ms)\t : {:f}".format(self.t_focalAnisoplanatism))
+                if hasattr(self,"t_focalAnisoplanatism"):
+                    print("Required time for focal Aniso PSD calculation (ms)\t : {:f}".format(self.t_focalAnisoplanatism))
                 
                 # Error breakdown
                 if hasattr(self,'t_errorBreakDown'):
