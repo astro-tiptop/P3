@@ -716,9 +716,9 @@ def getEnsquaredEnergy(psf):
         EE[n] = psf[y0 - n:y0+n+1,x0-n:x0+n+1].sum()
     return EE/S
 
-def getEncircledEnergy(psf,pixelscale=1,nargout=1):            
+def getEncircledEnergy(psf,pixelscale=1, center=None,nargout=1):            
     
-    rr, radialprofile2, ee = radial_profile(psf,ee=True,pixelscale=pixelscale)
+    rr, radialprofile2, ee = radial_profile(psf,ee=True, center=None,pixelscale=pixelscale)
     if nargout==1:
         return ee
     elif nargout == 2:
