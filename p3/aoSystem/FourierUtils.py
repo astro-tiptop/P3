@@ -167,8 +167,12 @@ def pistonFilter(D,f,fm=0,fn=0):
     #out         = np.zeros_like(F)
     #idx         = F!=0
     #out[idx]    = spc.j1(F[idx])/F[idx]
-    R         = sombrero(1,F)        
-    return 1 - 4 * R**2
+    R         = sombrero(1,F)      
+    pFilter   =  1 - 4 * R**2
+    if np.min(pFilter)<0:
+        pFilter[np.where(pFilter<0)] = 0
+
+    return pFilter
              
 def psd2cov(psd,pixelScale):
     nPts = np.array(psd.shape)
