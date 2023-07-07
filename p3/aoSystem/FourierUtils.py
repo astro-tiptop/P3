@@ -167,8 +167,12 @@ def pistonFilter(D,f,fm=0,fn=0):
     #out         = np.zeros_like(F)
     #idx         = F!=0
     #out[idx]    = spc.j1(F[idx])/F[idx]
-    R         = sombrero(1,F)        
-    return 1 - 4 * R**2
+    R         = sombrero(1,F)      
+    pFilter   =  1 - 4 * R**2
+    if np.min(pFilter)<0:
+        pFilter[np.where(pFilter<0)] = 0
+
+    return pFilter
              
 def psd2cov(psd,pixelScale):
     nPts = np.array(psd.shape)
@@ -716,9 +720,9 @@ def getEnsquaredEnergy(psf):
         EE[n] = psf[y0 - n:y0+n+1,x0-n:x0+n+1].sum()
     return EE/S
 
-def getEncircledEnergy(psf,pixelscale=1,nargout=1):            
+def getEncircledEnergy(psf,pixelscale=1, center=None,nargout=1):            
     
-    rr, radialprofile2, ee = radial_profile(psf,ee=True,pixelscale=pixelscale)
+    rr, radialprofile2, ee = radial_profile(psf,ee=True, center=None,pixelscale=pixelscale)
     if nargout==1:
         return ee
     elif nargout == 2:

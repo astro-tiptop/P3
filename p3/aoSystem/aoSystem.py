@@ -144,6 +144,22 @@ class aoSystem():
         else:
             path_statModes = ''
             
+        #----- EXTRA ERROR
+        if self.check_config_key('telescope', 'extraErrorNm'):       
+            extraErrorNm = self.get_config_value('telescope','extraErrorNm')
+        else:
+            extraErrorNm = 0
+            
+        if self.check_config_key('telescope', 'extraErrorExp'):
+            extraErrorExp = self.get_config_value('telescope','extraErrorExp')
+        else:
+            extraErrorExp = -2
+            
+        if self.check_config_key('telescope', 'extraErrorMin'):
+            extraErrorMin = self.get_config_value('telescope','extraErrorMin')
+        else:
+            extraErrorMin = 0
+            
         # ----- class definition     
         self.tel = telescope(D, nPup,
                              zenith_angle=zenithAngle,
@@ -154,7 +170,10 @@ class aoSystem():
                              path_static_off=path_static_off,
                              path_static_pos=path_static_pos,
                              path_apodizer=path_apodizer,
-                             path_statModes=path_statModes)                     
+                             path_statModes=path_statModes,
+                             extraErrorNm=extraErrorNm,
+                             extraErrorExp=extraErrorExp,
+                             extraErrorMin=extraErrorMin)                     
 
         #%% ATMOSPHERE
         
@@ -571,7 +590,11 @@ class aoSystem():
             delay_HO = 2
                      
         if self.check_config_key('RTC','LoopGain_LO'):
-            LoopGain_LO = self.get_config_value('RTC','LoopGain_LO')
+            temp = self.get_config_value('RTC','LoopGain_LO')
+            if temp != 'optimize':
+                LoopGain_LO = temp
+            else:
+                LoopGain_LO = None
         else:
             LoopGain_LO = None
             
