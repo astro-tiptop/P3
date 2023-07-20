@@ -118,7 +118,6 @@ class aoSystem():
                 path_pupil = path_p3 +'/'+ PathPupil
             else:
                 path_pupil = path_root + PathPupil
-            print('path_pupil: ', path_pupil)
         else:
             path_pupil = ''
                   
@@ -129,9 +128,9 @@ class aoSystem():
         
         if self.check_config_key('telescope','PathStaticOn'):
             PathStaticOn = self.get_config_value('telescope','PathStaticOn')
-            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+            if path_root == '' and PathStaticOn[0:9]=='/aoSystem' :
                 path_static_on = path_p3 + PathStaticOn
-            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+            elif path_root == '' and PathStaticOn[0:8]=='aoSystem' :
                 path_static_on = path_p3 +'/'+ PathStaticOn
             else:
                 path_static_on = path_root + PathStaticOn
@@ -140,9 +139,9 @@ class aoSystem():
         
         if self.check_config_key('telescope','PathStaticOff'):
             PathStaticOff = self.get_config_value('telescope','PathStaticOff')
-            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+            if path_root == '' and PathStaticOff[0:9]=='/aoSystem' :
                 path_static_off = path_p3 + PathStaticOff
-            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+            elif path_root == '' and PathStaticOff[0:8]=='aoSystem' :
                 path_static_off = path_p3 +'/'+ PathStaticOff
             else:
                 path_static_off = path_root + PathStaticOff
@@ -151,9 +150,9 @@ class aoSystem():
         
         if self.check_config_key('telescope','PathStaticPos'):
             PathStaticPos = self.get_config_value('telescope','PathStaticPos')
-            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+            if path_root == '' and PathStaticPos[0:9]=='/aoSystem' :
                 path_static_pos = path_p3 + PathStaticPos
-            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+            elif path_root == '' and PathStaticPos[0:8]=='aoSystem' :
                 path_static_pos = path_p3 +'/'+ PathStaticPos
             else:
                 path_static_pos = path_root + PathStaticPos
@@ -163,9 +162,9 @@ class aoSystem():
         #----- APODIZER
         if self.check_config_key('telescope','PathApodizer'):
             PathApodizer = self.get_config_value('telescope','PathApodizer')
-            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+            if path_root == '' and PathApodizer[0:9]=='/aoSystem' :
                 path_apodizer = path_p3 + PathApodizer
-            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+            elif path_root == '' and PathApodizer[0:8]=='aoSystem' :
                 path_apodizer = path_p3 +'/'+ PathApodizer
             else:
                 path_apodizer = path_root + PathApodizer
@@ -175,9 +174,9 @@ class aoSystem():
         #----- TELESCOPE ABERRATIONS
         if self.check_config_key('telescope', 'PathStatModes'):
             PathStatModes = self.get_config_value('telescope','PathStatModes')
-            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+            if path_root == '' and PathStatModes[0:9]=='/aoSystem' :
                 path_statModes = path_p3 + PathStatModes
-            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+            elif path_root == '' and PathStatModes[0:8]=='aoSystem' :
                 path_statModes = path_p3 +'/'+ PathStatModes
             else:
                 path_statModes = path_root + PathStatModes
