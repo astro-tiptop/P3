@@ -8,6 +8,7 @@ Created on Mon Apr  5 14:42:49 2021
 
 # IMPORTING PYTHON LIBRAIRIES
 import os.path as ospath
+import pathlib
 from configparser import ConfigParser
 import numpy as np
 
@@ -62,7 +63,6 @@ class aoSystem():
             self.error = True
             return
                 
-
         if path_config[-4::]=='.ini':
             # open the .ini file
             self.configType = 'ini'
@@ -107,9 +107,18 @@ class aoSystem():
             self.error = True
             return
             
+        path_p3 = str(pathlib.Path(__file__).parent.parent.absolute())
+            
         #----- PUPIL
         if self.check_config_key('telescope','PathPupil'):
-            path_pupil = path_root + self.get_config_value('telescope','PathPupil')
+            PathPupil = self.get_config_value('telescope','PathPupil')
+            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+                path_pupil = path_p3 + PathPupil
+            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+                path_pupil = path_p3 +'/'+ PathPupil
+            else:
+                path_pupil = path_root + PathPupil
+            print('path_pupil: ', path_pupil)
         else:
             path_pupil = ''
                   
@@ -119,29 +128,59 @@ class aoSystem():
             pupilAngle = 0.0
         
         if self.check_config_key('telescope','PathStaticOn'):
-            path_static_on = path_root + self.get_config_value('telescope','PathStaticOn')
+            PathStaticOn = self.get_config_value('telescope','PathStaticOn')
+            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+                path_static_on = path_p3 + PathStaticOn
+            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+                path_static_on = path_p3 +'/'+ PathStaticOn
+            else:
+                path_static_on = path_root + PathStaticOn
         else:
             path_static_on = None       
         
         if self.check_config_key('telescope','PathStaticOff'):
-            path_static_off = path_root +self.get_config_value('telescope','PathStaticOff')
+            PathStaticOff = self.get_config_value('telescope','PathStaticOff')
+            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+                path_static_off = path_p3 + PathStaticOff
+            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+                path_static_off = path_p3 +'/'+ PathStaticOff
+            else:
+                path_static_off = path_root + PathStaticOff
         else:
             path_static_off = None
         
         if self.check_config_key('telescope','PathStaticPos'):
-            path_static_pos = path_root + self.get_config_value('telescope','PathStaticPos')
+            PathStaticPos = self.get_config_value('telescope','PathStaticPos')
+            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+                path_static_pos = path_p3 + PathStaticPos
+            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+                path_static_pos = path_p3 +'/'+ PathStaticPos
+            else:
+                path_static_pos = path_root + PathStaticPos
         else:
             path_static_pos = None
             
         #----- APODIZER
         if self.check_config_key('telescope','PathApodizer'):
-            path_apodizer = path_root + self.get_config_value('telescope','PathApodizer')
+            PathApodizer = self.get_config_value('telescope','PathApodizer')
+            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+                path_apodizer = path_p3 + PathApodizer
+            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+                path_apodizer = path_p3 +'/'+ PathApodizer
+            else:
+                path_apodizer = path_root + PathApodizer
         else:
             path_apodizer = ''
                 
         #----- TELESCOPE ABERRATIONS
         if self.check_config_key('telescope', 'PathStatModes'):
-            path_statModes = path_root + self.get_config_value('telescope','PathStatModes')
+            PathStatModes = self.get_config_value('telescope','PathStatModes')
+            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
+                path_statModes = path_p3 + PathStatModes
+            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
+                path_statModes = path_p3 +'/'+ PathStatModes
+            else:
+                path_statModes = path_root + PathStatModes
         else:
             path_statModes = ''
             
