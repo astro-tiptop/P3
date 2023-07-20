@@ -236,7 +236,7 @@ class aoSystem():
             
         if self.check_config_key('atmosphere','Cn2Weights'):
             weights = self.get_config_value('atmosphere','Cn2Weights') 
-            if np.sum(weights)!=1:
+            if np.abs(np.sum(weights) - 1) > 1e-3:
                 print('%%%%%%%% ERROR %%%%%%%%')
                 print('Sum of Cn2 weights not equal to 1, please correct parameter file')
                 self.error = True
