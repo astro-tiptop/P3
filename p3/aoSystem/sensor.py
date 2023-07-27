@@ -61,7 +61,7 @@ class sensor:
         pixelScale  = self.detector.psInMas/1e3 # in arcsec
         ron         = self.detector.ron
         for k in range(self.nWfs):
-            nPix = self.detector.fovInPix/np.array(self.optics[k].nL)
+            nPix = self.detector.fovInPix
             dsub = self.optics[k].dsub
             
             if self.wfstype.upper() == 'SHACK-HARTMANN':
