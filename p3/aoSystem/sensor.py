@@ -70,28 +70,35 @@ class sensor:
                 # spot FWHM in pixels and without turbulence, N_samp in Thomas et al. 2006
                 # The condition nD = 2 corresponds to the Nyquist sampling of the spots
                 nD = max(1,rad2arcsec * wvl/dsub /pixelScale) 
-
+                print('nD',nD)
                 # The full width at half-maximum (FWHM) of the spot, N_T in Thomas et al. 2006
                 # For diffraction-limited spots nT = nD = 2
                 nT = max(1,np.hypot(max(self.detector.spotFWHM[0][0:2])/1e3,rad2arcsec*wvl/r0)/pixelScale)
-                
+                print('self.detector.spotFWHM[0]',self.detector.spotFWHM[0])
+                print('nT',nT)
                 # for WCoG, Nw is the weighting function FWHM in pixel
-                nW = algo_param[0]
+                nW = self.processing.settings[0]
+                print('nW',nW)
                 
                 # tCoG parameters, TODO implement tCoG
-                th = algo_param[1]
-                new_val_th = algo_param[2]
+                th = self.processing.settings[1]
+                new_val_th = self.processing.settings[2]
 
+                print('varRON',np.pi**2/3*(ron**2 /nph[k]**2) * (nPix**2/nD)**2)
+                print('varShot',np.pi**2/(2*np.log(2)*nph[k])*(nT/nD)**2)
+                print('varRON (wcog)',np.pi**3/(32*np.log(2)**2)*(ron**2 /nph[k]**2) * (nT**2+nW**2)**4/(nD**2*nW**4))
+                print('varShot (wcog)',np.pi**2/(2*np.log(2)*nph[k])*(nT/nD)**2 * (nT**2+nW**2)**4/((2*nT**2+nW**2)**2*nW**4))
+                
                 # read-out noise calculation & photo-noise calculation
                 # from Thomas et al. 2006
-                if algorithm == 'cog':
+                if self.processing.algorithm == 'cog':
                     varRON  = np.pi**2/3*(ron**2 /nph[k]**2) * (nPix**2/nD)**2
                     varShot  = np.pi**2/(2*np.log(2)*nph[k])*(nT/nD)**2
-                if algorithm == 'wcog':
-                    varRON  = np.pi**2/(32*np.log(2)**2)*(ron**2 /nph[k]**2) * (nT**2+nW**2)**4/(nD**2*nW**4)
-                    varShot  = np.pi**2/(2*np.log(2)*nph[k])*(nT/nD)**2 * (nT**2+nW**2)**4/((2*nT**2+nW**2)**2+nW**4)
-                if algorithm == 'qc':
-                     if nT > nD:
+                if self.processing.algorithm == 'wcog':
+                    varRON  = np.pi**3/(32*np.log(2)**2)*(ron**2 /nph[k]**2) * (nT**2+nW**2)**4/(nD**2*nW**4)
+                    varShot  = np.pi**2/(2*np.log(2)*nph[k])*(nT/nD)**2 * (nT**2+nW**2)**4/((2*nT**2+nW**2)**2*nW**4)
+                if self.processing.algorithm == 'qc':
+                    if nT > nD:
                         k = np.sqrt(2*np.pi) * (nT/(2*np.sqrt(2*np.log(2))) / nD)
                     else:
                         k = 1
