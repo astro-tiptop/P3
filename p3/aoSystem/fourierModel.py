@@ -39,7 +39,7 @@ else:
 plt.rcParams.update({
     "text.usetex": usetex,
     "font.family": "serif",
-    "font.serif": ["Palatino"],
+    "font.serif": ["Palatino","DejaVu Sans"],
 })
  
 #%%
