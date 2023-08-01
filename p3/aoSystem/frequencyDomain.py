@@ -7,7 +7,15 @@ Created on Mon Apr 19 11:34:44 2021
 """
 
 # IMPORTING PYTHON LIBRAIRIES
-import numpy as np
+import numpy as nnp
+from . import gpuEnabled
+
+if not gpuEnabled:
+    np = nnp
+else:
+    import cupy as cp
+    np = cp
+
 import p3.aoSystem.FourierUtils as FourierUtils
 from p3.aoSystem.anisoplanatismModel import anisoplanatism_structure_function
 import time
@@ -29,7 +37,7 @@ class frequencyDomain():
             self.samp  = 2.0 * np.ones_like(self.psInMas)
         else:
             self.samp  = val* rad2mas/(self.psInMas*self.ao.tel.D)
-        
+
     @property
     def wvlCen(self):
         return self.__wvlCen
@@ -40,7 +48,7 @@ class frequencyDomain():
             self.sampCen  = 2.0 * np.ones(len(val))
         else:
             self.sampCen  = val* rad2mas/(self.psInMasCen*self.ao.tel.D)
-            
+
     @property
     def wvlRef(self):
         return self.__wvlRef
@@ -63,7 +71,8 @@ class frequencyDomain():
             self.PSDstep= np.min(1/self.ao.tel.D/self.__samp)
         else:
             self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)
-            
+        self.PSDstep= np.asarray(self.PSDstep)
+
     @property
     def sampCen(self):
         return self.__sampCen
@@ -81,7 +90,7 @@ class frequencyDomain():
         self.nOtf       = self.nPix * self.kRef_
         #  ---- FULL DOMAIN OF FREQUENCY
         self.kx_,self.ky_ = FourierUtils.freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
-        self.k2_          = self.kx_**2 + self.ky_**2       
+        self.k2_          = self.kx_**2 + self.ky_**2
         #piston filtering        
         self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
         self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
@@ -94,7 +103,7 @@ class frequencyDomain():
     def pitch(self,val):
         self.__pitch = val
         # redefining the ao-corrected area
-        if np.all(self.kcExt !=None):
+        if not self.kcExt is None and np.all(self.kcExt):
             self.kc_= self.kcExt
         else:
             #return 1/(2*max(self.pitchs_dm.min(),self.pitchs_wfs.min()))
@@ -102,8 +111,9 @@ class frequencyDomain():
             #self.kc_= (val-1)/(2.0*self.ao.tel.D)
         self.kcMax_ =  np.max(self.kc_)
         #kc2         = self.kc_**2
+        self.kc_ = np.asarray(self.kc_)
         self.resAO  = int(np.max(2*self.kc_/self.PSDstep))
-        
+
         # ---- SPATIAL FREQUENCY DOMAIN OF THE AO-CORRECTED AREA
         #import pdb
         #pdb.set_trace()
@@ -213,7 +223,7 @@ class frequencyDomain():
 
         if self.ao.aoMode == 'SCAO' or computeFocalAnisoCov == False:
             # NGS case : angular-anisoplanatism only
-            if np.all(self.ao.src.direction == self.ao.ngs.direction):
+            if np.all(np.equal(self.ao.src.direction, self.ao.ngs.direction)):
                 self.isAniso = False
                 return None
             else:

@@ -4,15 +4,30 @@ Created on Wed Jun 17 01:17:43 2020
 
 @author: omartin
 """
+
 # Libraries
-import numpy as np
-import numpy.fft as fft
+import numpy as nnp
+from . import gpuEnabled
+
+if not gpuEnabled:
+    np = nnp
+    import scipy.interpolate as interp        
+    import scipy.ndimage as scnd
+    import scipy.special as ssp
+    import numpy.fft as fft
+else:
+    import cupy as cp
+    import scipy.interpolate as interp        
+#    import cupyx.scipy.interpolate as interp        
+    import cupyx.scipy.ndimage as scnd
+    import cupyx.scipy.special as ssp
+    import cupy.fft as fft
+    np = cp
+
 import matplotlib.pyplot as plt
 from astropy.modeling import models, fitting
 import matplotlib as mpl
-import scipy.interpolate as interp        
-import scipy.ndimage as scnd
-import scipy.special as ssp
+
 from matplotlib.path import Path
 
 #%%  FOURIER TOOLS
@@ -32,7 +47,7 @@ def fftCorrel(x,y):
 def fftsym(x):
     if x.ndim ==2:
         nx,ny            = x.shape
-        if np.any(np.iscomplex(x)):
+        if np.iscomplex(x):
             out              = np.zeros((nx,ny)) + complex(0,1)*np.zeros((nx,ny))
             out[0,0]         = x[0,0]
             out[0,1:ny-1]     = x[1,np.arange(ny-1,1,-1)]
@@ -49,11 +64,12 @@ def fftsym(x):
     elif x.ndim ==1:
         return fft.fftshift(x)
 
-def freq_array(nX,L=1,offset=1e-10):
+def freq_array(nX, L=1, offset=1e-10):
     k2D = np.mgrid[0:nX, 0:nX].astype(float)
     k2D[0] -= nX//2
     k2D[1] -= nX//2
-    k2D     = k2D*L + offset
+    k2D     *= np.asarray(L)
+    k2D     += offset
     return k2D[0],k2D[1]
 
 def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0,spatialFilter=1):
@@ -63,7 +79,7 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0,spatialFilter=1):
         
         # ADDING STATIC MAP
         phaseStat = np.zeros((nPup,nPup))
-        if np.any(tel.opdMap_on):
+        if not tel.opdMap_on is None and np.any(tel.opdMap_on):
             if theta_ext:
                 tel.opdMap_on = scnd.rotate(tel.opdMap_on,theta_ext,reshape=False)
             phaseStat = (2*np.pi*1e-9/wvl) * tel.opdMap_on
@@ -71,7 +87,7 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0,spatialFilter=1):
         # ADDING USER-SPECIFIED STATIC MODES
         xStat = np.asarray(xStat)
         phaseMap = 0
-        if np.any(tel.statModes):
+        if not tel.statModes is None and np.any(tel.statModes):
             if tel.statModes.shape[2]==len(xStat):
                 phaseMap = 2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)
                 phaseStat += phaseMap
@@ -82,7 +98,7 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0,spatialFilter=1):
         
         # INSTRUMENTAL OTF
         otfStat = pupil2otf(tel.pupil * tel.apodizer,phaseStat,samp)
-        if np.any(otfStat.shape !=nOtf):
+        if not otfStat is None and otfStat.shape!=nOtf:
             otfStat = interpolateSupport(otfStat,nOtf)
         otfStat/= otfStat.max()
         
@@ -91,7 +107,7 @@ def getStaticOTF(tel,nOtf,samp,wvl,xStat=[],theta_ext=0,spatialFilter=1):
             otfDL = otfStat
         else:
             otfDL = np.real(pupil2otf(tel.pupil * tel.apodizer,0*phaseStat,samp))
-            if np.any(otfDL.shape !=nOtf):
+            if otfDL.shape !=nOtf:
                 otfDL = interpolateSupport(otfDL,nOtf)
                 otfDL/= otfDL.max()
                 
@@ -148,14 +164,14 @@ def otfShannon2psf(otf,nqSmpl,fovInPixel):
         psf    = otf2psf(otf)
     else:
         # Interpolate the OTF at high resolution to set the PSF FOV
-        otf    = interpolateSupport(otf,int(np.round(fovInPixel/nqSmpl)))
+        otf    = interpolateSupport(otf,int(nnp.round(fovInPixel/nqSmpl)))
         psf    = otf2psf(otf)
         # Interpolate the PSF to set the PSF pixel scale
         psf    = interpolateSupport(psf,fovInPixel)
     return psf
                         
 def pistonFilter(D,f,fm=0,fn=0):    
-    f[np.where(f==0)] = 1e-10 
+    f[np.where(np.equal(f,0))] = 1e-10 
     if len(f.shape) ==1:
         Fx,Fy = np.meshgrid(f,f)            
         FX    = Fx -fm 
@@ -295,7 +311,7 @@ def SF2PSF(sf,freq,ao,jitterX=0,jitterY=0,jitterXY=0,F=[[1.0]],dx=[[0.0]],dy=[[0
         for jWvl in range(freq.nWvl):
             
             # UPDATE THE INSTRUMENTAL OTF
-            if (np.any(ao.tel.opdMap_on != None) and freq.nWvl>1) or len(xStat)>0:
+            if (not ao.tel.opdMap_on is None and freq.nWvl>1) or len(xStat)>0:
                 freq.otfNCPA, freq.otfDL, freq.phaseMap = \
                 getStaticOTF(ao.tel,int(freq.nOtf),freq.samp[jWvl],freq.wvl[jWvl],
                              xStat=xStat,theta_ext=theta_ext,spatialFilter=spatialFilter)
@@ -424,7 +440,7 @@ def interpolateSupport(image,nRes,kind='spline'):
     
     nx,ny = image.shape
     # Define angular frequencies vectors
-    if np.isscalar(nRes):
+    if nnp.isscalar(nRes):
         mx = my = nRes
     else:        
         mx = nRes[0]
@@ -442,41 +458,53 @@ def interpolateSupport(image,nRes,kind='spline'):
         
         # Initial frequencies grid    
         if nx%2 == 0:
-            uinit = np.linspace(-nx/2,nx/2-1,nx)*2/nx
+            uinit = nnp.linspace(-nx/2,nx/2-1,nx)*2/nx
         else:
-            uinit = np.linspace(-np.floor(nx/2),np.floor(nx/2),nx)*2/nx
+            uinit = nnp.linspace(-np.floor(nx/2),np.floor(nx/2),nx)*2/nx
         if ny%2 == 0:
-            vinit = np.linspace(-ny/2,ny/2-1,ny)*2/ny
+            vinit = nnp.linspace(-ny/2,ny/2-1,ny)*2/ny
         else:
-            vinit = np.linspace(-np.floor(ny/2),np.floor(ny/2),ny)*2/ny    
+            vinit = nnp.linspace(-np.floor(ny/2),np.floor(ny/2),ny)*2/ny    
              
         # Interpolated frequencies grid                  
         if mx%2 == 0:
-            unew = np.linspace(-mx/2,mx/2-1,mx)*2/mx
+            unew = nnp.linspace(-mx/2,mx/2-1,mx)*2/mx
         else:
-            unew = np.linspace(-np.floor(mx/2),np.floor(mx/2),mx)*2/mx
+            unew = nnp.linspace(-np.floor(mx/2),np.floor(mx/2),mx)*2/mx
         if my%2 == 0:
-            vnew = np.linspace(-my/2,my/2-1,my)*2/my
+            vnew = nnp.linspace(-my/2,my/2-1,my)*2/my
         else:
-            vnew = np.linspace(-np.floor(my/2),np.floor(my/2),my)*2/my
+            vnew = nnp.linspace(-np.floor(my/2),np.floor(my/2),my)*2/my
                    
         # Interpolation
     
         if kind == 'spline':
             # Surprinsingly v and u vectors must be shifted when using
             # RectBivariateSpline. See:https://github.com/scipy/scipy/issues/3164
-            fun_real = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.real(image))
+            xin = np.real(image)
+            if gpuEnabled:
+                xin = xin.get()
+            fun_real = interp.fitpack2.RectBivariateSpline(vinit, uinit, xin)
             if np.any(np.iscomplex(image)):
-                fun_imag = interp.fitpack2.RectBivariateSpline(vinit, uinit, np.imag(image))
+                xin = np.imag(image)
+                if gpuEnabled:
+                    xin = xin.get()
+                fun_imag = interp.fitpack2.RectBivariateSpline(vinit, uinit, xin)
         else:
-            fun_real = interp.interp2d(uinit, vinit, np.real(image),kind=kind)
+            xin = np.real(image)
+            if gpuEnabled:
+                xin = xin.get()
+            fun_real = interp.interp2d(uinit, vinit, xin,kind=kind)
             if np.any(np.iscomplex(image)):
-                fun_imag = interp.interp2d(uinit, vinit, np.imag(image),kind=kind)
+                xin = np.imag(image)
+                if gpuEnabled:
+                    xin = xin.get()
+                fun_imag = interp.interp2d(uinit, vinit, xin,kind=kind)
     
         if np.any(np.iscomplex(image)):
-            return fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew)
+            return np.asarray(fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew))
         else:
-            return fun_real(unew,vnew)
+            return np.asarray(fun_real(unew,vnew))
             
 
 def normalizeImage(im,normType=1,param=None):
@@ -771,7 +799,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
         so you should use (radius+binsize/2) for the radius of the EE curve if you want to be
         as precise as possible.
     """
-    
+        
     if normalize.lower() == 'peak':
         print("Calculating profile with PSF normalized to peak = 1")
         image /= image.max()
@@ -783,7 +811,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
     if binsize is None:
         binsize = pixelscale
 
-    y, x = np.indices(image.shape, dtype=float)
+    y, x = nnp.indices(image.shape, dtype=float)
     if center is None:
         # get exact center of image
         # center = (image.shape[1]/2, image.shape[0]/2)
@@ -792,33 +820,33 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
     x -= center[0]
     y -= center[1]
 
-    r = np.sqrt(x ** 2 + y ** 2) * pixelscale / binsize  # radius in bin size steps
+    r = nnp.sqrt(x ** 2 + y ** 2) * pixelscale / binsize  # radius in bin size steps
 
     if pa_range is None:
         # Use full image
-        ind = np.argsort(r.flat)
+        ind = nnp.argsort(r.flat)
         sr = r.flat[ind]  # sorted r
         sim = image.flat[ind]  # sorted image
 
     else:
         # Apply the PA range restriction
-        pa = np.rad2deg(np.arctan2(-x, y))  # Note the (-x,y) convention is needed for astronomical PA convention
+        pa = nnp.rad2deg(nnp.arctan2(-x, y))  # Note the (-x,y) convention is needed for astronomical PA convention
         mask = (pa >= pa_range[0]) & (pa <= pa_range[1])
-        ind = np.argsort(r[mask].flat)
+        ind = nnp.argsort(r[mask].flat)
         sr = r[mask].flat[ind]
         sim = image[mask].flat[ind]
 
     ri = sr.astype(int)  # sorted r as int
     deltar = ri[1:] - ri[:-1]  # assume all radii represented (more work if not)
-    rind = np.where(deltar)[0]
+    rind = nnp.where(deltar)[0]
     nr = rind[1:] - rind[:-1]  # number in radius bin
-    csim = np.nan_to_num(sim).cumsum(dtype=float)  # cumulative sum to figure out sums for each bin
-    # np.nancumsum is implemented in >1.12
+    csim = nnp.nan_to_num(sim).cumsum(dtype=float)  # cumulative sum to figure out sums for each bin
+    # nnp.nancumsum is implemented in >1.12
     tbin = csim[rind[1:]] - csim[rind[:-1]]  # sum for image values in radius bins
     radialprofile = tbin / nr
 
     # pre-pend the initial element that the above code misses.
-    radialprofile2 = np.empty(len(radialprofile) + 1)
+    radialprofile2 = nnp.empty(len(radialprofile) + 1)
     if rind[0] != 0:
         radialprofile2[0] = csim[rind[0]] / (
                 rind[0] + 1)  # if there are multiple elements in the center bin, average them
@@ -826,7 +854,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
         radialprofile2[0] = csim[0]  # otherwise if there's just one then just take it.
     radialprofile2[1:] = radialprofile
 
-    rr = np.arange(ri.min(), ri.min()+len(radialprofile2)) * binsize + binsize * 0.5  # these should be centered in the bins, so add a half.
+    rr = nnp.arange(ri.min(), ri.min()+len(radialprofile2)) * binsize + binsize * 0.5  # these should be centered in the bins, so add a half.
 
 
     if maxradius is not None:
@@ -835,15 +863,15 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
         radialprofile2 = radialprofile2[crop]
 
     if stddev:
-        stddevs = np.zeros_like(radialprofile2)
+        stddevs = nnp.zeros_like(radialprofile2)
         r_pix = r * binsize
         for i, radius in enumerate(rr):
             if i == 0:
-                wg = np.where(r < radius + binsize / 2)
+                wg = nnp.where(r < radius + binsize / 2)
             else:
-                wg = np.where((r_pix >= (radius - binsize / 2)) & (r_pix < (radius + binsize / 2)))
-                # wg = np.where( (r >= rr[i-1]) &  (r <rr[i] )))
-            stddevs[i] = np.nanstd(image[wg])
+                wg = nnp.where((r_pix >= (radius - binsize / 2)) & (r_pix < (radius + binsize / 2)))
+                # wg = nnp.where( (r >= rr[i-1]) &  (r <rr[i] )))
+            stddevs[i] = nnp.nanstd(image[wg])
         return rr, stddevs
 
     if nargout == 1:
@@ -903,16 +931,16 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     #Interpolation            
     Ny,Nx = psf.shape
     if rebin > 1:
-        im_hr = interpolateSupport(psf,rebin*np.array([Nx,Ny]))
+        im_hr = nnp.asarray(interpolateSupport(psf,rebin*nnp.array([Nx,Ny])))
     else:
-        im_hr = psf
+        im_hr = nnp.asarray(psf)
         
     ss = im_hr.shape
     sbx, sby = [[0,ss[1]],[0,ss[0]]]
 
-    peak_val = np.max(im_hr)
+    peak_val = nnp.max(im_hr)
     # initial guess of PSF center
-    y_peak, x_peak = np.where(im_hr == peak_val)
+    y_peak, x_peak = nnp.where(nnp.equal(im_hr, peak_val))
     x00 = sbx[0]
     y00 = sby[0]
     x_peak += x00
@@ -921,11 +949,11 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     if method == 'cutting':
         # Brutal approach when the PSF is centered and aligned x-axis FWHM
         imx     = im_hr[:,y_peak]
-        wx      = np.where(imx >= imx.max()/2)[0]
+        wx      = nnp.where(imx >= imx.max()/2)[0]
         FWHMx   = (wx.max() - wx.min())/rebin*pixelScale
         #y-axis FWHM
         imy     = im_hr[x_peak,:]
-        wy      = np.where(imy >= imy.max()/2)[1]
+        wy      = nnp.where(imy >= imy.max()/2)[1]
         FWHMy   = (wy.max() - wy.min())/rebin*pixelScale
         theta   = 0
 
@@ -941,20 +969,20 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
             xC      = C[:,0]
             yC      = C[:,1]
             # centering the ellispe
-            mx      = np.array([xC.max(),yC.max()])
-            mn      = np.array([xC.min(),yC.min()])
+            mx      = nnp.array([xC.max(),yC.max()])
+            mn      = nnp.array([xC.min(),yC.min()])
             cent    = (mx+mn)/2
             wx      = xC - cent[0]
             wy      = yC - cent[1] 
             # Get the module
-            wr      = np.hypot(wx,wy)/rebin*pixelScale                
+            wr      = nnp.hypot(wx,wy)/rebin*pixelScale                
             # Getting the FWHM
             FWHMx   = 2*wr.max()
             FWHMy   = 2*wr.min()
             #Getting the ellipse orientation
             xm      = wx[wr.argmax()]
             ym      = wy[wr.argmax()]
-            theta   = np.mean(180*np.arctan2(ym,xm)/np.pi)
+            theta   = nnp.mean(180*nnp.arctan2(ym,xm)/np.pi)
         except:
             FWHMx = -1 
             FWHMy = -1 
@@ -963,31 +991,31 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
         mpl.interactive(True)   
     elif method == 'gaussian':
         # initial guess of the FWHM
-        fwhm_guess = 2*np.sqrt((im_hr > peak_val/2).sum()/np.pi)
+        fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
         
-        stddev_guess = fwhm_guess/(2*np.sqrt(2*np.log(2)))
+        stddev_guess = fwhm_guess/(2*nnp.sqrt(2*nnp.log(2)))
         p_init = models.Gaussian2D(amplitude=peak_val, x_mean=x_peak[0], y_mean=y_peak[0],
                                    x_stddev=stddev_guess, y_stddev=stddev_guess)
         
         fit_p = fitting.LevMarLSQFitter()
     
-        y,x = np.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
+        y,x = nnp.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
         g = fit_p(p_init, x, y, im_hr)
         
-        FWHMx = 2 * np.sqrt(2 * np.log(2)) * np.abs(g.x_stddev.value*pixelScale)
-        FWHMy = 2 * np.sqrt(2 * np.log(2)) * np.abs(g.y_stddev.value*pixelScale)
+        FWHMx = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.x_stddev.value*pixelScale)
+        FWHMy = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.y_stddev.value*pixelScale)
         theta = g.theta.value*180/np.pi
     elif method == 'moffat':      
         # initial guess of the FWHM
-        fwhm_guess = 2*np.sqrt((im_hr > peak_val/2).sum()/np.pi)
+        fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
         
         beta = 4.765    # expected beta value  for Seeing limited PSF
         p_init = models.Moffat2D(amplitude=peak_val, x_0=x_peak[0], y_0=y_peak[0],
-                                 gamma=fwhm_guess/(2*np.sqrt(2**(1/beta)-1)))
+                                 gamma=fwhm_guess/(2*nnp.sqrt(2**(1/beta)-1)))
         
         fit_p = fitting.LevMarLSQFitter()
     
-        y,x = np.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
+        y,x = nnp.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
         g = fit_p(p_init, x, y, im_hr)
         
         FWHMx = g.fwhm*pixelScale
@@ -995,7 +1023,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
         theta   = 0
         
     # Get Ellipticity
-    aRatio      = np.max([FWHMx/FWHMy,FWHMy/FWHMx])
+    aRatio      = nnp.max([FWHMx/FWHMy,FWHMy/FWHMx])
     
     if nargout == 1:
         return 0.5 * (FWHMx+FWHMy)
@@ -1016,7 +1044,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf'):
         #% Get the OTF
         otf     = fft.fftshift(psf2otf(psf))
         otf     = otf/otf.max()
-        notf    = np.array(otf.shape)
+        notf    = nnp.array(otf.shape)
         
         # Get the Diffraction-limit OTF
         nX,nY   = pupil.shape
@@ -1095,7 +1123,7 @@ def gaussian(x,xdata):
     X     = X - x0
     Y     = Y - y0
     #Rotation
-    Xr    = X*np.cos(th) + Y*np.sin(th)
-    Yr    = Y*np.cos(th) - X*np.sin(th)
+    Xr    = X*nnp.cos(th) + Y*nnp.sin(th)
+    Yr    = Y*nnp.cos(th) - X*nnp.sin(th)
     # Gaussian expression
-    return I0*np.exp(-0.5*((Xr/ax)**2 + (Yr/ay)**2) )
+    return I0*nnp.exp(-0.5*((Xr/ax)**2 + (Yr/ay)**2) )
