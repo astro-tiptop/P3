@@ -1087,16 +1087,16 @@ def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
         if posSlab[iii] >= posSlab[iii+1]:
             posSlab[iii+1] = posSlab[iii]+1
                               
-    posSlab = np.concatenate((posSlab, [nAltitudes]))
+    posSlab = np.concatenate((posSlab, np.asarray([nAltitudes])))
     posSlab = posSlab.astype('b')
     Cn2eq = np.zeros(nEqLayers)
     altEq = np.zeros(nEqLayers)
     
     for ii in range(nEqLayers):
-        Cn2eq[ii] = sum(Cn2[posSlab[ii]:posSlab[ii+1]])
-        altEq[ii] = (sum(altitudes[posSlab[ii]:posSlab[ii+1]]**(power) * Cn2[posSlab[ii]:posSlab[ii+1]])/Cn2eq[ii])**(1/power)
+        Cn2eq[ii] = sum(Cn2[posSlab[ii].item():posSlab[ii+1].item()])
+        altEq[ii] = (sum(altitudes[posSlab[ii].item():posSlab[ii+1].item()]**(power) * Cn2[posSlab[ii].item():posSlab[ii+1].item()])/Cn2eq[ii])**(1/power)
        
-    return Cn2eq,altEq
+    return Cn2eq.get(),altEq.get()
 
 def toeplitz(matrix):
     n , m = matrix.shape
