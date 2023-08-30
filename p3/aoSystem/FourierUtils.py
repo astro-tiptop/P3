@@ -254,7 +254,7 @@ def telescopeOtf(pupil,samp):
     return otf/otf.max()
            
 def telescopePsf(pupil,samp,kind='spline'):
-    nSize = np.array(pupil.shape)
+    nSize = nnp.array(pupil.shape)
     
     if samp >=2:
         otf = telescopeOtf(pupil,samp)
@@ -748,17 +748,17 @@ def getEnsquaredEnergy(psf):
         EE[n] = psf[y0 - n:y0+n+1,x0-n:x0+n+1].sum()
     return EE/S
 
-def getEncircledEnergy(psf,pixelscale=1, center=None,nargout=1):            
+def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):            
     
-    rr, radialprofile2, ee = radial_profile(psf,ee=True, center=None,pixelscale=pixelscale)
+    rr, radialprofile2, ee = radial_profile(psf,ee=True, center=None, pixelscale=pixelscale)
     if nargout==1:
         return ee
     elif nargout == 2:
         return ee,rr
 
 
-def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=False, binsize=None, maxradius=None,
-                   normalize='None', pa_range=None, slice=0,nargout=2):
+def radial_profile(image,ext=0,pixelscale=1,ee=False,center=None,stddev=False,binsize=None,maxradius=None,
+                   normalize='None',pa_range=None,slice=0,nargout=2):
     """ Compute a radial profile of the image.
 
     This computes a discrete radial profile evaluated on the provided binsize. For a version
@@ -1056,7 +1056,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf'):
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
         psfDL   = telescopePsf(pupil,samp)
-        psfDL   = interpolateSupport(psfDL,np.array(psfDL.shape))
+        psfDL   = interpolateSupport(psfDL,nnp.array(psfDL.shape))
         psf[psf<0]  =0 
         SR      = psf.max()/psfDL.max() * psfDL.sum()/psf.sum()
     else:
