@@ -57,6 +57,12 @@ rad2mas = 3600 * 180 * 1000 / np.pi
 rad2arc = rad2mas / 1000
 deg2rad = np.pi/180
 
+def cpuArray(v):
+    if isinstance(v,nnp.ndarray):
+        return v
+    else:
+        return v.get()
+
 class fourierModel:
     """ Fourier class gathering the PSD calculation for PSF reconstruction. 
     """
@@ -115,7 +121,7 @@ class fourierModel:
                 wDir_mod       = self.ao.atm.wDir
                 self.strechFactor_mod = self.strechFactor
             
-            self.atm_mod = atmosphere(self.ao.atm.wvl,self.ao.atm.r0,weights_mod,heights_mod,wSpeed_mod,wDir_mod,self.ao.atm.L0)
+            self.atm_mod = atmosphere(self.ao.atm.wvl,self.ao.atm.r0,cpuArray(weights_mod),cpuArray(heights_mod),cpuArray(wSpeed_mod),cpuArray(wDir_mod),self.ao.atm.L0)
             
             #updating the atmosphere wavelength !
             self.ao.atm.wvl  = self.freq.wvlRef
@@ -302,7 +308,7 @@ class fourierModel:
         k       = np.sqrt(self.freq.k2AO_)
         nK      = self.freq.resAO
         nL      = len(self.ao.atm.heights)
-        h_mod   = self.atm_mod.heights * self.strechFactor_mod
+        h_mod   = np.asarray(self.atm_mod.heights) * self.strechFactor_mod
         nL_mod  = len(h_mod)
         nGs     = self.nGs
         i       = complex(0,1)
@@ -349,7 +355,7 @@ class fourierModel:
         h_dm    = self.ao.dms.heights
         nDm     = len(h_dm)
         nDir    = (len(self.ao.dms.opt_dir[0]))
-        h_mod   = self.atm_mod.heights * self.strechFactor_mod
+        h_mod   = np.asarray(self.atm_mod.heights) * self.strechFactor_mod
         nL      = len(h_mod)
         nK      = self.freq.resAO
         i       = complex(0,1)
@@ -673,7 +679,7 @@ class fourierModel:
         for s in range(self.ao.src.nSrc):
             if self.nGs < 2:  
                 th  = self.ao.src.direction[:,s] - self.gs.direction[:,0]
-                if np.any(th):
+                if np.any(np.asarray(th)):
                     A = np.zeros((nK,nK))
                     for l in range(self.ao.atm.nL):                
                         A   = A + Ws[l]*np.exp(2*i*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]))            
