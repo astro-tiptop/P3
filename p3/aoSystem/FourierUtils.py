@@ -254,7 +254,7 @@ def telescopeOtf(pupil,samp):
     return otf/otf.max()
            
 def telescopePsf(pupil,samp,kind='spline'):
-    nSize = np.array(pupil.shape)
+    nSize = nnp.array(pupil.shape)
     
     if samp >=2:
         otf = telescopeOtf(pupil,samp)
@@ -748,17 +748,17 @@ def getEnsquaredEnergy(psf):
         EE[n] = psf[y0 - n:y0+n+1,x0-n:x0+n+1].sum()
     return EE/S
 
-def getEncircledEnergy(psf,pixelscale=1, center=None,nargout=1):            
+def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):            
     
-    rr, radialprofile2, ee = radial_profile(psf,ee=True, center=None,pixelscale=pixelscale)
+    rr, radialprofile2, ee = radial_profile(psf,ee=True, center=None, pixelscale=pixelscale)
     if nargout==1:
         return ee
     elif nargout == 2:
         return ee,rr
 
 
-def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=False, binsize=None, maxradius=None,
-                   normalize='None', pa_range=None, slice=0,nargout=2):
+def radial_profile(image,ext=0,pixelscale=1,ee=False,center=None,stddev=False,binsize=None,maxradius=None,
+                   normalize='None',pa_range=None,slice=0,nargout=2):
     """ Compute a radial profile of the image.
 
     This computes a discrete radial profile evaluated on the provided binsize. For a version
@@ -1056,7 +1056,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf'):
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
         psfDL   = telescopePsf(pupil,samp)
-        psfDL   = interpolateSupport(psfDL,np.array(psfDL.shape))
+        psfDL   = interpolateSupport(psfDL,nnp.array(psfDL.shape))
         psf[psf<0]  =0 
         SR      = psf.max()/psfDL.max() * psfDL.sum()/psf.sum()
     else:
@@ -1087,16 +1087,16 @@ def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
         if posSlab[iii] >= posSlab[iii+1]:
             posSlab[iii+1] = posSlab[iii]+1
                               
-    posSlab = np.concatenate((posSlab, [nAltitudes]))
+    posSlab = np.concatenate((posSlab, np.asarray([nAltitudes])))
     posSlab = posSlab.astype('b')
     Cn2eq = np.zeros(nEqLayers)
     altEq = np.zeros(nEqLayers)
     
     for ii in range(nEqLayers):
-        Cn2eq[ii] = sum(Cn2[posSlab[ii]:posSlab[ii+1]])
-        altEq[ii] = (sum(altitudes[posSlab[ii]:posSlab[ii+1]]**(power) * Cn2[posSlab[ii]:posSlab[ii+1]])/Cn2eq[ii])**(1/power)
+        Cn2eq[ii] = sum(Cn2[posSlab[ii].item():posSlab[ii+1].item()])
+        altEq[ii] = (sum(altitudes[posSlab[ii].item():posSlab[ii+1].item()]**(power) * Cn2[posSlab[ii].item():posSlab[ii+1].item()])/Cn2eq[ii])**(1/power)
        
-    return Cn2eq,altEq
+    return Cn2eq.get(),altEq.get()
 
 def toeplitz(matrix):
     n , m = matrix.shape

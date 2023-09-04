@@ -57,6 +57,12 @@ rad2mas = 3600 * 180 * 1000 / np.pi
 rad2arc = rad2mas / 1000
 deg2rad = np.pi/180
 
+def cpuArray(v):
+    if isinstance(v,nnp.ndarray):
+        return v
+    else:
+        return v.get()
+    
 class fourierModel:
     """ Fourier class gathering the PSD calculation for PSF reconstruction. 
     """
@@ -104,8 +110,8 @@ class fourierModel:
                 weights_mod,heights_mod = FourierUtils.eqLayers(self.ao.atm.weights,self.ao.atm.heights,self.ao.dms.nRecLayers)
                 if self.ao.dms.nRecLayers == 1:
                     heights_mod = [0.0]
-                wSpeed_mod = np.linspace(min(self.ao.atm.wSpeed),max(self.ao.atm.wSpeed),num=self.ao.dms.nRecLayers)
-                wDir_mod   = np.linspace(min(self.ao.atm.wDir),max(self.ao.atm.wDir),num=self.ao.dms.nRecLayers)
+                wSpeed_mod = cpuArray(np.linspace(min(self.ao.atm.wSpeed),max(self.ao.atm.wSpeed),num=self.ao.dms.nRecLayers))
+                wDir_mod   = cpuArray(np.linspace(min(self.ao.atm.wDir),max(self.ao.atm.wDir),num=self.ao.dms.nRecLayers))
                 if self.ao.lgs:
                     self.strechFactor_mod = 1.0/(1.0 - heights_mod/self.gs.height[0])
             else:
