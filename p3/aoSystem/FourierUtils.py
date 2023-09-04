@@ -30,6 +30,12 @@ import matplotlib as mpl
 
 from matplotlib.path import Path
 
+def cpuArray(v):
+    if isinstance(v,nnp.ndarray):
+        return v
+    else:
+        return v.get()
+
 #%%  FOURIER TOOLS
 
 def cov2sf(cov):
@@ -1087,8 +1093,10 @@ def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
         if posSlab[iii] >= posSlab[iii+1]:
             posSlab[iii+1] = posSlab[iii]+1
                               
-    posSlab = np.concatenate((posSlab, np.asarray([nAltitudes])))
-    posSlab = posSlab.astype('b')
+    posSlab1 = np.concatenate((posSlab, np.asarray([nAltitudes])))
+    posSlab2 = cpuArray(posSlab1)
+    posSlab = posSlab2.astype(int)
+
     Cn2eq = np.zeros(nEqLayers)
     altEq = np.zeros(nEqLayers)
     
