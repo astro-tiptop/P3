@@ -309,7 +309,7 @@ class fourierModel:
         k       = np.sqrt(self.freq.k2AO_)
         nK      = self.freq.resAO
         nL      = len(self.ao.atm.heights)
-        h_mod   = np.asarray(self.atm_mod.heights) * self.strechFactor_mod
+        h_mod   = self.atm_mod.heights * cpuArray(self.strechFactor_mod)
         nL_mod  = len(h_mod)
         nGs     = self.nGs
         i       = complex(0,1)
@@ -356,7 +356,7 @@ class fourierModel:
         h_dm    = self.ao.dms.heights
         nDm     = len(h_dm)
         nDir    = (len(self.ao.dms.opt_dir[0]))
-        h_mod   = np.asarray(self.atm_mod.heights) * self.strechFactor_mod
+        h_mod   = self.atm_mod.heights * cpuArray(self.strechFactor_mod)
         nL      = len(h_mod)
         nK      = self.freq.resAO
         i       = complex(0,1)
