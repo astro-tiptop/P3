@@ -31,7 +31,7 @@ import matplotlib as mpl
 from matplotlib.path import Path
 
 def cpuArray(v):
-    if isinstance(v,nnp.ndarray):
+    if isinstance(v,nnp.ndarray) or isinstance(v, list):
         return v
     else:
         return v.get()
