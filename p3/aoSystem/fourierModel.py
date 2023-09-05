@@ -58,7 +58,7 @@ rad2arc = rad2mas / 1000
 deg2rad = np.pi/180
 
 def cpuArray(v):
-    if isinstance(v,nnp.ndarray):
+    if isinstance(v,nnp.ndarray) or isinstance(v, list):
         return v
     else:
         return v.get()
