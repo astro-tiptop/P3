@@ -33,7 +33,7 @@ class aoSystem():
         
     def raiseMissingRequiredSec(self,sec):
         raise ValueError("The section '{}' is missing from the parameter file"
-                         ,format(sec))
+                         .format(sec))
         
     def raiseNotSameLength(self,sec,opt):
         raise ValueError("'{}' in section '{}' must have the same length"
