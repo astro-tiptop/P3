@@ -454,7 +454,7 @@ class aoSystem():
             modu = None
             
         if self.check_config_key('sensor_HO','NoiseVariance'):
-            NoiseVar = self.get_config_value('sensor_HO','NoiseVariance')
+            NoiseVar = np.array(self.get_config_value('sensor_HO','NoiseVariance'))
         else:
             NoiseVar = [None]
             
