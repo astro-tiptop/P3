@@ -27,15 +27,23 @@ import p3.aoSystem.anisoplanatismModel as anisoplanatismModel
 #%%
 class aoSystem():
 
-    
+    def raiseMissingRequiredOpt(self,sec,opt):
+        raise ValueError("'{}' is missing from section '{}'"
+                         ,format(sec,opt))
+        
+    def raiseMissingRequiredSec(self,sec):
+        raise ValueError("The section '{}' is missing from the parameter file"
+                         .format(sec))
+        
+    def raiseNotSameLength(self,sec,opt):
+        raise ValueError("'{}' in section '{}' must have the same length"
+                         .format(*opt,sec))
 
     def check_section_key(self, primary):
         if self.configType == 'ini':
             return self.config.has_section(primary)
         elif self.configType == 'yml':
             return primary in self.my_yaml_dict.keys()
-
-
     
     def check_config_key(self, primary, secondary):
         if self.configType == 'ini':
@@ -45,7 +53,6 @@ class aoSystem():
                 return secondary in self.my_yaml_dict[primary].keys()
             else:
                 return False
-
 
     def get_config_value(self, primary, secondary):
         if self.configType == 'ini':
@@ -58,10 +65,7 @@ class aoSystem():
         self.error = False
         # verify if the file exists
         if ospath.isfile(path_config) == False:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The .ini or .yml file does not exist\n')
-            self.error = True
-            return
+            raise ValueError('The parameter file (.ini or .yml) could not be found.')
                 
         if path_config[-4::]=='.ini':
             # open the .ini file
@@ -79,13 +83,13 @@ class aoSystem():
         
         #%% TELESCOPE
         #----- grabbing main parameters
+        if not(self.check_section_key('telescope')):
+            self.raiseMissingRequiredSec('telescope')
+        
         if self.check_config_key('telescope','TelescopeDiameter'):
             D = self.get_config_value('telescope','TelescopeDiameter')
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the telescope diameter\n')
-            self.error = True
-            return
+            self.raiseMissingRequiredOpt('telescope','TelescopeDiameter')
         
         if self.check_config_key('telescope','ZenithAngle'):
             zenithAngle = self.get_config_value('telescope','ZenithAngle')
@@ -102,10 +106,7 @@ class aoSystem():
         if self.check_config_key('telescope','Resolution'):
             nPup = self.get_config_value('telescope','Resolution')
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the pupil (telescope) resolution\n')
-            self.error = True
-            return
+            self.raiseMissingRequiredOpt('telescope','Resolution')
             
         path_p3 = str(pathlib.Path(__file__).parent.parent.absolute())
             
@@ -215,7 +216,9 @@ class aoSystem():
                              extraErrorMin=extraErrorMin)                     
 
         #%% ATMOSPHERE
-        
+        if not(self.check_section_key('atmosphere')):
+            self.raiseMissingRequiredSec('atmosphere')
+            
         if self.check_config_key('atmosphere','Wavelength'):
             wvlAtm = self.get_config_value('atmosphere','Wavelength') 
         else:
@@ -224,10 +227,7 @@ class aoSystem():
         if self.check_config_key('atmosphere','Seeing'):
             r0 = 0.976*wvlAtm/self.get_config_value('atmosphere','Seeing')*3600*180/np.pi 
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the atmosphere seeing\n')
-            self.error = True
-            return
+            self.raiseMissingRequiredOpt('atmosphere','Seeing')
         
         if self.check_config_key('atmosphere','L0'):
             L0 = self.get_config_value('atmosphere','L0') 
@@ -237,9 +237,7 @@ class aoSystem():
         if self.check_config_key('atmosphere','Cn2Weights'):
             weights = self.get_config_value('atmosphere','Cn2Weights') 
             if np.abs(np.sum(weights) - 1) > 1e-3:
-                print('%%%%%%%% ERROR %%%%%%%%')
-                print('Sum of Cn2 weights not equal to 1, please correct parameter file')
-                self.error = True
+                raise ValueError("Sum of 'Cn2Weights' in section 'atmosphere' is not equal to 1")
         else:
             weights = [1.0]
         
@@ -260,10 +258,8 @@ class aoSystem():
 
         #-----  verification
         if not (len(weights) == len(heights) == len(wSpeed) == len(wDir)):
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The number of atmospheric layers is not consistent in the parameters file\n')
-            self.error = True
-            return
+            self.raiseNotSameLength('atmosphere',['Cn2Weights','Cn2Heights','WindSpeed','WindDirection'])
+
         #----- class definition
         self.atm = atmosphere(wvlAtm, r0*airmass**(-3.0/5.0),
                               weights,
@@ -272,12 +268,14 @@ class aoSystem():
                               wDir,
                               L0)            
         
-         #%%  GUIDE STARS 
+        #%%  GUIDE STARS 
+        if not(self.check_section_key('sources_HO')):
+            self.raiseMissingRequiredSec('sources_HO')
+            
         if self.check_config_key('sources_HO','Wavelength'):
             wvlGs     = np.unique(np.array(self.get_config_value('sources_HO','Wavelength')))
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the wavelength of the HO source (sources_HO)\n')
+            self.raiseMissingRequiredOpt('sources_HO', 'Wavelength')
             return 0
         
         if self.check_config_key('sources_HO','Zenith'):
@@ -297,10 +295,8 @@ class aoSystem():
                          
         # ----- verification
         if len(zenithGs) != len(azimuthGs):
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The number of guide stars for high-order sensing is not consistent in the parameters file\n')
-            self.error = True
-            return
+            self.raiseNotSameLength('sources_HO', ['Azimuth','Zenith'])
+
         # ----- creating the source class
         if heightGs == 0:
             self.ngs = source(wvlGs,
@@ -314,38 +310,32 @@ class aoSystem():
                               tag="LGS",verbose=True)  
             
             if (not self.check_section_key('sources_LO')) | (not self.check_section_key('sources_LO')):
-                print('%%%%%%%% WARNING %%%%%%%%')
-                print('No information about the tip-tilt star can be retrieved\n')
+                print('Warning: No information about the tip-tilt star can be retrieved')
+
                 self.ngs = None
             else:
                 if self.check_config_key('sources_LO','Wavelength'):
                     wvlGs = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
                 else:
-                    print('%%%%%%%% ERROR %%%%%%%%')
-                    print('You must provide a value for the wavelength of the LO source (sources_LO)\n')
-                    self.error = True
-                    return
+                    self.raiseMissingRequiredOpt('sources_LO','Wavelength')
         
                 zenithGs   = np.array(self.get_config_value('sources_LO','Zenith'))
                 azimuthGs  = np.array(self.get_config_value('sources_LO','Azimuth'))
                 # ----- verification
                 if len(zenithGs) != len(azimuthGs):
-                    print('%%%%%%%% ERROR %%%%%%%%')
-                    print('The number of guide stars for high-order sensing is not consistent in the parameters file\n')
-                    self.error = True
-                    return
+                    self.raiseNotSameLength('sources_LO', ['Zenith','Azimuth'])
+
                 self.ngs = source(wvlGs,zenithGs,azimuthGs,tag="NGS",verbose=True)   
                               
                 
         #%%  SCIENCE SOURCES
-        
+        if not(self.check_section_key('sources_science')):
+            self.raiseMissingRequiredSec('sources_science') 
+            
         if self.check_config_key('sources_science','Wavelength'):
             wvlSrc = np.array(self.get_config_value('sources_science','Wavelength'))
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the wavelength of the science source (sources_science)\n')
-            self.error = True
-            return
+            self.raiseMissingRequiredOpt('sources_science', 'Wavelength')
         
         if self.check_config_key('sources_science','Zenith'):
             zenithSrc = self.get_config_value('sources_science','Zenith') 
@@ -363,15 +353,12 @@ class aoSystem():
         
         #----- verification
         if len(zenithSrc) != len(azimuthSrc):
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The number of scientific sources is not consistent in the parameters file\n')
-            self.error = True
+            self.raiseNotSameLength('sources_science', ['Zenith','Azimuth'])
             return
         
         if self.getPSDatNGSpositions and self.check_config_key('sources_LO','Wavelength'):
             zenithSrc = zenithSrc +  (self.get_config_value('sources_LO','Zenith'))
             azimuthSrc = azimuthSrc + (self.get_config_value('sources_LO','Azimuth'))
-            
             
         #----- class definition
         self.src = source(wvlSrc,
@@ -380,22 +367,18 @@ class aoSystem():
  
        
 #%% HIGH-ORDER WAVEFRONT SENSOR
-        
+        if not(self.check_section_key('sensor_HO')):
+            self.raiseMissingRequiredSec('sensor_HO')
+            
         if self.check_config_key('sensor_HO','PixelScale'):
             psInMas = self.get_config_value('sensor_HO','PixelScale')
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the HO detector (sensor_HO) pixel scale\n')
-            self.error = True
-            return
+            self.raiseMissingRequiredOpt('sensor_HO', 'PixelScale')
         
         if self.check_config_key('sensor_HO','FieldOfView'):
             fov = self.get_config_value('sensor_HO','FieldOfView')
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the HO detector (sensor_HO) field of view\n')
-            self.error = True
-            return
+            self.raiseMissingRequiredOpt('sensor_HO', 'FieldOfView') 
         
         if self.check_config_key('sensor_HO','Binning'):
             Binning = self.get_config_value('sensor_HO','Binning')
@@ -513,16 +496,14 @@ class aoSystem():
             if self.check_config_key('sensor_LO','PixelScale'):
                 psInMas = self.get_config_value('sensor_LO','PixelScale')
             else:
-                print('%%%%%%%% ERROR %%%%%%%%')
-                print('You must provide a value for the LO detector (sensor_LO) pixel scale\n')
+                self.raiseMissingRequiredOpt('sensor_LO', 'PixelScale')
                 self.error = True
                 return
             
             if self.check_config_key('sensor_LO','FieldOfView'):
                 fov = self.get_config_value('sensor_LO','FieldOfView')
             else:
-                print('%%%%%%%% ERROR %%%%%%%%')
-                print('You must provide a value for the LO detector (sensor_LO) field of view\n')
+                self.raiseMissingRequiredOpt('sensor_LO', 'FieldOfView')
                 self.error = True
                 return
             
@@ -660,19 +641,18 @@ class aoSystem():
                        loopGainLO=LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
                
 #%% DEFORMABLE MIRRORS
+        if not(self.check_section_key('DM')):
+            self.raiseMissingRequiredSec('DM')
+
         if self.check_config_key('DM','NumberActuators'):
             nActu = self.get_config_value('DM','NumberActuators')
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the Dm number of actuators (NumberActuators)\n')
-            self.error = True
-            return
+            self.raiseMissingRequiredOpt('DM', 'NumberActuators')
         
         if self.check_config_key('DM','DmPitchs'):
             DmPitchs = np.array(self.get_config_value('DM','DmPitchs'))
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the Dm actuators pitch (DmPitchs)\n')
+            self.raiseMissingRequiredOpt('DM','DmPitchs')
             self.error = True
             return
         
@@ -708,10 +688,7 @@ class aoSystem():
 
          # ----- verification
         if (len(opt_zen) != len(opt_az)) or (len(opt_zen) != len(opt_w)):
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('The number of optimization directions is not consistent in the parameters file\n')
-            self.error = True
-            return
+            self.raiseNotSameLength('DM', ['OptimizationZenith','OptimizationAzimuth','OptimizationWeight'])
               
         if self.check_config_key('DM','OptimizationConditioning'):
             cond = self.get_config_value('DM','OptimizationConditioning') 
@@ -738,6 +715,8 @@ class aoSystem():
                                     AoArea=AoArea)
       
 #%% SCIENCE DETECTOR
+        if not(self.check_section_key('sensor_science')):
+            self.raiseMissingRequiredSec('sensor_science')
         
         if self.check_config_key('sensor_science','Name'):
             camName = self.get_config_value('sensor_science','Name')
@@ -747,18 +726,12 @@ class aoSystem():
         if self.check_config_key('sensor_science','PixelScale'):
             psInMas = self.get_config_value('sensor_science','PixelScale')
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the science detector (sensor_science) pixel scale\n')
-            self.error = True
-            return
+            self.raiseMissingRequiredOpt('sensor_science', 'PixelScale')
         
         if self.check_config_key('sensor_science','FieldOfView'):
             fov = self.get_config_value('sensor_science','FieldOfView')
         else:
-            print('%%%%%%%% ERROR %%%%%%%%')
-            print('You must provide a value for the science detector (sensor_science) field of view\n')
-            self.error = True
-            return
+            self.raiseMissingRequiredOpt('sensor_science', 'FieldOfView')
         
         if self.check_config_key('sensor_science','Binning'):
             Binning = self.get_config_value('sensor_science','Binning')
