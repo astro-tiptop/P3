@@ -1104,7 +1104,7 @@ def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
         Cn2eq[ii] = sum(Cn2[posSlab[ii].item():posSlab[ii+1].item()])
         altEq[ii] = (sum(altitudes[posSlab[ii].item():posSlab[ii+1].item()]**(power) * Cn2[posSlab[ii].item():posSlab[ii+1].item()])/Cn2eq[ii])**(1/power)
        
-    return Cn2eq.get(),altEq.get()
+    return cpuArray(Cn2eq),cpuArray(altEq)
 
 def toeplitz(matrix):
     n , m = matrix.shape
