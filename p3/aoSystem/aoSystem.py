@@ -29,7 +29,7 @@ class aoSystem():
 
     def raiseMissingRequiredOpt(self,sec,opt):
         raise ValueError("'{}' is missing from section '{}'"
-                         ,format(sec,opt))
+                         .format(opt,sec))
         
     def raiseMissingRequiredSec(self,sec):
         raise ValueError("The section '{}' is missing from the parameter file"
@@ -229,7 +229,10 @@ class aoSystem():
         if self.check_config_key('atmosphere','Seeing'):
             r0 = 0.976*wvlAtm/self.get_config_value('atmosphere','Seeing')*3600*180/np.pi 
         else:
-            self.raiseMissingRequiredOpt('atmosphere','Seeing')
+            if self.check_config_key('atmosphere','r0_value'):
+                r0 = self.get_config_value('atmosphere','r0_value') 
+            else:
+                self.raiseMissingRequiredOpt('atmosphere','Seeing')
         
         if self.check_config_key('atmosphere','L0'):
             L0 = self.get_config_value('atmosphere','L0') 
