@@ -93,6 +93,8 @@ class aoSystem():
         
         if self.check_config_key('telescope','ZenithAngle'):
             zenithAngle = self.get_config_value('telescope','ZenithAngle')
+            if zenithAngle >= 90:
+                raise ValueError("'zenithAngle' [deg] cannot be greater than or equal to 90.")
         else:
             zenithAngle = 0.0
         
