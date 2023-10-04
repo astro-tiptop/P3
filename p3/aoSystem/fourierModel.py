@@ -865,6 +865,8 @@ class fourierModel:
         psd = psd * pf
         if self.ao.tel.extraErrorMin>0:
             psd[np.where(k<self.ao.tel.extraErrorMin)] = 0
+        if self.ao.tel.extraErrorMax>0:
+            psd[np.where(k>self.ao.tel.extraErrorMax)] = 0
         
         psd = psd * self.ao.tel.extraErrorNm**2/np.sum(psd)
         
