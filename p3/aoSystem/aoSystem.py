@@ -39,27 +39,18 @@ class aoSystem():
         raise ValueError("'{}' in section '{}' must have the same length"
                          .format(*opt,sec))
 
-    def check_section_key(self, primary):
-        if self.configType == 'ini':
-            return self.config.has_section(primary)
-        elif self.configType == 'yml':
-            return primary in self.my_yaml_dict.keys()
+    def check_section_key(self, primary):        
+        return primary in self.my_data_map.keys()
     
     def check_config_key(self, primary, secondary):
-        if self.configType == 'ini':
-            return self.config.has_option(primary, secondary)
-        elif self.configType == 'yml':
-            if primary in self.my_yaml_dict.keys():
-                return secondary in self.my_yaml_dict[primary].keys()
-            else:
-                return False
+        if primary in self.my_data_map.keys():
+            return secondary in self.my_data_map[primary].keys()
+        else:
+            return False
 
     def get_config_value(self, primary, secondary):
-        if self.configType == 'ini':
-            return eval(self.config[primary][secondary])
-        elif self.configType == 'yml':
-            return self.my_yaml_dict[primary][secondary]
-
+        return self.my_data_map[primary][secondary]
+    
     def __init__(self,path_config,path_root='',nLayer=None,getPSDatNGSpositions=False,coo_stars=None):
                             
         self.error = False
@@ -69,16 +60,20 @@ class aoSystem():
                 
         if path_config[-4::]=='.ini':
             # open the .ini file
-            self.configType = 'ini'
-            self.config = ConfigParser()
-            self.config.optionxform = str
-            self.config.read(path_config)
-
+            config = ConfigParser()
+            config.optionxform = str
+            config.read(path_config)
+            self.my_data_map = {} 
+            for section in config.sections():
+                self.my_data_map[section] = {}
+                for name,value in config.items(section):
+                    self.my_data_map[section].update({name:eval(value)})            
+            
         elif path_config[-4::]=='.yml':
-            self.configType = 'yml'
             with open(path_config) as f:
-                self.my_yaml_dict = yaml.safe_load(f)
-        
+                my_yaml_dict = yaml.safe_load(f)        
+            self.my_data_map = my_yaml_dict
+
         self.getPSDatNGSpositions = getPSDatNGSpositions
         
         #%% TELESCOPE
@@ -87,7 +82,7 @@ class aoSystem():
             self.raiseMissingRequiredSec('telescope')
         
         if self.check_config_key('telescope','TelescopeDiameter'):
-            D = self.get_config_value('telescope','TelescopeDiameter')
+            self.D = self.get_config_value('telescope','TelescopeDiameter')
         else:
             self.raiseMissingRequiredOpt('telescope','TelescopeDiameter')
         
@@ -208,7 +203,7 @@ class aoSystem():
             extraErrorMax = 0
             
         # ----- class definition     
-        self.tel = telescope(D, nPup,
+        self.tel = telescope(self.D, nPup,
                              zenith_angle=zenithAngle,
                              obsRatio=obsRatio,
                              pupilAngle=pupilAngle,
@@ -320,24 +315,7 @@ class aoSystem():
                               height=heightGs*airmass,
                               tag="LGS",verbose=True)  
             
-            if (not self.check_section_key('sources_LO')) | (not self.check_section_key('sources_LO')):
-                print('Warning: No information about the tip-tilt star can be retrieved')
-
-                self.ngs = None
-            else:
-                if self.check_config_key('sources_LO','Wavelength'):
-                    wvlGs = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
-                else:
-                    self.raiseMissingRequiredOpt('sources_LO','Wavelength')
-        
-                zenithGs   = np.array(self.get_config_value('sources_LO','Zenith'))
-                azimuthGs  = np.array(self.get_config_value('sources_LO','Azimuth'))
-                # ----- verification
-                if len(zenithGs) != len(azimuthGs):
-                    self.raiseNotSameLength('sources_LO', ['Zenith','Azimuth'])
-
-                self.ngs = source(wvlGs,zenithGs,azimuthGs,tag="NGS",verbose=True)   
-                              
+            self.configLO()                              
                 
         #%%  SCIENCE SOURCES
         if not(self.check_section_key('sources_science')):
@@ -402,9 +380,9 @@ class aoSystem():
             spotFWHM = [[0.0, 0.0]]
             
         if self.check_config_key('sensor_HO','NumberPhotons'):
-            nph = self.get_config_value('sensor_HO','NumberPhotons')
+            nphHO = self.get_config_value('sensor_HO','NumberPhotons')
         else:
-            nph = [np.inf]
+            nphHO = [np.inf]
         
         if self.check_config_key('sensor_HO','SigmaRON'):
             ron = self.get_config_value('sensor_HO','SigmaRON')
@@ -412,9 +390,9 @@ class aoSystem():
             ron = 0.0
         
         if self.check_config_key('sensor_HO','Gain'):
-            Gain = self.get_config_value('sensor_HO','Gain')
+            self.Gain = self.get_config_value('sensor_HO','Gain')
         else:
-            Gain = 1
+            self.Gain = 1
             
         if self.check_config_key('sensor_HO','SkyBackground'):
             sky = self.get_config_value('sensor_HO','SkyBackground')
@@ -457,7 +435,7 @@ class aoSystem():
         if self.check_config_key('sensor_HO','SizeLenslets'):
             dsub = self.get_config_value('sensor_HO','SizeLenslets')
         else:
-            dsub = list(D/np.array(nL))
+            dsub = list(self.D/np.array(nL))
             
         if self.check_config_key('sensor_HO','Modulation'):
             modu = self.get_config_value('sensor_HO','Modulation')
@@ -496,114 +474,14 @@ class aoSystem():
             
         self.wfs = sensor(psInMas, fov,
                           binning=Binning, spotFWHM=spotFWHM,
-                          nph=nph, bandwidth=bw, transmittance=tr, dispersion=disp,
-                          gain=Gain, ron=ron, sky=sky, dark=dark, excess=excess,
+                          nph=nphHO, bandwidth=bw, transmittance=tr, dispersion=disp,
+                          gain=self.Gain, ron=ron, sky=sky, dark=dark, excess=excess,
                           nL=nL, dsub=dsub, wfstype=wfstype, modulation=modu,
                           noiseVar=NoiseVar, algorithm=algorithm,
                           algo_param=[wr,thr,nv], tag="HO WFS")
 #%% TIP-TILT SENSORS
         if self.check_section_key('sensor_LO'):
-            
-            if self.check_config_key('sensor_LO','PixelScale'):
-                psInMas = self.get_config_value('sensor_LO','PixelScale')
-            else:
-                self.raiseMissingRequiredOpt('sensor_LO', 'PixelScale')
-                self.error = True
-                return
-            
-            if self.check_config_key('sensor_LO','FieldOfView'):
-                fov = self.get_config_value('sensor_LO','FieldOfView')
-            else:
-                self.raiseMissingRequiredOpt('sensor_LO', 'FieldOfView')
-                self.error = True
-                return
-            
-            if self.check_config_key('sensor_LO','Binning'):
-                Binning = self.get_config_value('sensor_LO','Binning')
-            else:
-                Binning = 1
-            
-            if self.check_config_key('sensor_LO','SpotFWHM'):
-                spotFWHM = self.get_config_value('sensor_LO','SpotFWHM')
-            else:
-                spotFWHM = [[0.0, 0.0]]
-                
-            if self.check_config_key('sensor_LO','NumberPhotons'):
-                nph = self.get_config_value('sensor_LO','NumberPhotons')
-            else:
-                nph = np.inf
-            
-            if self.check_config_key('sensor_LO','SigmaRON'):
-                ron = self.get_config_value('sensor_LO','SigmaRON')
-            else:
-                ron = 0.0
-            
-            if self.check_config_key('sensor_LO','SkyBackground'):
-                sky = self.get_config_value('sensor_LO','SkyBackground')
-            else:
-                sky = 0.0
-            
-            if self.check_config_key('sensor_LO','Dark'):
-                dark = self.get_config_value('sensor_LO','Dark')
-            else:
-                dark = 0.0
-                
-            if self.check_config_key('sensor_LO','ExcessNoiseFactor'):
-                excess = self.get_config_value('sensor_LO','ExcessNoiseFactor')
-            else:
-                excess = 1.0
-            
-            if self.check_config_key('sensor_LO','SpectralBandwidth'):
-                bw = self.get_config_value('sensor_LO','SpectralBandwidth')
-            else:
-                bw = 0.0
-            if self.check_config_key('sensor_LO','Transmittance'):
-                tr = self.get_config_value('sensor_LO','Transmittance')
-            else:
-                tr = [1.0]
-            if self.check_config_key('sensor_LO','Dispersion'):
-                disp = self.get_config_value('sensor_LO','Dispersion')
-            else:
-                disp = [[0.0], [0.0]]
-            
-            if self.check_config_key('sensor_LO','NumberLenslets'):
-                nL = self.get_config_value('sensor_LO','NumberLenslets')
-            else:
-                nL = [1]
-                     
-            if self.check_config_key('sensor_LO','NoiseVariance'):
-                NoiseVar = self.get_config_value('sensor_LO','NoiseVariance')
-            else:
-                NoiseVar = [None]
-                
-            if self.check_config_key('sensor_LO','Algorithm'):
-                algorithm = self.get_config_value('sensor_LO','Algorithm')
-            else:
-                algorithm = 'wcog'
-                
-            if self.check_config_key('sensor_LO','WindowRadiusWCoG'):
-                wr = self.get_config_value('sensor_LO','WindowRadiusWCoG')
-            else:
-                wr = 5.0
-                
-            if self.check_config_key('sensor_LO','ThresholdWCoG = 0.0'):
-                thr = self.get_config_value('sensor_LO','ThresholdWCoG = 0.0')
-            else:
-                thr = 0.0
-                
-            if self.check_config_key('sensor_LO','NewValueThrPix'):
-                nv = self.get_config_value('sensor_LO','NewValueThrPix')
-            else:
-                nv = 0.0
-                
-                
-            self.tts = sensor(psInMas, fov,
-                              binning=Binning, spotFWHM=spotFWHM,
-                              nph=nph, bandwidth=bw, transmittance=tr, dispersion=disp,
-                              gain=Gain, ron=ron, sky=sky, dark=dark, excess=excess,
-                              nL=nL, dsub=list(D/np.array(nL)),
-                              wfstype='Shack-Hartmann', noiseVar=NoiseVar,
-                              algorithm=algorithm, algo_param=[wr,thr,nv], tag="TT WFS")
+            self.configLOsensor()
         else:
             self.tts = None
 
@@ -768,9 +646,9 @@ class aoSystem():
             disp = [[0.0],[0.0]]
         
         if self.check_config_key('sensor_science','NumberPhotons'):
-            nph = self.get_config_value('sensor_science','NumberPhotons')
+            nphSC = self.get_config_value('sensor_science','NumberPhotons')
         else:
-            nph = np.inf
+            nphSC = np.inf
         
         if self.check_config_key('sensor_science','Saturation'):
             saturation = self.get_config_value('sensor_science','Saturation')
@@ -783,9 +661,9 @@ class aoSystem():
             ron = 0.0
         
         if self.check_config_key('sensor_science','Gain'):
-            Gain = self.get_config_value('sensor_science','Gain')
+            self.Gain = self.get_config_value('sensor_science','Gain')
         else:
-            Gain = 1
+            self.Gain = 1
             
         if self.check_config_key('sensor_science','SkyBackground'):
             sky = self.get_config_value('sensor_science','SkyBackground')
@@ -804,8 +682,8 @@ class aoSystem():
         
         self.cam = detector(psInMas, fov,
                             binning=Binning, spotFWHM=spotFWHM, saturation=saturation,
-                            nph=nph, bandwidth=bw, transmittance=tr, dispersion=disp,
-                            gain=Gain, ron=ron, sky=sky, dark=dark, excess=excess,
+                            nph=nphSC, bandwidth=bw, transmittance=tr, dispersion=disp,
+                            gain=self.Gain, ron=ron, sky=sky, dark=dark, excess=excess,
                             tag=camName)
         
     #%% AO mode
@@ -826,6 +704,131 @@ class aoSystem():
     #%% ERROR BREAKDOWN
         if self.rtc.holoop['gain'] > 0:
             self.errorBreakdown()
+
+
+    def configLO(self):
+        
+        if not self.check_section_key('sources_LO'):
+        
+            print('Warning: No information about the tip-tilt star can be retrieved')            
+            self.ngs = None
+        else:
+            if self.check_config_key('sources_LO','Wavelength'):
+                wvlGs = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
+            else:
+                self.raiseMissingRequiredOpt('sources_LO','Wavelength')
+
+            zenithGs   = np.array(self.get_config_value('sources_LO','Zenith'))
+            azimuthGs  = np.array(self.get_config_value('sources_LO','Azimuth'))
+            # ----- verification
+            if len(zenithGs) != len(azimuthGs):
+                self.raiseNotSameLength('sources_LO', ['Zenith','Azimuth'])
+
+            self.ngs = source(wvlGs,zenithGs,azimuthGs,tag="NGS",verbose=True)   
+
+    
+    def configLOsensor(self):
+            
+        if self.check_config_key('sensor_LO','PixelScale'):
+            psInMas = self.get_config_value('sensor_LO','PixelScale')
+        else:
+            self.raiseMissingRequiredOpt('sensor_LO', 'PixelScale')
+            self.error = True
+            return
+
+        if self.check_config_key('sensor_LO','FieldOfView'):
+            fov = self.get_config_value('sensor_LO','FieldOfView')
+        else:
+            self.raiseMissingRequiredOpt('sensor_LO', 'FieldOfView')
+            self.error = True
+            return
+
+        if self.check_config_key('sensor_LO','Binning'):
+            Binning = self.get_config_value('sensor_LO','Binning')
+        else:
+            Binning = 1
+
+        if self.check_config_key('sensor_LO','SpotFWHM'):
+            spotFWHM = self.get_config_value('sensor_LO','SpotFWHM')
+        else:
+            spotFWHM = [[0.0, 0.0]]
+
+        if self.check_config_key('sensor_LO','NumberPhotons'):
+            nphLO = self.get_config_value('sensor_LO','NumberPhotons')
+        else:
+            nphLO = np.inf
+
+        if self.check_config_key('sensor_LO','SigmaRON'):
+            ron = self.get_config_value('sensor_LO','SigmaRON')
+        else:
+            ron = 0.0
+
+        if self.check_config_key('sensor_LO','SkyBackground'):
+            sky = self.get_config_value('sensor_LO','SkyBackground')
+        else:
+            sky = 0.0
+
+        if self.check_config_key('sensor_LO','Dark'):
+            dark = self.get_config_value('sensor_LO','Dark')
+        else:
+            dark = 0.0
+
+        if self.check_config_key('sensor_LO','ExcessNoiseFactor'):
+            excess = self.get_config_value('sensor_LO','ExcessNoiseFactor')
+        else:
+            excess = 1.0
+
+        if self.check_config_key('sensor_LO','SpectralBandwidth'):
+            bw = self.get_config_value('sensor_LO','SpectralBandwidth')
+        else:
+            bw = 0.0
+        if self.check_config_key('sensor_LO','Transmittance'):
+            tr = self.get_config_value('sensor_LO','Transmittance')
+        else:
+            tr = [1.0]
+        if self.check_config_key('sensor_LO','Dispersion'):
+            disp = self.get_config_value('sensor_LO','Dispersion')
+        else:
+            disp = [[0.0], [0.0]]
+
+        if self.check_config_key('sensor_LO','NumberLenslets'):
+            nL = self.get_config_value('sensor_LO','NumberLenslets')
+        else:
+            nL = [1]
+
+        if self.check_config_key('sensor_LO','NoiseVariance'):
+            NoiseVar = self.get_config_value('sensor_LO','NoiseVariance')
+        else:
+            NoiseVar = [None]
+
+        if self.check_config_key('sensor_LO','Algorithm'):
+            algorithm = self.get_config_value('sensor_LO','Algorithm')
+        else:
+            algorithm = 'wcog'
+
+        if self.check_config_key('sensor_LO','WindowRadiusWCoG'):
+            wr = self.get_config_value('sensor_LO','WindowRadiusWCoG')
+        else:
+            wr = 5.0
+
+        if self.check_config_key('sensor_LO','ThresholdWCoG = 0.0'):
+            thr = self.get_config_value('sensor_LO','ThresholdWCoG = 0.0')
+        else:
+            thr = 0.0
+
+        if self.check_config_key('sensor_LO','NewValueThrPix'):
+            nv = self.get_config_value('sensor_LO','NewValueThrPix')
+        else:
+            nv = 0.0
+            
+        self.tts = sensor(psInMas, fov,
+                          binning=Binning, spotFWHM=spotFWHM,
+                          nph=nphLO, bandwidth=bw, transmittance=tr, dispersion=disp,
+                          gain=self.Gain, ron=ron, sky=sky, dark=dark, excess=excess,
+                          nL=nL, dsub=list(self.D/np.array(nL)),
+                          wfstype='Shack-Hartmann', noiseVar=NoiseVar,
+                          algorithm=algorithm, algo_param=[wr,thr,nv], tag="TT WFS")
+
     
     def __repr__(self):
         
