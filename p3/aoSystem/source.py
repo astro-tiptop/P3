@@ -69,7 +69,7 @@ class source:
        
         # Vectorizes source properties
         if len(wvl) == 1 and self.nSrc>1:
-            print('Vectorize the wavelength value to cope with the number of ' + self.tag + ' sources')
+            # print('Vectorize the wavelength value to cope with the number of ' + self.tag + ' sources')
             self.wvl = self.wvl[0]*np.ones(self.nSrc)
             self.nWvl=1
         else:

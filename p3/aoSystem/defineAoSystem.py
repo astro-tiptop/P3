@@ -29,20 +29,17 @@ from p3.aoSystem.detector import detector
 
 class aoSystem():
     
+    def check_section_key(self, primary):        
+        return primary in self.my_data_map.keys()
     
     def check_config_key(self, primary, secondary):
-        if self.configType == 'ini':
-            return self.config.has_option(primary, secondary)
-        elif self.configType == 'yml':
-            return secondary in self.my_yaml_dict[primary].keys()
-
+        if primary in self.my_data_map.keys():
+            return secondary in self.my_data_map[primary].keys()
+        else:
+            return False
 
     def get_config_value(self, primary, secondary):
-        if self.configType == 'ini':
-            return eval(self.config[primary][secondary])
-        elif self.configType == 'yml':
-            return self.my_yaml_dict[primary][secondary]
-
+        return self.my_data_map[primary][secondary]
 
     def __init__(path_config, nLayer=None):
                             
@@ -55,15 +52,19 @@ class aoSystem():
             
             if path_config[-4::]=='.ini':
                 # open the .ini file
-                self.configType = 'ini'
-                self.config = ConfigParser()
-                self.config.optionxform = str
-                self.config.read(path_config)
+                config = ConfigParser()
+                config.optionxform = str
+                config.read(path_config)
+                self.my_data_map = {} 
+                for section in config.sections():
+                    self.my_data_map[section] = {}
+                    for name,value in config.items(section):
+                        self.my_data_map[section].update({name:eval(value)})            
                 
             elif path_config[-4::]=='.yml':
-                self.configType = 'yml'
                 with open(path_config) as f:
-                    self.my_yaml_dict = yaml.safe_load(f)
+                    my_yaml_dict = yaml.safe_load(f)        
+                self.my_data_map = my_yaml_dict
 
                 
             #%% Telescope
@@ -239,7 +240,7 @@ class aoSystem():
                 self.lgs = None
             else:
                 self.lgs = source(wvlGs,zenithGs,azimuthGs,height=heightGs,tag="LGS",verbose=True)   
-                if (not config.has_section('sources_LO')) | (not config.has_section('sources_LO')):
+                if not check_section_key('sources_LO'):
                     print('%%%%%%%% WARNING %%%%%%%%')
                     print('No information about the tip-tilt star can be retrieved\n')
                     self.ngs = None
@@ -413,9 +414,7 @@ class aoSystem():
                            noise=NoiseVariance,SlopeAlgorithm=SlopeAlgorithm,wcog=[wr,thr,nv],tag="HO WFS")
             
             #%% TIP-TILT SENSORS
-            if config.has_section('sensor_LO'):
-            
-            
+            if check_section_key('sensor_LO'):            
                 if self.check_config_key('sensor_LO','PixelScale'):
                     psInMas = self.get_config_value('sensor_LO','PixelScale')
                 else:

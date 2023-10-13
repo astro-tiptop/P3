@@ -89,6 +89,8 @@ class fourierModel:
         
         # GRAB PARAMETERS
         self.ao = aoSystem(path_ini,path_root=path_root,getPSDatNGSpositions=getPSDatNGSpositions)
+        self.my_data_map = self.ao.my_data_map
+        
         self.t_initAO = 1000*(time.time() - tstart)
         
         if self.ao.error==False:
