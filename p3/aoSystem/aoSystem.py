@@ -390,9 +390,9 @@ class aoSystem():
             ron = 0.0
         
         if self.check_config_key('sensor_HO','Gain'):
-            self.Gain = self.get_config_value('sensor_HO','Gain')
+            self.detectorGainHO = self.get_config_value('sensor_HO','Gain')
         else:
-            self.Gain = 1
+            self.detectorGainHO = 1
             
         if self.check_config_key('sensor_HO','SkyBackground'):
             sky = self.get_config_value('sensor_HO','SkyBackground')
@@ -475,7 +475,7 @@ class aoSystem():
         self.wfs = sensor(psInMas, fov,
                           binning=Binning, spotFWHM=spotFWHM,
                           nph=nphHO, bandwidth=bw, transmittance=tr, dispersion=disp,
-                          gain=self.Gain, ron=ron, sky=sky, dark=dark, excess=excess,
+                          gain=self.detectorGainHO, ron=ron, sky=sky, dark=dark, excess=excess,
                           nL=nL, dsub=dsub, wfstype=wfstype, modulation=modu,
                           noiseVar=NoiseVar, algorithm=algorithm,
                           algo_param=[wr,thr,nv], tag="HO WFS")
@@ -488,9 +488,9 @@ class aoSystem():
  #%% REAL-TIME-COMPUTER
      
         if self.check_config_key('RTC','LoopGain_HO'):
-            LoopGain_HO = self.get_config_value('RTC','LoopGain_HO')
+            self.LoopGain_HO = self.get_config_value('RTC','LoopGain_HO')
         else:
-            LoopGain_HO = 0.5
+            self.LoopGain_HO = 0.5
             
         if self.check_config_key('RTC','SensorFrameRate_HO'):
             frameRate_HO = self.get_config_value('RTC','SensorFrameRate_HO')
@@ -505,11 +505,11 @@ class aoSystem():
         if self.check_config_key('RTC','LoopGain_LO'):
             temp = self.get_config_value('RTC','LoopGain_LO')
             if temp != 'optimize':
-                LoopGain_LO = temp
+                self.LoopGain_LO = temp
             else:
-                LoopGain_LO = None
+                self.LoopGain_LO = None
         else:
-            LoopGain_LO = None
+            self.LoopGain_LO = None
             
         if self.check_config_key('RTC','SensorFrameRate_LO'):
             frameRate_LO = self.get_config_value('RTC','SensorFrameRate_LO')
@@ -526,8 +526,8 @@ class aoSystem():
         else:
             wfe = None
             
-        self.rtc = rtc(LoopGain_HO, frameRate_HO, delay_HO, wfe=wfe,
-                       loopGainLO=LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
+        self.rtc = rtc(self.LoopGain_HO, frameRate_HO, delay_HO, wfe=wfe,
+                       loopGainLO=self.LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
                
 #%% DEFORMABLE MIRRORS
         if not(self.check_section_key('DM')):
@@ -661,9 +661,9 @@ class aoSystem():
             ron = 0.0
         
         if self.check_config_key('sensor_science','Gain'):
-            self.Gain = self.get_config_value('sensor_science','Gain')
+            self.detectorGainScience = self.get_config_value('sensor_science','Gain')
         else:
-            self.Gain = 1
+            self.detectorGainScience = 1
             
         if self.check_config_key('sensor_science','SkyBackground'):
             sky = self.get_config_value('sensor_science','SkyBackground')
@@ -683,7 +683,7 @@ class aoSystem():
         self.cam = detector(psInMas, fov,
                             binning=Binning, spotFWHM=spotFWHM, saturation=saturation,
                             nph=nphSC, bandwidth=bw, transmittance=tr, dispersion=disp,
-                            gain=self.Gain, ron=ron, sky=sky, dark=dark, excess=excess,
+                            gain=self.detectorGainScience, ron=ron, sky=sky, dark=dark, excess=excess,
                             tag=camName)
         
     #%% AO mode
@@ -758,6 +758,11 @@ class aoSystem():
         else:
             nphLO = np.inf
 
+        if self.check_config_key('sensor_LO','Gain'):
+            self.detectorGainLO = self.get_config_value('sensor_LO','Gain')
+        else:
+            self.detectorGainLO = 1
+            
         if self.check_config_key('sensor_LO','SigmaRON'):
             ron = self.get_config_value('sensor_LO','SigmaRON')
         else:
@@ -824,7 +829,7 @@ class aoSystem():
         self.tts = sensor(psInMas, fov,
                           binning=Binning, spotFWHM=spotFWHM,
                           nph=nphLO, bandwidth=bw, transmittance=tr, dispersion=disp,
-                          gain=self.Gain, ron=ron, sky=sky, dark=dark, excess=excess,
+                          gain=self.detectorGainLO, ron=ron, sky=sky, dark=dark, excess=excess,
                           nL=nL, dsub=list(self.D/np.array(nL)),
                           wfstype='Shack-Hartmann', noiseVar=NoiseVar,
                           algorithm=algorithm, algo_param=[wr,thr,nv], tag="TT WFS")
