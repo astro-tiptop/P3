@@ -73,7 +73,8 @@ class fourierModel:
                  normalizePSD=False, displayContour=False, getPSDatNGSpositions=False,
                  getErrorBreakDown=False, getFWHM=False, getEnsquaredEnergy=False,
                  getEncircledEnergy=False, fftphasor=False, MV=0, nyquistSampling=False,
-                 addOtfPixel=False, computeFocalAnisoCov=True, TiltFilter=False):
+                 addOtfPixel=False, computeFocalAnisoCov=True, TiltFilter=False,
+                 doComputations=True):
         
         tstart = time.time()
         
@@ -86,17 +87,55 @@ class fourierModel:
         self.calcPSF = calcPSF
         self.tag = 'TIPTOP'
         self.addOtfPixel = addOtfPixel
+        self.nyquistSampling = nyquistSampling
+        self.computeFocalAnisoCov = computeFocalAnisoCov
+        self.MV = MV
+        self.TiltFilterP = TiltFilter
+        self.normalizePSD = normalizePSD
         
         # GRAB PARAMETERS
         self.ao = aoSystem(path_ini,path_root=path_root,getPSDatNGSpositions=getPSDatNGSpositions)
         self.my_data_map = self.ao.my_data_map
-        
+
         self.t_initAO = 1000*(time.time() - tstart)
-        
+
+        self.t_initFreq = 0
+        self.t_powerSpectrumDensity = 0
+        self.t_reconstructor = 0
+        self.t_finalReconstructor = 0
+        self.t_tomo = 0
+        self.t_opt = 0
+        self.t_controller = 0
+        self.t_fittingPSD = 0
+        self.t_aliasingPSD = 0
+        self.t_noisePSD = 0
+        self.t_spatioTemporalPSD = 0
+        self.t_focalAnisoplanatism = 0
+        self.t_errorBreakDown = 0
+        self.t_getPsfMetrics = 0
+        self.t_displayResults = 0
+        self.t_getPSF = 0
+
+        self.nGs = 0
+
+        if doComputations:
+            self.initComputations()
+
+        # DISPLAYING EXECUTION TIMES
+        if self.verbose:
+            self.displayExecutionTime()
+
+        self.t_init = 1000*(time.time()  - tstart)
+
+
+    def initComputations(self):
+
+        tstart = time.time()
+
         if self.ao.error==False:
             
             # DEFINING THE FREQUENCY DOMAIN
-            self.freq = frequencyDomain(self.ao,nyquistSampling=nyquistSampling,computeFocalAnisoCov=computeFocalAnisoCov)
+            self.freq = frequencyDomain(self.ao,nyquistSampling=self.nyquistSampling,computeFocalAnisoCov=self.computeFocalAnisoCov)
 
             # DEFINING THE GUIDE STAR AND THE STRECHING FACTOR
             if self.ao.lgs:
@@ -129,6 +168,7 @@ class fourierModel:
             #updating the atmosphere wavelength !
             self.ao.atm.wvl  = self.freq.wvlRef
             self.atm_mod.wvl = self.freq.wvlRef
+
             self.t_initFreq = 1000*(time.time() - tstart)
 
             vv = self.freq.psInMas
@@ -144,16 +184,16 @@ class fourierModel:
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
             
             # DEFINE THE RECONSTRUCTOR
-            self.spatialReconstructor(MV=MV)
+            self.spatialReconstructor(MV=self.MV)
                 
             # DEFINE THE CONTROLLER
             self.controller(display=self.display)
                             
             #set tilt filter key before computing the PSD
-            self.applyTiltFilter = TiltFilter
+            self.applyTiltFilter = self.TiltFilterP
             
             # COMPUTE THE PSD
-            if normalizePSD == True:
+            if self.normalizePSD == True:
                 wfe = self.ao.rtc.holoop['wfe']
             else:
                 wfe = None
@@ -163,8 +203,8 @@ class fourierModel:
             self.SF  = self.phaseStructureFunction()
             
             # COMPUTE THE PSF
-            if calcPSF:
-                self.PSF, self.SR = self.pointSpreadFunction(verbose=verbose,fftphasor=fftphasor,addOtfPixel=self.addOtfPixel)
+            if self.calcPSF:
+                self.PSF, self.SR = self.pointSpreadFunction(verbose=self.verbose,fftphasor=fftphasor,addOtfPixel=self.addOtfPixel)
                 
                 # GETTING METRICS
                 if getFWHM == True or getEnsquaredEnergy==True or getEncircledEnergy==True:
@@ -181,14 +221,6 @@ class fourierModel:
                     
         # DEFINING BOUNDS
         self.bounds = self.defineBounds()
-                
-        self.t_init = 1000*(time.time()  - tstart)
-        
-        # DISPLAYING EXECUTION TIMES
-        if verbose:
-            self.displayExecutionTime()
-          
-        
             
     def __repr__(self):
         s = '\t\t\t\t________________________ FOURIER MODEL ________________________\n\n'

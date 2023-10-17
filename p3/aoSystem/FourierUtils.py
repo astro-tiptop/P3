@@ -22,6 +22,7 @@ else:
     import cupyx.scipy.ndimage as scnd
     import cupyx.scipy.special as ssp
     import cupy.fft as fft
+    import scipy.special as spc
     np = cp
 
 import matplotlib.pyplot as plt
@@ -131,9 +132,9 @@ def mcDonald(x):
         out = 3/5 * np.ones_like(x)
         idx  = x!=0
         if np.any(idx==False):
-            out[idx] = x[idx] ** (5/6) * ssp.kv(5/6,x[idx])/(2**(5/6) * ssp.gamma(11/6))
+            out[idx] = x[idx] ** (5/6) * spc.kv(5/6,x[idx])/(2**(5/6) * spc.gamma(11/6))
         else:
-            out = x ** (5/6) * ssp.kv(5/6,x)/(2**(5/6) * ssp.gamma(11/6))
+            out = x ** (5/6) * spc.kv(5/6,x)/(2**(5/6) * spc.gamma(11/6))
         return out
         
 def Ialpha(x,y):
