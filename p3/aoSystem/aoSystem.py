@@ -52,7 +52,8 @@ class aoSystem():
         return self.my_data_map[primary][secondary]
     
     def __init__(self,path_config,path_root='',nLayer=None,getPSDatNGSpositions=False,coo_stars=None):
-                            
+
+        self.coo_stars = coo_stars
         self.error = False
         # verify if the file exists
         if ospath.isfile(path_config) == False:
@@ -279,20 +280,20 @@ class aoSystem():
             self.raiseMissingRequiredSec('sources_HO')
             
         if self.check_config_key('sources_HO','Wavelength'):
-            wvlGs     = np.unique(np.array(self.get_config_value('sources_HO','Wavelength')))
+            self.wvlGs     = np.unique(np.array(self.get_config_value('sources_HO','Wavelength')))
         else:
             self.raiseMissingRequiredOpt('sources_HO', 'Wavelength')
             return 0
         
         if self.check_config_key('sources_HO','Zenith'):
-            zenithGs = self.get_config_value('sources_HO','Zenith') 
+            self.zenithGs = self.get_config_value('sources_HO','Zenith') 
         else:
-            zenithGs = [0.0]
+            self.zenithGs = [0.0]
             
         if self.check_config_key('sources_HO','Azimuth'):
-            azimuthGs = self.get_config_value('sources_HO','Azimuth') 
+            self.azimuthGs = self.get_config_value('sources_HO','Azimuth') 
         else:
-            azimuthGs = [0.0]
+            self.azimuthGs = [0.0]
             
         if self.check_config_key('sources_HO','Height'):
             heightGs  = self.get_config_value('sources_HO','Height') 
@@ -300,23 +301,25 @@ class aoSystem():
             heightGs = 0.0
                          
         # ----- verification
-        if len(zenithGs) != len(azimuthGs):
+        if len(self.zenithGs) != len(self.azimuthGs):
             self.raiseNotSameLength('sources_HO', ['Azimuth','Zenith'])
 
         # ----- creating the source class
         if heightGs == 0:
-            self.ngs = source(wvlGs,
-                              zenithGs,azimuthGs,
+            self.ngs = source(self.wvlGs,
+                              self.zenithGs,self.azimuthGs,
                               tag="NGS",verbose=True)   
             self.lgs = None
         else:
-            self.lgs = source(wvlGs,
-                              zenithGs,azimuthGs,
+            self.lgs = source(self.wvlGs,
+                              self.zenithGs,self.azimuthGs,
                               height=heightGs*airmass,
                               tag="LGS",verbose=True)  
-            
-            self.configLO()                              
-                
+
+        self.configLO()
+        self.configLO_SC()
+
+    def configLO_SC(self):
         #%%  SCIENCE SOURCES
         if not(self.check_section_key('sources_science')):
             self.raiseMissingRequiredSec('sources_science') 
@@ -336,24 +339,24 @@ class aoSystem():
         else:
             azimuthSrc = [0.0]
         
-        if np.any(coo_stars):
-            zenithSrc = np.hypot(coo_stars[0],coo_stars[1])
-            azimuthSrc = np.arctan2(coo_stars[0],coo_stars[1])
+        if np.any(self.coo_stars):
+            zenithSrc = np.hypot(self.coo_stars[0],self.coo_stars[1])
+            azimuthSrc = np.arctan2(self.coo_stars[0],self.coo_stars[1])
         
         #----- verification
         if len(zenithSrc) != len(azimuthSrc):
             self.raiseNotSameLength('sources_science', ['Zenith','Azimuth'])
             return
-        
+
         if self.getPSDatNGSpositions and self.check_config_key('sources_LO','Wavelength'):
             zenithSrc = zenithSrc +  (self.get_config_value('sources_LO','Zenith'))
             azimuthSrc = azimuthSrc + (self.get_config_value('sources_LO','Azimuth'))
-            
+
         #----- class definition
         self.src = source(wvlSrc,
                           zenithSrc, azimuthSrc,
                           tag="SCIENCE",verbose=True)   
- 
+
        
 #%% HIGH-ORDER WAVEFRONT SENSOR
         if not(self.check_section_key('sensor_HO')):
@@ -714,17 +717,17 @@ class aoSystem():
             self.ngs = None
         else:
             if self.check_config_key('sources_LO','Wavelength'):
-                wvlGs = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
+                self.wvlGs = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
             else:
                 self.raiseMissingRequiredOpt('sources_LO','Wavelength')
 
-            zenithGs   = np.array(self.get_config_value('sources_LO','Zenith'))
-            azimuthGs  = np.array(self.get_config_value('sources_LO','Azimuth'))
+            self.zenithGs   = self.get_config_value('sources_LO','Zenith')
+            self.azimuthGs  = self.get_config_value('sources_LO','Azimuth')
             # ----- verification
-            if len(zenithGs) != len(azimuthGs):
+            if len(self.zenithGs) != len(self.azimuthGs):
                 self.raiseNotSameLength('sources_LO', ['Zenith','Azimuth'])
 
-            self.ngs = source(wvlGs,zenithGs,azimuthGs,tag="NGS",verbose=True)   
+            self.ngs = source(self.wvlGs,self.zenithGs,self.azimuthGs,tag="NGS",verbose=True)
 
     
     def configLOsensor(self):
