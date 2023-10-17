@@ -510,9 +510,9 @@ class aoSystem():
             if temp != 'optimize':
                 self.LoopGain_LO = temp
             else:
-                self.LoopGain_LO = 'optimize'
+                self.LoopGain_LO = None
         else:
-            self.LoopGain_LO = 'optimize'
+            self.LoopGain_LO = None
             
         if self.check_config_key('RTC','SensorFrameRate_LO'):
             frameRate_LO = self.get_config_value('RTC','SensorFrameRate_LO')
