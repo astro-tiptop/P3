@@ -121,13 +121,6 @@ class fourierModel:
         if doComputations:
             self.initComputations()
 
-        # DISPLAYING EXECUTION TIMES
-        if self.verbose:
-            self.displayExecutionTime()
-
-        self.t_init = 1000*(time.time()  - tstart)
-
-
     def initComputations(self):
 
         tstart = time.time()
@@ -221,6 +214,12 @@ class fourierModel:
                     
         # DEFINING BOUNDS
         self.bounds = self.defineBounds()
+        
+        self.t_init = 1000*(time.time()  - tstart)
+            
+        # DISPLAYING EXECUTION TIMES
+        if self.verbose:
+            self.displayExecutionTime()
             
     def __repr__(self):
         s = '\t\t\t\t________________________ FOURIER MODEL ________________________\n\n'
