@@ -82,6 +82,7 @@ class fourierModel:
         self.verbose = verbose
         self.path_ini = path_ini  
         self.display = display
+        self.displayContour = displayContour
         self.getErrorBreakDown = getErrorBreakDown
         self.getPSFmetrics = getFWHM or getEnsquaredEnergy or getEncircledEnergy
         self.calcPSF = calcPSF
@@ -92,6 +93,11 @@ class fourierModel:
         self.MV = MV
         self.TiltFilterP = TiltFilter
         self.normalizePSD = normalizePSD
+        self.fftphasor = fftphasor
+
+        self.getFWHM = getFWHM
+        self.getEnsquaredEnergy = getEnsquaredEnergy
+        self.getEncircledEnergy = getEncircledEnergy
         
         # GRAB PARAMETERS
         self.ao = aoSystem(path_ini,path_root=path_root,getPSDatNGSpositions=getPSDatNGSpositions)
@@ -120,6 +126,13 @@ class fourierModel:
 
         if doComputations:
             self.initComputations()
+
+       self.t_init = 1000*(time.time()  - tstart)
+
+        # DISPLAYING EXECUTION TIMES
+        if self.verbose:
+            self.displayExecutionTime()
+
 
     def initComputations(self):
 
@@ -197,16 +210,16 @@ class fourierModel:
             
             # COMPUTE THE PSF
             if self.calcPSF:
-                self.PSF, self.SR = self.pointSpreadFunction(verbose=self.verbose,fftphasor=fftphasor,addOtfPixel=self.addOtfPixel)
+                self.PSF, self.SR = self.pointSpreadFunction(verbose=self.verbose,fftphasor=self.fftphasor,addOtfPixel=self.addOtfPixel)
                 
                 # GETTING METRICS
-                if getFWHM == True or getEnsquaredEnergy==True or getEncircledEnergy==True:
-                    self.getPsfMetrics(getEnsquaredEnergy=getEnsquaredEnergy,\
-                        getEncircledEnergy=getEncircledEnergy,getFWHM=getFWHM)
+                if self.getFWHM == True or self.getEnsquaredEnergy==True or self.getEncircledEnergy==True:
+                    self.getPsfMetrics(getEnsquaredEnergy=self.getEnsquaredEnergy,\
+                        getEncircledEnergy=self.getEncircledEnergy,getFWHM=self.getFWHM)
     
                 # DISPLAYING THE PSFS
-                if display:
-                    self.displayResults(displayContour=displayContour)
+                if self.display:
+                    self.displayResults(displayContour=self.displayContour)
                 
             # COMPUTE THE ERROR BREAKDOWN
             if self.getErrorBreakDown:
