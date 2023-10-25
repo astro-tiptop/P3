@@ -67,10 +67,11 @@ class frequencyDomain():
     def samp(self,val):
         self.k_      = np.ceil(2.0/val).astype('int') # works for oversampling
         self.__samp  = self.k_ * val
-        if np.any(self.k_ > 2):
-            self.PSDstep= np.min(1/self.ao.tel.D/self.__samp)
-        else:
-            self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)
+        #if np.any(self.k_ > 2):
+        #    self.PSDstep= np.min(1/self.ao.tel.D/self.__samp)
+        #else:
+        #    self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)
+        self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas/self.k_)
         self.PSDstep= np.asarray(self.PSDstep)
 
     @property
@@ -78,7 +79,7 @@ class frequencyDomain():
         return self.__sampCen
     @sampCen.setter
     def sampCen(self,val):
-        self.kCen_      = np.ceil(2.0/val).astype(int)# works for oversampling
+        self.kCen_      = np.ceil(2.0/val).astype('int')# works for oversampling
         self.__sampCen  = self.kCen_ * val
     @property
     def sampRef(self):
