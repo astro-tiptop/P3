@@ -304,12 +304,13 @@ class aoSystem():
         if len(self.zenithGs) != len(self.azimuthGs):
             self.raiseNotSameLength('sources_HO', ['Azimuth','Zenith'])
 
+        self.ngs = None
+        self.lgs = None
         # ----- creating the source class
         if heightGs == 0:
             self.ngs = source(self.wvlGs,
                               self.zenithGs,self.azimuthGs,
                               tag="NGS",verbose=True)   
-            self.lgs = None
         else:
             self.lgs = source(self.wvlGs,
                               self.zenithGs,self.azimuthGs,
@@ -357,8 +358,7 @@ class aoSystem():
                           zenithSrc, azimuthSrc,
                           tag="SCIENCE",verbose=True)   
 
-       
-#%% HIGH-ORDER WAVEFRONT SENSOR
+        #%% HIGH-ORDER WAVEFRONT SENSOR
         if not(self.check_section_key('sensor_HO')):
             self.raiseMissingRequiredSec('sensor_HO')
             
@@ -606,7 +606,7 @@ class aoSystem():
                                     opt_cond=cond,n_rec = nrec,
                                     AoArea=AoArea)
       
-#%% SCIENCE DETECTOR
+        #%% SCIENCE DETECTOR
         if not(self.check_section_key('sensor_science')):
             self.raiseMissingRequiredSec('sensor_science')
         
@@ -689,7 +689,7 @@ class aoSystem():
                             gain=self.detectorGainScience, ron=ron, sky=sky, dark=dark, excess=excess,
                             tag=camName)
         
-    #%% AO mode
+        # %% AO mode
         self.aoMode = 'SCAO'
         
         if self.lgs:
@@ -704,7 +704,7 @@ class aoSystem():
             else:
                 self.aoMode = 'SLAO'
     
-    #%% ERROR BREAKDOWN
+        # %% ERROR BREAKDOWN
         if self.rtc.holoop['gain'] > 0:
             self.errorBreakdown()
 
@@ -714,7 +714,6 @@ class aoSystem():
         if not self.check_section_key('sources_LO'):
         
             print('Warning: No information about the tip-tilt star can be retrieved')            
-            self.ngs = None
         else:
             if self.check_config_key('sources_LO','Wavelength'):
                 self.wvlGs = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
