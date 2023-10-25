@@ -127,7 +127,7 @@ class fourierModel:
         if doComputations:
             self.initComputations()
 
-       self.t_init = 1000*(time.time()  - tstart)
+        self.t_init = 1000*(time.time()  - tstart)
 
         # DISPLAYING EXECUTION TIMES
         if self.verbose:
