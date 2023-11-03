@@ -352,7 +352,7 @@ class aoSystem():
         if self.getPSDatNGSpositions and self.check_config_key('sources_LO','Wavelength'):
             zenithSrc = zenithSrc +  (self.get_config_value('sources_LO','Zenith'))
             azimuthSrc = azimuthSrc + (self.get_config_value('sources_LO','Azimuth'))
-
+            
         #----- class definition
         self.src = source(wvlSrc,
                           zenithSrc, azimuthSrc,
@@ -716,17 +716,17 @@ class aoSystem():
             print('Warning: No information about the tip-tilt star can be retrieved')            
         else:
             if self.check_config_key('sources_LO','Wavelength'):
-                self.wvlGs = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
+                self.wvlGsLO = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
             else:
                 self.raiseMissingRequiredOpt('sources_LO','Wavelength')
 
-            self.zenithGs   = self.get_config_value('sources_LO','Zenith')
-            self.azimuthGs  = self.get_config_value('sources_LO','Azimuth')
+            self.zenithGsLO   = self.get_config_value('sources_LO','Zenith')
+            self.azimuthGsLO  = self.get_config_value('sources_LO','Azimuth')
             # ----- verification
-            if len(self.zenithGs) != len(self.azimuthGs):
+            if len(self.zenithGsLO) != len(self.azimuthGsLO):
                 self.raiseNotSameLength('sources_LO', ['Zenith','Azimuth'])
 
-            self.ngs = source(self.wvlGs,self.zenithGs,self.azimuthGs,tag="NGS",verbose=True)
+            self.ngs = source(self.wvlGsLO,self.zenithGsLO,self.azimuthGsLO,tag="NGS",verbose=True)
 
     
     def configLOsensor(self):
