@@ -307,15 +307,15 @@ class aoSystem():
         self.ngs = None
         self.lgs = None
         # ----- creating the source class
-        if heightGs == 0:
+        if heightGs == 0 and not self.check_section_key('sources_LO'):
             self.ngs = source(self.wvlGs,
                               self.zenithGs,self.azimuthGs,
-                              tag="NGS",verbose=True)   
+                              tag="NGS",verbose=True)
         else:
             self.lgs = source(self.wvlGs,
                               self.zenithGs,self.azimuthGs,
                               height=heightGs*airmass,
-                              tag="LGS",verbose=True)  
+                              tag="LGS",verbose=True)
 
         self.configLO()
         self.configLO_SC()

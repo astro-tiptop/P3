@@ -221,10 +221,13 @@ class frequencyDomain():
         
         # compute th Cn2 profile in m^(-5/3)
         Cn2 = self.ao.atm.weights * self.ao.atm.r0**(-5/3)
-
-        if self.ao.aoMode == 'SCAO' or computeFocalAnisoCov == False:
-            # NGS case : angular-anisoplanatism only
-            if np.all(np.equal(np.asarray(self.ao.src.direction), np.asarray(self.ao.ngs.direction))) or computeFocalAnisoCov == False:
+       
+        if computeFocalAnisoCov == False:
+            self.isAniso = False
+            return None
+        elif self.ao.aoMode == 'SCAO':
+            # NGS case : angular-anisoplanatism only              
+            if np.all(np.equal(np.asarray(self.ao.src.direction), np.asarray(self.ao.ngs.direction))):
                 self.isAniso = False
                 return None
             else:
@@ -234,7 +237,6 @@ class frequencyDomain():
                                                 self.ao.ngs,self.ao.ngs,self.nOtf,
                                                 self.sampRef,self.ao.dms.nActu1D)
                 return (self.dani_ang *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
-        
         elif self.ao.aoMode == 'SLAO':
             # LGS case : focal-angular  + anisokinetism
             self.isAniso = True
@@ -245,5 +247,6 @@ class frequencyDomain():
                 
             return ( (self.dani_focang + self.dani_tt) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         else:
+            # LTAO, GLAO or MCAO case
             self.isAniso = False
             return None
