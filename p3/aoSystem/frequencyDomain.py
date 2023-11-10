@@ -227,7 +227,7 @@ class frequencyDomain():
             return None
         elif self.ao.aoMode == 'SCAO':
             # NGS case : angular-anisoplanatism only              
-            if np.all(np.equal(self.ao.src.direction, self.ao.ngs.direction)):
+            if np.all(np.equal(np.asarray(self.ao.src.direction), np.asarray(self.ao.ngs.direction))):
                 self.isAniso = False
                 return None
             else:
