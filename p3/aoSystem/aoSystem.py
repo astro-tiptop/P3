@@ -909,7 +909,7 @@ class aoSystem():
             self.wfe['TT Noise'] = 0
         
         # Focal anisoplanatism
-        if self.lgs:
+        if self.lgs and self.lgs.height[0] > 0:
             self.wfe['Focal anisoplanatism'] = anisoplanatismModel.focal_anisoplanatism_variance(self.tel,self.atm,self.lgs)
         else:
             self.wfe['Focal anisoplanatism'] = 0

@@ -868,13 +868,7 @@ class fourierModel:
             freqs = freqs[1:]
         nf0 = len(freqs)
         coeff = np.zeros((nf0,nCn2))
-        
-        if self.verbose:
-            print('h_laser',h_laser)
-            print('h',h)
-            print('nf0',nf0)
-            print('ratio',ratio)
-        
+
         for j in range(nCn2):
             for i in range(nf0):
                 if freqs[i]*ratio[j] > self.freq.kc_:
