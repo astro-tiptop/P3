@@ -1069,7 +1069,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf'):
     else:
         raise ValueError("Method must be 'otf' or 'max'")
         
-    return np.round(SR,nR)
+    return nnp.round(SR,nR)
 
 #%% Data treatment
     
