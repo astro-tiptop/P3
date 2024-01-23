@@ -475,6 +475,11 @@ class aoSystem():
         else:
             excess = 1.0
             
+        if self.check_config_key('sensor_HO','addMcaoWFsensConeError'):
+            self.addMcaoWFsensConeError = self.get_config_value('sensor_HO','addMcaoWFsensConeError')
+        else:
+            self.addMcaoWFsensConeError = False
+
         self.wfs = sensor(psInMas, fov,
                           binning=Binning, spotFWHM=spotFWHM,
                           nph=nphHO, bandwidth=bw, transmittance=tr, dispersion=disp,

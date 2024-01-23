@@ -567,6 +567,13 @@ class fourierModel:
                 self.psdCone = self.focalAnisoplanatismPSD()
                 psd += np.repeat(self.psdCone[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
             
+            # additional error for MCAO system with laser GS:
+            # reduced volume for WF sensing due to the cone effect
+            if self.ao.addMcaoWFsensConeError and self.nGs != 1 and self.gs.height[0] != 0:
+                print('MCAO and laser case adding error due to reduced volume for WF sensing')
+                self.psdMcaoWFsensCone = self.mcaoWFsensConePSD(psd)
+                psd += self.psdMcaoWFsensCone
+
             # NORMALIZATION
             if wfe !=None:
                 psd *= (dk * rad2nm)**2
@@ -897,6 +904,63 @@ class fourierModel:
         
         return np.real(psd)
     
+    def mcaoWFsensConePSD(self,psdCorr):
+        """%% power spectrum density related to the reduced volume sensed
+              by the LGS WFS due to cone effect in MCAO systems.
+              This effect is related to the cone effect and it depends on
+              the LGS geometry and the uncorrected part of the input PSD.
+        """
+        tstart  = time.time()
+
+        #Instantiate the function output
+        psd      = np.zeros((self.freq.nOtf,self.freq.nOtf,self.ao.src.nSrc))
+        # atmo PSD 
+        psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))
+
+        # AO correction area
+        id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
+        id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
+        fMax = self.freq.nOtf/2 + self.freq.resAO/2
+        h = self.ao.atm.heights
+        nCn2 = len(h)
+        h_laser = self.gs.height[0]
+        zenith = self.ao.src.zenith
+        lfov = 2 * np.max(self.gs.zenith)
+        fs = np.max(np.sqrt(self.freq.k2_))*2.
+        x = np.sqrt(self.freq.k2_)/(fs/2.)*np.pi
+        xc = np.empty(x.shape, dtype=np.complex128)
+        xc.imag = x
+        z = np.exp(xc)
+        # effective FoV
+        eFoV = ( lfov*(1/rad2arc) -  self.ao.tel.D * (1/h_laser) ) * rad2arc
+        # filter considering the maximum cut off frequency        
+        sPoleMax = 2*np.pi*fMax
+        zPoleMax = np.exp(sPoleMax/fs)
+        lpFilterMax = z * (1 - zPoleMax) / (z - zPoleMax)
+
+        for i in range(self.ao.src.nSrc):
+            deltaAngleE = zenith[i] - eFoV/2
+            deltaAngleL = zenith[i] - lfov/2
+            if deltaAngleL < 0: deltaAngleL = 0
+            deltaPsd = psd_atmo[id1:id2,id1:id2]-psdCorr[id1:id2,id1:id2,i]
+            for j in range(nCn2):
+                layerHeight = h[j]
+                if layerHeight > 0 and deltaAngleE > 0:
+                    fCut = rad2arc/(deltaAngleE * layerHeight)
+                    errPercTemp = deltaAngleL * layerHeight * (1/rad2arc) * (1/self.ao.tel.D)
+                    if errPercTemp > 1: errPercTemp = 1
+                    errPerc = 1 - errPercTemp
+                    if fCut < fMax:
+                        sPole = 2*np.pi*fCut
+                        zPole = np.exp(sPole/fs)
+                        lpFilter = z * (1 - zPole) / (z - zPole)
+                        lpFilterRatio = np.abs(lpFilter[id1:id2,id1:id2])/np.abs(lpFilterMax[id1:id2,id1:id2])
+                        psd[id1:id2,id1:id2,i] += self.ao.atm.weights[j] * (1-lpFilterRatio**2.) * deltaPsd * errPerc
+
+        self.t_mcaoWFsensCone = 1000*(time.time() - tstart)
+
+        return np.real(psd)
+
     def extraErrorPSD(self):
     
         k   = np.sqrt(self.freq.k2_)
@@ -1284,6 +1348,8 @@ class fourierModel:
                 print("Required time for ST PSD calculation (ms)\t : {:f}".format(self.t_spatioTemporalPSD))
                 if hasattr(self,"t_focalAnisoplanatism"):
                     print("Required time for focal Aniso PSD calculation (ms)\t : {:f}".format(self.t_focalAnisoplanatism))
+                if hasattr(self,"t_mcaoWFsensCone"):
+                    print("Required time for MCAO WF sens cone PSD calculation (ms)\t : {:f}".format(self.t_mcaoWFsensCone))
                 
                 # Error breakdown
                 if hasattr(self,'t_errorBreakDown'):
