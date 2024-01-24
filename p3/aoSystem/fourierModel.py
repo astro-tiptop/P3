@@ -904,7 +904,7 @@ class fourierModel:
         
         return np.real(psd)
     
-    def mcaoWFsensConePSD(self,psdCorr):
+    def mcaoWFsensConePSD(self,psdRes):
         """%% power spectrum density related to the reduced volume sensed
               by the LGS WFS due to cone effect in MCAO systems.
               This effect is related to the cone effect and it depends on
@@ -919,47 +919,42 @@ class fourierModel:
         # AO correction area
         id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
         id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
-        # piston filter
-        k  = np.sqrt(self.freq.k2_)
-        pf = FourierUtils.pistonFilter(self.ao.tel.D,k)
-        pf = pf[id1:id2,id1:id2]
         # geometry
         lfov = 2 * np.max(self.gs.zenith)
         # effective FoV
         eFoV = ( lfov*(1/rad2arc) -  self.ao.tel.D * (1/self.gs.height[0]) ) * rad2arc
         # filter considering the maximum cut off frequency
-        fs = np.max(np.sqrt(self.freq.k2_))*2.
-        x  = np.sqrt(self.freq.k2_)/(fs/2.)*np.pi
-        xc = np.empty(x.shape, dtype=np.complex128)
-        xc.imag = x
+        k  = np.sqrt(self.freq.k2_)
+        fs = np.max(k)*2.
+        x  = k/(fs/2.)*np.pi
+        xc = 1j * x
         z  = np.exp(xc)
         sPoleMax = 2*np.pi*self.freq.kcMax_
         zPoleMax = np.exp(sPoleMax/fs)
         lpFilterMax = z * (1 - zPoleMax) / (z - zPoleMax)
         # number of layers
         nCn2 = len(self.ao.atm.heights)
-
+        # piston filter
+        pf = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.freq.k2_))
+        pf = pf[id1:id2,id1:id2]
+        
         for i in range(self.ao.src.nSrc):
-            deltaAngleE = self.ao.src.zenith[i] - eFoV/2
+            deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV/2
             deltaAngleL = self.ao.src.zenith[i] - lfov/2
             if deltaAngleL < 0: deltaAngleL = 0
-            deltaPsd = psd_atmo[id1:id2,id1:id2]-psdCorr[id1:id2,id1:id2,i]
+            deltaPsd = psd_atmo[id1:id2,id1:id2]-psdRes[id1:id2,id1:id2,i]
             deltaPsd[np.where(deltaPsd<0)] = 0
-            deltaPsd = deltaPsd * pf
+            deltaPsdPf = deltaPsd * pf
             for j in range(nCn2):
                 if self.ao.atm.heights[j] > 0 and deltaAngleE > 0:
                     fCut = rad2arc/(deltaAngleE * self.ao.atm.heights[j])
-                    errPercTemp = deltaAngleL * self.ao.atm.heights[j] * (1/rad2arc) * (1/self.ao.tel.D)
-                    if errPercTemp > 1: errPercTemp = 1
-                    errPerc = 1 - errPercTemp
                     if fCut < self.freq.kcMax_:
                         sPole = 2*np.pi*fCut
                         zPole = np.exp(sPole/fs)
                         lpFilter = z * (1 - zPole) / (z - zPole)
-                        lpFilterRatio = np.abs(lpFilter[id1:id2,id1:id2])/np.abs(lpFilterMax[id1:id2,id1:id2])
-                        lpFilter2 = (1-lpFilterRatio**2.)
+                        lpFilter2 = (1-np.abs(lpFilter[id1:id2,id1:id2])**2.)
                         lpFilter2[np.where(lpFilter2<0)] = 0
-                        psd[id1:id2,id1:id2,i] += self.ao.atm.weights[j] * lpFilter2 * deltaPsd * errPerc
+                        psd[id1:id2,id1:id2,i] += self.ao.atm.weights[j] * lpFilter2 * deltaPsdPf
 
         self.t_mcaoWFsensCone = 1000*(time.time() - tstart)
 
