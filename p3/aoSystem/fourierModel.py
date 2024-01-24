@@ -948,11 +948,13 @@ class fourierModel:
             for j in range(nCn2):
                 if self.ao.atm.heights[j] > 0 and deltaAngleE > 0:
                     fCut = rad2arc/(deltaAngleE * self.ao.atm.heights[j])
-                    if fCut < self.freq.kcMax_:
+                    eqD = self.ao.tel.D - deltaAngleL * self.ao.atm.heights[j] * (1/rad2arc)
+                    if eqD > self.ao.tel.D: eqD = self.ao.tel.D
+                    if fCut < self.freq.kcMax_ and eqD > 0:
                         sPole = 2*np.pi*fCut
                         zPole = np.exp(sPole/fs)
-                        lpFilter = z * (1 - zPole) / (z - zPole)
-                        lpFilter2 = (1-np.abs(lpFilter[id1:id2,id1:id2])**2.)
+                        lpFilter = z *  (1 - zPole) / (z - zPole)
+                        lpFilter2 = (1-np.abs(lpFilter[id1:id2,id1:id2])**2.) * (eqD/self.ao.tel.D)**2
                         lpFilter2[np.where(lpFilter2<0)] = 0
                         psd[id1:id2,id1:id2,i] += self.ao.atm.weights[j] * lpFilter2 * deltaPsdPf
 
