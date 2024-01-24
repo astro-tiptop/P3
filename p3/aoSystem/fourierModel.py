@@ -570,7 +570,7 @@ class fourierModel:
             # additional error for MCAO system with laser GS:
             # reduced volume for WF sensing due to the cone effect
             if self.ao.addMcaoWFsensConeError and self.nGs != 1 and self.gs.height[0] != 0:
-                print('MCAO and laser case adding error due to reduced volume for WF sensing')
+                print('MCAO and laser case: adding error due to reduced volume for WF sensing')
                 self.psdMcaoWFsensCone = self.mcaoWFsensConePSD(psd)
                 psd += self.psdMcaoWFsensCone
 
@@ -916,46 +916,50 @@ class fourierModel:
         psd      = np.zeros((self.freq.nOtf,self.freq.nOtf,self.ao.src.nSrc))
         # atmo PSD 
         psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))
-
         # AO correction area
         id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
         id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
-        fMax = self.freq.nOtf/2 + self.freq.resAO/2
-        h = self.ao.atm.heights
-        nCn2 = len(h)
-        h_laser = self.gs.height[0]
-        zenith = self.ao.src.zenith
+        # piston filter
+        k  = np.sqrt(self.freq.k2_)
+        pf = FourierUtils.pistonFilter(self.ao.tel.D,k)
+        pf = pf[id1:id2,id1:id2]
+        # geometry
         lfov = 2 * np.max(self.gs.zenith)
+        # effective FoV
+        eFoV = ( lfov*(1/rad2arc) -  self.ao.tel.D * (1/self.gs.height[0]) ) * rad2arc
+        # filter considering the maximum cut off frequency
         fs = np.max(np.sqrt(self.freq.k2_))*2.
-        x = np.sqrt(self.freq.k2_)/(fs/2.)*np.pi
+        x  = np.sqrt(self.freq.k2_)/(fs/2.)*np.pi
         xc = np.empty(x.shape, dtype=np.complex128)
         xc.imag = x
-        z = np.exp(xc)
-        # effective FoV
-        eFoV = ( lfov*(1/rad2arc) -  self.ao.tel.D * (1/h_laser) ) * rad2arc
-        # filter considering the maximum cut off frequency        
-        sPoleMax = 2*np.pi*fMax
+        z  = np.exp(xc)
+        sPoleMax = 2*np.pi*self.freq.kcMax_
         zPoleMax = np.exp(sPoleMax/fs)
         lpFilterMax = z * (1 - zPoleMax) / (z - zPoleMax)
+        # number of layers
+        nCn2 = len(self.ao.atm.heights)
 
         for i in range(self.ao.src.nSrc):
-            deltaAngleE = zenith[i] - eFoV/2
-            deltaAngleL = zenith[i] - lfov/2
+            deltaAngleE = self.ao.src.zenith[i] - eFoV/2
+            deltaAngleL = self.ao.src.zenith[i] - lfov/2
             if deltaAngleL < 0: deltaAngleL = 0
             deltaPsd = psd_atmo[id1:id2,id1:id2]-psdCorr[id1:id2,id1:id2,i]
+            deltaPsd[np.where(deltaPsd<0)] = 0
+            deltaPsd = deltaPsd * pf
             for j in range(nCn2):
-                layerHeight = h[j]
-                if layerHeight > 0 and deltaAngleE > 0:
-                    fCut = rad2arc/(deltaAngleE * layerHeight)
-                    errPercTemp = deltaAngleL * layerHeight * (1/rad2arc) * (1/self.ao.tel.D)
+                if self.ao.atm.heights[j] > 0 and deltaAngleE > 0:
+                    fCut = rad2arc/(deltaAngleE * self.ao.atm.heights[j])
+                    errPercTemp = deltaAngleL * self.ao.atm.heights[j] * (1/rad2arc) * (1/self.ao.tel.D)
                     if errPercTemp > 1: errPercTemp = 1
                     errPerc = 1 - errPercTemp
-                    if fCut < fMax:
+                    if fCut < self.freq.kcMax_:
                         sPole = 2*np.pi*fCut
                         zPole = np.exp(sPole/fs)
                         lpFilter = z * (1 - zPole) / (z - zPole)
                         lpFilterRatio = np.abs(lpFilter[id1:id2,id1:id2])/np.abs(lpFilterMax[id1:id2,id1:id2])
-                        psd[id1:id2,id1:id2,i] += self.ao.atm.weights[j] * (1-lpFilterRatio**2.) * deltaPsd * errPerc
+                        lpFilter2 = (1-lpFilterRatio**2.)
+                        lpFilter2[np.where(lpFilter2<0)] = 0
+                        psd[id1:id2,id1:id2,i] += self.ao.atm.weights[j] * lpFilter2 * deltaPsd * errPerc
 
         self.t_mcaoWFsensCone = 1000*(time.time() - tstart)
 
