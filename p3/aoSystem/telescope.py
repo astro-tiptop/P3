@@ -63,24 +63,29 @@ class telescope:
     def __init__(self,D,resolution, zenith_angle=0.0,obsRatio=0.0,pupilAngle = 0.0,\
                  path_pupil='', path_static_on='', path_static_off='', path_static_pos='',\
                  path_apodizer='', path_statModes='', extraErrorNm=0.0, extraErrorExp=-2, \
-                 extraErrorMin=0.0, extraErrorMax=0.0, verbose=True):
+                 extraErrorMin=0.0, extraErrorMax=0.0, extraErrorLoNm=0.0, extraErrorLoExp=-2, \
+                 extraErrorLoMin=0.0, extraErrorLoMax=0.0, verbose=True):
         
         # PARSING INPUTS
-        self.D               = D            # primary mirror diameter in meters
-        self.zenith_angle    = zenith_angle # telescope zenith angle in degrees
-        self.obsRatio        = obsRatio     # secondary mirror diameter in D units
-        self.resolution      = resolution   # pupil resolution in pixels
-        self.verbose         = verbose
-        self.pupilAngle      = pupilAngle
-        self.path_pupil      = path_pupil
-        self.path_static_on  = path_static_on
-        self.path_static_pos = path_static_off
-        self.path_apodizer   = path_apodizer
-        self.path_statModes  = path_statModes
-        self.extraErrorNm    = extraErrorNm
-        self.extraErrorExp   = extraErrorExp
-        self.extraErrorMin   = extraErrorMin
-        self.extraErrorMax   = extraErrorMax
+        self.D                 = D            # primary mirror diameter in meters
+        self.zenith_angle      = zenith_angle # telescope zenith angle in degrees
+        self.obsRatio          = obsRatio     # secondary mirror diameter in D units
+        self.resolution        = resolution   # pupil resolution in pixels
+        self.verbose           = verbose
+        self.pupilAngle        = pupilAngle
+        self.path_pupil        = path_pupil
+        self.path_static_on    = path_static_on
+        self.path_static_pos   = path_static_off
+        self.path_apodizer     = path_apodizer
+        self.path_statModes    = path_statModes
+        self.extraErrorNm      = extraErrorNm
+        self.extraErrorExp     = extraErrorExp
+        self.extraErrorMin     = extraErrorMin
+        self.extraErrorMax     = extraErrorMax
+        self.extraErrorLoNm    = extraErrorLoNm
+        self.extraErrorLoExp   = extraErrorLoExp
+        self.extraErrorLoMin   = extraErrorLoMin
+        self.extraErrorLoMax   = extraErrorLoMax
         
         #----- PUPIL DEFINITION        
         
