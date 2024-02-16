@@ -203,6 +203,26 @@ class aoSystem():
         else:
             extraErrorMax = 0
             
+        if self.check_config_key('telescope', 'extraErrorLoNm'):       
+            extraErrorLoNm = self.get_config_value('telescope','extraErrorLoNm')
+        else:
+            extraErrorLoNm = extraErrorNm  
+            
+        if self.check_config_key('telescope', 'extraErrorLoExp'):
+            extraErrorLoExp = self.get_config_value('telescope','extraErrorLoExp')
+        else:
+            extraErrorLoExp = -2
+            
+        if self.check_config_key('telescope', 'extraErrorLoMin'):
+            extraErrorLoMin = self.get_config_value('telescope','extraErrorLoMin')
+        else:
+            extraErrorLoMin = 0
+            
+        if self.check_config_key('telescope', 'extraErrorLoMax'):
+            extraErrorLoMax = self.get_config_value('telescope','extraErrorLoMax')
+        else:
+            extraErrorLoMax = 0
+            
         # ----- class definition     
         self.tel = telescope(self.D, nPup,
                              zenith_angle=zenithAngle,
@@ -217,7 +237,11 @@ class aoSystem():
                              extraErrorNm=extraErrorNm,
                              extraErrorExp=extraErrorExp,
                              extraErrorMin=extraErrorMin,
-                             extraErrorMax=extraErrorMax)                     
+                             extraErrorMax=extraErrorMax,
+                             extraErrorLoNm=extraErrorLoNm,
+                             extraErrorLoExp=extraErrorLoExp,
+                             extraErrorLoMin=extraErrorLoMin,
+                             extraErrorLoMax=extraErrorLoMax)                     
 
         #%% ATMOSPHERE
         if not(self.check_section_key('atmosphere')):
@@ -904,7 +928,10 @@ class aoSystem():
             self.wfe['TT Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.ttloop['bandwidth'])* Dr053 * 2**(-2/3))
             
             if self.tts.processing.noiseVar == [None]:
-                varNoise = self.tts.NoiseVariance(self.atm.r0 ,self.atm.wvl)
+                #varNoise = self.tts.NoiseVariance(self.atm.r0 ,self.atm.wvl) # this line has been commented because it makes no sense
+                                                                              # to consider the open loop r0 in this computation:
+                                                                              # we expect the LO WFS to use a spot corrected by HO loop
+                varNoise = self.tts.NoiseVariance(self.tts.optics[0].dsub ,self.atm.wvl)
             else:
                 varNoise = self.tts.processing.noiseVar
             
