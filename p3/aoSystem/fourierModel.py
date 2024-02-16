@@ -593,9 +593,19 @@ class fourierModel:
             if self.verbose:
                 print('extra error in nm RMS: ',self.ao.tel.extraErrorNm)
                 print('extra error spatial frequency exponent: ',self.ao.tel.extraErrorExp)
+                print('extra error in nm RMS (LO): ',self.ao.tel.extraErrorLoNm)
+                print('extra error spatial frequency exponent (LO): ',self.ao.tel.extraErrorLoExp)
             if self.ao.tel.extraErrorNm > 0:
                 self.psdExtra = np.real(self.extraErrorPSD())
-                for i in range(self.ao.src.nSrc):
+            if self.ao.getPSDatNGSpositions and self.ao.tel.extraErrorLoNm >= 0:
+                nLO = len(self.ao.azimuthGsLO)
+                self.psdExtraLo = np.real(self.extraErrorLoPSD())
+            else:
+                nLO = 0
+            for i in range(self.ao.src.nSrc):
+                if self.ao.tel.extraErrorLoNm >= 0 and self.ao.src.nSrc-i <= nLO:
+                    psd[:,:,i] += self.psdExtraLo
+                elif self.ao.tel.extraErrorNm > 0:
                     psd[:,:,i] += self.psdExtra
             
         self.t_powerSpectrumDensity = 1000*(time.time() - tstart)
@@ -974,6 +984,30 @@ class fourierModel:
             psd[np.where(k>self.ao.tel.extraErrorMax)] = 0
         
         psd = psd * self.ao.tel.extraErrorNm**2/np.sum(psd)
+        
+        #fig, ax1 = plt.subplots(1,1)
+        #im = ax1.imshow(np.log(np.abs(psd)), cmap='hot')
+        #ax1.set_title('extra error PSD', color='black') 
+        
+        # Derives wavefront error
+        rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi 
+        
+        psd = psd * 1/rad2nm**2
+    
+        return np.real(psd)
+    
+    def extraErrorLoPSD(self):
+    
+        k   = np.sqrt(self.freq.k2_)
+        psd = k**self.ao.tel.extraErrorLoExp
+        pf  = FourierUtils.pistonFilter(self.ao.tel.D,k)
+        psd = psd * pf
+        if self.ao.tel.extraErrorLoMin>0:
+            psd[np.where(k<self.ao.tel.extraErrorLoMin)] = 0
+        if self.ao.tel.extraErrorLoMax>0:
+            psd[np.where(k>self.ao.tel.extraErrorLoMax)] = 0
+        
+        psd = psd * self.ao.tel.extraErrorLoNm**2/np.sum(psd)
         
         #fig, ax1 = plt.subplots(1,1)
         #im = ax1.imshow(np.log(np.abs(psd)), cmap='hot')
