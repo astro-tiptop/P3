@@ -843,9 +843,13 @@ class aoSystem():
             algorithm = 'wcog'
 
         if self.check_config_key('sensor_LO','WindowRadiusWCoG'):
-            wr = self.get_config_value('sensor_LO','WindowRadiusWCoG')
+            temp = self.get_config_value('sensor_LO','WindowRadiusWCoG')
+            if temp != 'optimize':
+                wr = temp
+            else:
+                wr = 1.0
         else:
-            wr = 5.0
+            wr = 1.0
 
         if self.check_config_key('sensor_LO','ThresholdWCoG = 0.0'):
             thr = self.get_config_value('sensor_LO','ThresholdWCoG = 0.0')
