@@ -211,7 +211,7 @@ class aoSystem():
         if self.check_config_key('telescope', 'extraErrorLoExp'):
             extraErrorLoExp = self.get_config_value('telescope','extraErrorLoExp')
         else:
-            extraErrorLoExp = -2
+            extraErrorLoExp = extraErrorExp
             
         if self.check_config_key('telescope', 'extraErrorLoMin'):
             extraErrorLoMin = self.get_config_value('telescope','extraErrorLoMin')

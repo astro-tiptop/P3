@@ -949,7 +949,10 @@ class fourierModel:
         pf = pf[id1:id2,id1:id2]
         
         for i in range(self.ao.src.nSrc):
-            deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV/2
+            if eFoV > 0:
+                deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV/2
+            else:
+                deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV
             deltaAngleL = self.ao.src.zenith[i] - lfov/2
             if deltaAngleL < 0: deltaAngleL = 0
             deltaPsd = psd_atmo[id1:id2,id1:id2]-psdRes[id1:id2,id1:id2,i]
@@ -1080,12 +1083,17 @@ class fourierModel:
             self.wfeDiffRef= np.sqrt(self.psdDiffRef.sum(axis=(0,1)))* rad2nm
             self.wfeChrom  = np.sqrt(self.psdChromatism.sum(axis=(0,1)))* rad2nm
             self.wfeJitter = 1e9*self.ao.tel.D*nnp.mean(self.ao.cam.spotFWHM[0][0:2])/rad2mas/4
+            if self.ao.addMcaoWFsensConeError:
+                self.wfeMcaoCone = np.sqrt(self.psdMcaoWFsensCone[:,:,0].sum())* rad2nm
+            else:
+                self.wfeMcaoCone = 0
             self.wfeExtra  = self.ao.tel.extraErrorNm
             
             # Total wavefront error
             self.wfeTot = np.sqrt(self.wfeNCPA**2 + self.wfeFit**2 + self.wfeAl**2\
                                   + self.wfeST**2 + self.wfeN**2 + self.wfeDiffRef**2\
-                                  + self.wfeChrom**2 + self.wfeJitter**2 + self.wfeExtra**2)
+                                  + self.wfeChrom**2 + self.wfeJitter**2 + self.wfeMcaoCone**2\
+                                  + self.wfeExtra**2)
             
             # Maréchal appoximation to get the Strehl-ratio
             self.SRmar  = 100*np.exp(-(self.wfeTot*2*np.pi*1e-9/self.freq.wvlRef)**2)
@@ -1120,6 +1128,8 @@ class fourierModel:
                     print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[idCenter])
                 print('.Spatio-temporal error:\t\t%4.2fnm'%self.wfeST[idCenter])
                 print('.Additionnal jitter:\t\t%4.2fmas / %4.2fnm'%(nnp.mean(self.ao.cam.spotFWHM[0][0:2]),self.wfeJitter))
+                if self.ao.addMcaoWFsensConeError:
+                    print('.Mcao Cone:\t\t\t%4.2fnm'%self.wfeMcaoCone)
                 print('.Extra error:\t\t\t%4.2fnm'%self.wfeExtra)
                 print('-------------------------------------------')
                 print('.Sole servoLag error:\t\t%4.2fnm'%self.wfeS)
