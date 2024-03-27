@@ -1052,15 +1052,53 @@ class fourierModel:
         coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff)**2
         
         #fig, ax1 = plt.subplots(1,1)
-        #im = ax1.plot(coeff)      
+        #im = ax1.plot(cpuArray(coeff))
         #plt.xlim([0, 20])
         #fig, ax2 = plt.subplots(1,1)
         #from matplotlib import colors
-        #im = ax2.imshow(coeff_tot, cmap='hot', norm=colors.LogNorm())
+        #im = ax2.imshow(cpuArray(coeff_tot), cmap='hot', norm=colors.LogNorm())
         #ax2.set_title('tilt filter coefficients', color='black')
             
         return np.real(coeff_tot)
-       
+
+    def FocusFilter(self):
+        """%% Spatial filter to remove focus related errors
+        """
+        
+        nPoints = 1001
+        nPhase = 10 # number of phase shift cases
+        x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
+        freqs = self.freq.kx_[int(np.ceil(self.freq.nOtf/2)-1):,0]
+        if freqs[0] < 0:
+            freqs = freqs[1:]
+        nf0 = len(freqs)
+        coeff = np.zeros(nf0)
+        
+        for i in range(nf0):
+            if freqs[i] == 0:
+                coeff[i] = 0
+            elif 1/freqs[i] < 0.1*self.ao.tel.D:
+                coeff[i] = 1
+            else:
+                for k in range(nPhase):
+                    sin_ref = np.sin(2*np.pi*freqs[i]*x+2*np.pi*k/nPhase)
+                    coeff_lin = np.polyfit(x,sin_ref,2)
+                    sin_temp = coeff_lin[0]*x**2
+                    sin_res = sin_ref - sin_temp
+                    coeff[i] += np.std(sin_res) / np.std(sin_ref) * 1/nPhase
+        
+        coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff)**2
+        
+        #fig, ax1 = plt.subplots(1,1)
+        #im = ax1.plot(cpuArray(coeff)) 
+        #plt.xlim([0, 20])
+        #fig, ax2 = plt.subplots(1,1)
+        #from matplotlib import colors
+        #im = ax2.imshow(cpuArray(coeff_tot), cmap='hot', norm=colors.LogNorm())
+        #ax2.set_title('focus filter coefficients', color='black')
+        
+        return np.real(coeff_tot)
+        
 #%% AO ERROR BREAKDOWN
     def errorBreakDown(self,verbose=True):
         """ AO error breakdown from the PSD integrals
