@@ -147,7 +147,10 @@ class fourierModel:
             if self.ao.lgs:
                 self.gs  = self.ao.lgs
                 self.nGs = self.ao.lgs.nSrc
-                self.strechFactor = 1.0/(1.0 - self.ao.atm.heights/self.gs.height[0])
+                if self.gs.height[0]!=0:
+                    self.strechFactor = 1.0/(1.0 - self.ao.atm.heights/self.gs.height[0])
+                else:
+                    self.strechFactor = 1.0
             else:
                 self.gs  = self.ao.ngs
                 self.nGs = self.ao.ngs.nSrc
