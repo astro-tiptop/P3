@@ -1040,32 +1040,32 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
         return FWHMx,FWHMy,aRatio
     elif nargout == 4:
         return FWHMx,FWHMy,aRatio,theta
-                          
+
 def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf'):
     if recentering:    
         psf = centerPsf(psf0,2)
     else:
         psf = psf0
+
+    npsf   = nnp.array(psf.shape)
+
+    # Get the OTF
+    otfDL = telescopeOtf(pupil,samp)
         
     if method == 'otf':
-        #% Get the OTF
         otf     = fft.fftshift(psf2otf(psf))
         otf     = otf/otf.max()
         notf    = nnp.array(otf.shape)
-        
-        # Get the Diffraction-limit OTF
-        nX,nY   = pupil.shape
-        pup_pad = enlargeSupport(pupil,samp)
-        otfDL   = fft.fftshift(abs(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2)))
         otfDL   = interpolateSupport(otfDL,notf)
-        otfDL   = otfDL/otfDL.max()
         # Get the Strehl
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
-        psfDL   = telescopePsf(pupil,samp)
-        psfDL   = interpolateSupport(psfDL,nnp.array(psfDL.shape))
-        psf[psf<0]  =0 
-        SR      = psf.max()/psfDL.max() * psfDL.sum()/psf.sum()
+        psfDL  = otf2psf(otfDL)
+        psfDL[psfDL<0]  =0
+        psfDL *= 1/psfDL.sum()
+        psf[psf<0]  =0
+        psf   *= 1/psf.sum()
+        SR     = psf.max()/psfDL.max()
     else:
         raise ValueError("Method must be 'otf' or 'max'")
         
