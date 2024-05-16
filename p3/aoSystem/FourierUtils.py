@@ -757,7 +757,7 @@ def getEnsquaredEnergy(psf):
 
 def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):            
     
-    rr, radialprofile2, ee = radial_profile(psf,ee=True, center=None, pixelscale=pixelscale)
+    rr, radialprofile2, ee = radial_profile(psf,ee=True, center=center, pixelscale=pixelscale)
     if nargout==1:
         return ee
     elif nargout == 2:
