@@ -465,7 +465,7 @@ class fourierModel:
             
             # Get the noise propagation factor
             f           = np.logspace(-3,np.log10(0.5/Ts),nF)
-            z           = np.exp(-2*i*np.pi*f*Ts)
+            z           = np.exp(2*i*np.pi*f*Ts)
             self.hInt   = loopGain/(1.0 - z**(-1.0))
             self.rtfInt = 1.0/(1 + self.hInt * z**(-delay))
             self.atfInt = self.hInt * z**(-delay) * self.rtfInt
