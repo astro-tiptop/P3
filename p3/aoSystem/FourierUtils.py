@@ -938,7 +938,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     #Interpolation            
     Ny,Nx = psf.shape
     if rebin > 1:
-        im_hr = nnp.asarray(interpolateSupport(psf,rebin*nnp.array([Nx,Ny])))
+        im_hr = nnp.asarray(cpuArray(interpolateSupport(psf,rebin*nnp.array([Nx,Ny]))))
     else:
         im_hr = nnp.asarray(psf)
         
