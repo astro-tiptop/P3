@@ -866,6 +866,7 @@ class fourierModel:
        cov = fft.fftshift(fft.fftn(fft.fftshift(self.PSD,axes=(0,1)),axes=(0,1)),axes=(0,1))
        return 2*np.real(cov.max(axis=(0,1)) - cov)
 
+
     def focalAnisoplanatismPSD(self):
         """%% Focal Anisoplanatism power spectrum density
         """
@@ -881,40 +882,58 @@ class fourierModel:
         x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
         h = self.ao.atm.heights
         h_laser = self.gs.height[0]
-        ratio = (h_laser-h)/h_laser
+        ratio = np.array((h_laser-h)/h_laser)
         nCn2 = len(h)
         freqs = self.freq.kx_[int(np.ceil(self.freq.nOtf/2)-1):,0]
         if freqs[0] < 0:
             freqs = freqs[1:]
-        nf0 = len(freqs)
-        coeff = np.zeros((nf0,nCn2))
 
+        # We create grids to avoid explicit loops
+        freqs_matrix = freqs[:, np.newaxis]  # len(freqs) x 1 (for broadcasting)
+        ratio_matrix = ratio[np.newaxis, :]  # 1 x nCn2       (for broadcasting)
+
+        x4D = x[np.newaxis, np.newaxis, :, np.newaxis]
+        freqs_4Dmatrix = (freqs_matrix * (np.ones(nCn2))[np.newaxis, :])[:, :, np.newaxis, np.newaxis ]
+        freqs_ratio_matrix = freqs_matrix * ratio_matrix
+        freqs_ratio_4Dmatrix = freqs_ratio_matrix[:, :, np.newaxis, np.newaxis]
+
+        # We vector-initialise sin_ref and sin_temp over all combinations of i, j and k
+        k_values = np.arange(nPhase)
+        phase_4Dmatrix = (2 * np.pi * k_values / nPhase)[np.newaxis, np.newaxis, np.newaxis, :]
+
+        # Calculation of sinusoids, their std dev and differences for each phase
+        sin_ref = np.sin(2 * np.pi * freqs_4Dmatrix * x4D + phase_4Dmatrix)
+        sin_temp = np.sin(2 * np.pi * freqs_ratio_4Dmatrix * x4D + phase_4Dmatrix)
+
+        sin_ref_std = np.std(sin_ref, axis=2)
+        sin_temp_std = np.std(sin_temp, axis=2)
+        std_ratio = sin_ref_std/sin_temp_std
+        sin_res = sin_ref - std_ratio[:,:,np.newaxis,:] * sin_temp
+
+        # We calculate the coefficients using the average on the phase
+        coeff = np.mean(np.std(sin_res, axis=2) / sin_ref_std, axis=2)
+
+        # Now we calculate where the conditions are not satisfied and we put the coefficients to 0
+        condition1 = freqs_matrix * ratio_matrix > self.freq.kc_
+        condition2 = freqs_matrix < 1e-5
+        non_valid_mask = (condition1 | condition2)
+        coeff[non_valid_mask] = 0
+
+        # We calculate 2D coefficients and PSD
+        coeff_tot = []
         for j in range(nCn2):
-            for i in range(nf0):
-                if freqs[i]*ratio[j] > self.freq.kc_:
-                    coeff[i,j] = 0.0
-                else:
-                    if freqs[i] < 1e-5:
-                        coeff[i,j] = 0
-                    else:
-                        for k in range(nPhase):
-                            sin_ref = np.sin(2*np.pi*freqs[i]*x+2*np.pi*k/nPhase)
-                            sin_temp = np.sin(2*np.pi*freqs[i]*ratio[j]*x+2*np.pi*k/nPhase)
-                            sin_res = sin_ref - np.std(sin_ref)/np.std(sin_temp)*sin_temp
-                            coeff[i,j] += np.std(sin_res) / np.std(sin_ref) * 1/nPhase
-                         
             coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff[:,j])**2
-            
+
             #fig, ax1 = plt.subplots(1,1)
-            #im = ax1.plot(coeff)
+            #im = ax1.plot(coeff[:,j])
             #fig, ax2 = plt.subplots(1,1)
             #im = ax2.imshow(coeff_tot, cmap='hot')
             #ax2.set_title('cone effect filter coefficients', color='black')
-            
+
             psd += coeff_tot*psd_atmo*self.ao.atm.weights[j]
-        
+
         self.t_focalAnisoplanatism = 1000*(time.time() - tstart)
-        
+
         return np.real(psd)
     
     def mcaoWFsensConePSD(self,psdRes):
@@ -1433,7 +1452,7 @@ class fourierModel:
                 print("Required time for noise PSD calculation (ms)\t : {:f}".format(self.t_noisePSD))
                 print("Required time for ST PSD calculation (ms)\t : {:f}".format(self.t_spatioTemporalPSD))
                 if hasattr(self,"t_focalAnisoplanatism"):
-                    print("Required time for focal Aniso PSD calculation (ms)\t : {:f}".format(self.t_focalAnisoplanatism))
+                    print("Required time for focal Aniso PSD calc. (ms)\t : {:f}".format(self.t_focalAnisoplanatism))
                 if hasattr(self,"t_mcaoWFsensCone"):
                     print("Required time for MCAO WF sens cone PSD calculation (ms)\t : {:f}".format(self.t_mcaoWFsensCone))
                 
