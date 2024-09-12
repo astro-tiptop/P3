@@ -63,6 +63,15 @@ def cpuArray(v):
     else:
         return v.get()
 
+def besselj__n(n, z):
+    if n<0:
+        return -1**(-n) * besselj__n(-n, z)
+    if n==0:
+        return spc.j0(z)
+    elif n==1:
+        return spc.j1(z)
+    elif n>=2:
+        return 2*(n-1)*besselj__n(int(n)-1, z)/z - besselj__n(int(n)-2, z)
 
 class fourierModel:
     """ Fourier class gathering the PSD calculation for PSF reconstruction. 
@@ -998,6 +1007,10 @@ class fourierModel:
         return np.real(psd)
 
     def extraErrorPSD(self):
+        """%% extra error
+        """
+
+        tstart  = time.time()
     
         k   = np.sqrt(self.freq.k2_)
         psd = k**self.ao.tel.extraErrorExp
@@ -1018,10 +1031,16 @@ class fourierModel:
         rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi 
         
         psd = psd * 1/rad2nm**2
+
+        self.t_extra = 1000*(time.time() - tstart)
     
         return np.real(psd)
     
     def extraErrorLoPSD(self):
+        """%% extra error for LO
+        """
+
+        tstart  = time.time()
     
         k   = np.sqrt(self.freq.k2_)
         psd = k**self.ao.tel.extraErrorLoExp
@@ -1042,89 +1061,54 @@ class fourierModel:
         rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi 
         
         psd = psd * 1/rad2nm**2
+
+        self.t_extraLo = 1000*(time.time() - tstart)
     
         return np.real(psd)
     
     def TiltFilter(self):
         """%% Spatial filter to remove tilt related errors
         """
-        
-        nPoints = 1001
-        nPhase = 10 # number of phase shift cases
-        x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
-        freqs = self.freq.kx_[int(np.ceil(self.freq.nOtf/2)-1):,0]
-        if freqs[0] < 0:
-            freqs = freqs[1:]
-        nf0 = len(freqs)
-        coeff = np.zeros(nf0)
-               
-        for i in range(nf0):
-            if freqs[i] == 0:
-                coeff[i] = 0
-            elif 1/freqs[i] < 0.1*self.ao.tel.D:
-                coeff[i] = 1
-            else:
-                for k in range(nPhase):
-                    sin_ref = np.sin(2*np.pi*freqs[i]*x+2*np.pi*k/nPhase)
-                    coeff_lin = np.polyfit(x,sin_ref,1)
-                    sin_temp = coeff_lin[0]*x+coeff_lin[1]
-                    sin_res = sin_ref - sin_temp
-                    coeff[i] += np.std(sin_res) / np.std(sin_ref) * 1/nPhase
-               
-        coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff)**2
-        
+
+        tstart  = time.time()
+
+        # from Sasiela 93
+        x = 0.5*self.ao.tel.D*2*np.pi*np.sqrt(self.freq.k2_)
+        coeff_tot = 1 - (2*spc.j1(x)/(x))**2 - (4*besselj__n(2,x)/(x))**2
+
         #fig, ax1 = plt.subplots(1,1)
-        #im = ax1.plot(cpuArray(coeff))
-        #plt.xlim([0, 20])
-        #fig, ax2 = plt.subplots(1,1)
         #from matplotlib import colors
-        #im = ax2.imshow(cpuArray(coeff_tot), cmap='hot', norm=colors.LogNorm())
-        #ax2.set_title('tilt filter coefficients', color='black')
+        #im = ax1.imshow(cpuArray(coeff_tot), cmap='hot', norm=colors.LogNorm())
+        #ax1.set_title('tilt filter coefficients', color='black')
+
+        self.t_tiltFilter = 1000*(time.time() - tstart)
             
         return np.real(coeff_tot)
 
     def FocusFilter(self):
         """%% Spatial filter to remove focus related errors
         """
-        
-        nPoints = 1001
-        nPhase = 10 # number of phase shift cases
-        x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
-        freqs = self.freq.kx_[int(np.ceil(self.freq.nOtf/2)-1):,0]
-        if freqs[0] < 0:
-            freqs = freqs[1:]
-        nf0 = len(freqs)
-        coeff = np.zeros(nf0)
-        
-        for i in range(nf0):
-            if freqs[i] == 0:
-                coeff[i] = 0
-            elif 1/freqs[i] < 0.1*self.ao.tel.D:
-                coeff[i] = 1
-            else:
-                for k in range(nPhase):
-                    sin_ref = np.sin(2*np.pi*freqs[i]*x+2*np.pi*k/nPhase)
-                    coeff_lin = np.polyfit(x,sin_ref,2)
-                    sin_temp = coeff_lin[0]*x**2
-                    sin_res = sin_ref - sin_temp
-                    coeff[i] += np.std(sin_res) / np.std(sin_ref) * 1/nPhase
-        
-        coeff_tot = np.interp(np.sqrt(self.freq.k2_), freqs, coeff)**2
+
+        tstart  = time.time()
+
+        # from Sasiela 93
+        x = 0.5*self.ao.tel.D*2*np.pi*np.sqrt(self.freq.k2_)
+        coeff_tot = 1 - 3*(2*besselj__n(3,x)/(x))**2
         
         #fig, ax1 = plt.subplots(1,1)
-        #im = ax1.plot(cpuArray(coeff)) 
-        #plt.xlim([0, 20])
-        #fig, ax2 = plt.subplots(1,1)
         #from matplotlib import colors
-        #im = ax2.imshow(cpuArray(coeff_tot), cmap='hot', norm=colors.LogNorm())
-        #ax2.set_title('focus filter coefficients', color='black')
+        #im = ax1.imshow(cpuArray(coeff_tot), cmap='hot', norm=colors.LogNorm())
+        #ax1.set_title('focus filter coefficients', color='black')
+
+        self.t_focusFilter = 1000*(time.time() - tstart)
         
         return np.real(coeff_tot)
         
 #%% AO ERROR BREAKDOWN
     def errorBreakDown(self,verbose=True):
         """ AO error breakdown from the PSD integrals
-        """        
+        """
+
         tstart  = time.time()
         
         if self.ao.rtc.holoop['gain'] != 0:
@@ -1454,7 +1438,15 @@ class fourierModel:
                 if hasattr(self,"t_focalAnisoplanatism"):
                     print("Required time for focal Aniso PSD calc. (ms)\t : {:f}".format(self.t_focalAnisoplanatism))
                 if hasattr(self,"t_mcaoWFsensCone"):
-                    print("Required time for MCAO WF sens cone PSD calculation (ms)\t : {:f}".format(self.t_mcaoWFsensCone))
+                    print("Required time for MCAO WFs cone PSD calc. (ms)\t : {:f}".format(self.t_mcaoWFsensCone))
+                if hasattr(self,"t_extra"):
+                    print("Required time for extra PSD calculation (ms)\t : {:f}".format(self.t_extra))
+                if hasattr(self,"t_extraLo"):
+                    print("Required time for extra PSD (LO) calc. (ms)\t : {:f}".format(self.t_extraLo))
+                if hasattr(self,"t_tiltFilter"):
+                    print("Required time for tilt filter calculation (ms)\t : {:f}".format(self.t_tiltFilter))
+                if hasattr(self,"t_focusFilter"):
+                    print("Required time for focus filter calculation (ms)\t : {:f}".format(self.t_focusFilter))
                 
                 # Error breakdown
                 if hasattr(self,'t_errorBreakDown'):
