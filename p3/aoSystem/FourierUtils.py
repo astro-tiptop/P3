@@ -46,9 +46,11 @@ def fftCorrel(x,y):
     nPts = x.shape
     
     if len(nPts) == 1:
-        out =  fft.ifft(fft.fft(x)*np.conj(fft.fft(y)))/nPts
+        factor = 1/nPts
+        out =  fft.ifft(fft.fft(x)*np.conj(fft.fft(y)))*factor
     elif len(nPts) == 2:
-        out =  fft.ifft2(fft.fft2(x)*np.conj(fft.fft2(y)))/(nPts[0]*nPts[1])
+        factor = 1/(nPts[0]*nPts[1])
+        out =  fft.ifft2(fft.fft2(x)*np.conj(fft.fft2(y)))*factor
     return out
 
 def fftsym(x):

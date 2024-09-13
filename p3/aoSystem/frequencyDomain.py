@@ -36,7 +36,7 @@ class frequencyDomain():
         if self.nyquistSampling == True:
             self.samp  = 2.0 * np.ones_like(self.psInMas)
         else:
-            self.samp  = val* rad2mas/(self.psInMas*self.ao.tel.D)
+            self.samp  = val* rad2mas* 1/(self.psInMas*self.ao.tel.D)
 
     @property
     def wvlCen(self):
@@ -47,7 +47,7 @@ class frequencyDomain():
         if self.nyquistSampling == True:
             self.sampCen  = 2.0 * np.ones(len(val))
         else:
-            self.sampCen  = val* rad2mas/(self.psInMasCen*self.ao.tel.D)
+            self.sampCen  = val* rad2mas * 1/(self.psInMasCen*self.ao.tel.D)
 
     @property
     def wvlRef(self):
@@ -58,7 +58,7 @@ class frequencyDomain():
         if self.nyquistSampling == True:
             self.sampRef  = 2.0
         else:
-            self.sampRef  = val* rad2mas/(self.psInMas[0]*self.ao.tel.D)    
+            self.sampRef  = val* rad2mas * 1/(self.psInMas[0]*self.ao.tel.D)
     # SAMPLING
     @property
     def samp(self):
@@ -71,8 +71,12 @@ class frequencyDomain():
         #    self.PSDstep= np.min(1/self.ao.tel.D/self.__samp)
         #else:
         #    self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)
-        self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas/self.k_)
-        self.PSDstep= np.asarray(self.PSDstep)
+        PSDsteps = self.psInMas/(self.wvl_*rad2mas*self.k_)
+        if len(PSDsteps) > 1:
+            PSDstep= np.min(PSDSteps)
+        else:
+            PSDstep= np.asarray(PSDsteps)
+        self.PSDstep= np.asarray(PSDstep)
 
     @property
     def sampCen(self):
@@ -95,7 +99,7 @@ class frequencyDomain():
         #piston filtering        
         self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
         self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
-    
+
     # CUT-OFF FREQUENCY
     @property
     def pitch(self):
@@ -105,15 +109,15 @@ class frequencyDomain():
         self.__pitch = val
         # redefining the ao-corrected area
         if not self.kcExt is None and np.all(self.kcExt):
-            self.kc_= self.kcExt
+            self.kc_ = self.kcExt
         else:
             #return 1/(2*max(self.pitchs_dm.min(),self.pitchs_wfs.min()))
             self.kc_ =  1/(2*val)
-            #self.kc_= (val-1)/(2.0*self.ao.tel.D)
-        self.kcMax_ =  np.max(self.kc_)
-        #kc2         = self.kc_**2
-        self.kc_ = np.asarray(self.kc_)
-        self.resAO  = int(np.max(2*self.kc_/self.PSDstep))
+            #self.kc_ = (val-1)/(2.0*self.ao.tel.D)
+        self.kcMax_  =  np.max(self.kc_)
+        #kc2          = self.kc_**2
+        self.kc_     = np.asarray(self.kc_)
+        self.resAO   = int(2*self.kcMax_/self.PSDstep)
 
         # ---- SPATIAL FREQUENCY DOMAIN OF THE AO-CORRECTED AREA
         #import pdb
@@ -181,7 +185,10 @@ class frequencyDomain():
         self.nPix   = self.ao.cam.fovInPix
         self.wvl    = self.wvl_
         self.wvlCen = wvlCen_
-        self.wvlRef = np.min(self.wvl_)
+        if len(self.wvl_) > 1:
+            self.wvlRef = np.min(self.wvl_)
+        else:
+            self.wvlRef = self.wvl_
         self.pitch  = self.ao.dms.pitch
         
         self.tfreq = 1000*(time.time()-t0)

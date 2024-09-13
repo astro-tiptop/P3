@@ -114,7 +114,9 @@ class fourierModel:
 
         self.t_initAO = 1000*(time.time() - tstart)
 
+        self.t_init = 0
         self.t_initFreq = 0
+        self.t_atmo = 0
         self.t_powerSpectrumDensity = 0
         self.t_reconstructor = 0
         self.t_finalReconstructor = 0
@@ -130,17 +132,19 @@ class fourierModel:
         self.t_getPsfMetrics = 0
         self.t_displayResults = 0
         self.t_getPSF = 0
+        self.t_focalAnisoplanatism = 0
+        self.t_mcaoWFsensCone = 0
+        self.t_extra = 0
+        self.t_extraLo = 0
+        self.t_tiltFilter = 0
+        self.t_focusFilter = 0
+        self.t_errorBreakDown = 0
+        self.t_getPsfMetrics = 0
 
         self.nGs = 0
 
         if doComputations:
             self.initComputations()
-
-        self.t_init = 1000*(time.time()  - tstart)
-
-        # DISPLAYING EXECUTION TIMES
-        if self.verbose:
-            self.displayExecutionTime()
 
 
     def initComputations(self):
@@ -151,6 +155,8 @@ class fourierModel:
             
             # DEFINING THE FREQUENCY DOMAIN
             self.freq = frequencyDomain(self.ao,nyquistSampling=self.nyquistSampling,computeFocalAnisoCov=self.computeFocalAnisoCov)
+
+            self.t_initFreq = 1000*(time.time() - tstart)
 
             # DEFINING THE GUIDE STAR AND THE STRECHING FACTOR
             if self.ao.lgs:
@@ -187,7 +193,7 @@ class fourierModel:
             self.ao.atm.wvl  = self.freq.wvlRef
             self.atm_mod.wvl = self.freq.wvlRef
 
-            self.t_initFreq = 1000*(time.time() - tstart)
+            self.t_atmo = 1000*(time.time() - self.t_initFreq/1000 - tstart)
 
             vv = self.freq.psInMas
             rr = 2*self.freq.kcInMas/vv 
@@ -239,9 +245,9 @@ class fourierModel:
                     
         # DEFINING BOUNDS
         self.bounds = self.defineBounds()
-        
+
         self.t_init = 1000*(time.time()  - tstart)
-            
+
         # DISPLAYING EXECUTION TIMES
         if self.verbose:
             self.displayExecutionTime()
@@ -575,7 +581,8 @@ class fourierModel:
            
             # Cone effect
             if self.nGs == 1 and self.gs.height[0] != 0:
-                print('SLAO case adding cone effect')
+                if self.verbose:
+                    print('SLAO case adding cone effect')
                 self.psdCone = self.focalAnisoplanatismPSD()
                 psd += np.repeat(self.psdCone[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
             
@@ -1415,50 +1422,61 @@ class fourierModel:
     def displayExecutionTime(self):
         
         # total
-        print("Required time for total calculation (ms)\t : {:f}".format(self.t_init))
-        print("Required time for AO system model init (ms)\t : {:f}".format(self.t_initAO))
+        if self.t_init > 0: print("Required time for total calculation (ms)\t : {:f}".format(self.t_init))
+        if self.t_initAO > 0: print("Required time for AO system model init (ms)\t : {:f}".format(self.t_initAO))
         if self.ao.error == False:
-            print("Required time for frequency domain init (ms)\t : {:f}".format(self.t_initFreq))
-            print("Required time for final PSD calculation (ms)\t : {:f}".format(self.t_powerSpectrumDensity))
+            if self.t_initFreq > 0: print("Required time for frequency domain init (ms)\t : {:f}".format(self.t_initFreq))
+            if self.t_atmo > 0: print("Required time for atmosphere nodel init (ms)\t : {:f}".format(self.t_atmo))
+
+            if self.t_powerSpectrumDensity > 0: print("Required time for final PSD calculation (ms)\t : {:f}".format(self.t_powerSpectrumDensity))
 
             # Reconstructors
             if self.ao.rtc.holoop['gain'] > 0:
-                print("Required time for WFS reconstructors init (ms)\t : {:f}".format(self.t_reconstructor))
+                if self.t_reconstructor > 0:
+                    print("Required time for WFS reconstructors init (ms)\t : {:f}".format(self.t_reconstructor))
                 if self.nGs > 1:
-                    print("Required time for optimization init (ms)\t : {:f}".format(self.t_finalReconstructor))
-                    print("Required time for tomography init (ms)\t\t : {:f}".format(self.t_tomo))
-                    print("Required time for optimization init (ms)\t : {:f}".format(self.t_opt))
+                    if self.t_finalReconstructor > 0:
+                        print("Required time for optimization init (ms)\t : {:f}".format(self.t_finalReconstructor))
+                    if self.t_tomo > 0:
+                        print("Required time for tomography init (ms)\t\t : {:f}".format(self.t_tomo))
+                    if self.t_opt > 0:
+                        print("Required time for optimization init (ms)\t : {:f}".format(self.t_opt))
                 # Controller
-                print("Required time for controller instantiation (ms)\t : {:f}".format(self.t_controller))
+                if self.t_controller > 0:
+                    print("Required time for controller instantiation (ms)\t : {:f}".format(self.t_controller))
                 # PSD
-                print("Required time for fitting PSD calculation (ms)\t : {:f}".format(self.t_fittingPSD))
-                print("Required time for aliasing PSD calculation (ms)\t : {:f}".format(self.t_aliasingPSD))
-                print("Required time for noise PSD calculation (ms)\t : {:f}".format(self.t_noisePSD))
-                print("Required time for ST PSD calculation (ms)\t : {:f}".format(self.t_spatioTemporalPSD))
-                if hasattr(self,"t_focalAnisoplanatism"):
+                if self.t_fittingPSD > 0:
+                    print("Required time for fitting PSD calculation (ms)\t : {:f}".format(self.t_fittingPSD))
+                if self.t_aliasingPSD > 0:
+                    print("Required time for aliasing PSD calculation (ms)\t : {:f}".format(self.t_aliasingPSD))
+                if self.t_noisePSD > 0:
+                    print("Required time for noise PSD calculation (ms)\t : {:f}".format(self.t_noisePSD))
+                if self.t_spatioTemporalPSD > 0:
+                    print("Required time for ST PSD calculation (ms)\t : {:f}".format(self.t_spatioTemporalPSD))
+                if self.t_focalAnisoplanatism > 0:
                     print("Required time for focal Aniso PSD calc. (ms)\t : {:f}".format(self.t_focalAnisoplanatism))
-                if hasattr(self,"t_mcaoWFsensCone"):
+                if self.t_mcaoWFsensCone > 0:
                     print("Required time for MCAO WFs cone PSD calc. (ms)\t : {:f}".format(self.t_mcaoWFsensCone))
-                if hasattr(self,"t_extra"):
+                if self.t_extra > 0:
                     print("Required time for extra PSD calculation (ms)\t : {:f}".format(self.t_extra))
-                if hasattr(self,"t_extraLo"):
+                if self.t_extraLo > 0:
                     print("Required time for extra PSD (LO) calc. (ms)\t : {:f}".format(self.t_extraLo))
-                if hasattr(self,"t_tiltFilter"):
+                if self.t_tiltFilter > 0:
                     print("Required time for tilt filter calculation (ms)\t : {:f}".format(self.t_tiltFilter))
-                if hasattr(self,"t_focusFilter"):
+                if self.t_focusFilter > 0:
                     print("Required time for focus filter calculation (ms)\t : {:f}".format(self.t_focusFilter))
-                
+
                 # Error breakdown
-                if hasattr(self,'t_errorBreakDown'):
+                if self.t_errorBreakDown > 0:
                     print("Required time for error calculation (ms)\t : {:f}".format(self.t_errorBreakDown))
-                    
+
                 # PSF metrics
-                if hasattr(self,'t_getPsfMetrics'):
+                if self.t_getPsfMetrics >0:
                     print("Required time for get PSF metrics (ms)\t\t : {:f}".format(self.t_getPsfMetrics))
-                
+
                 # Display
                 if self.display and self.calcPSF:
                     print("Required time for displaying figures (ms)\t : {:f}".format(self.t_displayResults))
-                    
+
             if self.calcPSF:
                 print("Required time for all PSFs calculation (ms)\t : {:f}".format(self.t_getPSF))
