@@ -71,12 +71,12 @@ class frequencyDomain():
         #    self.PSDstep= np.min(1/self.ao.tel.D/self.__samp)
         #else:
         #    self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)
-        PSDsteps = self.psInMas/self.wvl_/rad2mas/self.k_
+        PSDsteps = self.psInMas/(self.wvl_*rad2mas*self.k_)
         if len(PSDsteps) > 1:
-            self.PSDstep= np.min(PSDSteps)
+            PSDstep= np.min(PSDSteps)
         else:
-            self.PSDstep= PSDsteps
-        self.PSDstep= np.asarray(self.PSDstep)
+            PSDstep= np.asarray(PSDsteps)
+        self.PSDstep= np.asarray(PSDstep)
 
     @property
     def sampCen(self):
@@ -109,16 +109,15 @@ class frequencyDomain():
         self.__pitch = val
         # redefining the ao-corrected area
         if not self.kcExt is None and np.all(self.kcExt):
-            self.kc_= self.kcExt
+            self.kc_ = self.kcExt
         else:
             #return 1/(2*max(self.pitchs_dm.min(),self.pitchs_wfs.min()))
             self.kc_ =  1/(2*val)
-            #self.kc_= (val-1)/(2.0*self.ao.tel.D)
-        self.kcMax_ =  np.max(self.kc_)
-        #kc2         = self.kc_**2
-        self.kc_ = np.asarray(self.kc_)
-        self.resAO  = int(np.max(2*self.kc_/self.PSDstep))
-        self.resAO  = int(2*self.kcMax_/self.PSDstep)
+            #self.kc_ = (val-1)/(2.0*self.ao.tel.D)
+        self.kcMax_  =  np.max(self.kc_)
+        #kc2          = self.kc_**2
+        self.kc_     = np.asarray(self.kc_)
+        self.resAO   = int(2*self.kcMax_/self.PSDstep)
 
         # ---- SPATIAL FREQUENCY DOMAIN OF THE AO-CORRECTED AREA
         #import pdb
