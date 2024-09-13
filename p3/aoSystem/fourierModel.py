@@ -589,7 +589,8 @@ class fourierModel:
             # additional error for MCAO system with laser GS:
             # reduced volume for WF sensing due to the cone effect
             if self.ao.addMcaoWFsensConeError and self.nGs != 1 and self.gs.height[0] != 0:
-                print('MCAO and laser case: adding error due to reduced volume for WF sensing')
+                if self.verbose:
+                    print('MCAO and laser case: adding error due to reduced volume for WF sensing')
                 self.psdMcaoWFsensCone = self.mcaoWFsensConePSD(psd)
                 psd += self.psdMcaoWFsensCone
 
