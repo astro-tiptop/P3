@@ -146,10 +146,6 @@ class fourierModel:
         if doComputations:
             self.initComputations()
 
-        # DISPLAYING EXECUTION TIMES
-        if self.verbose:
-            self.displayExecutionTime()
-
 
     def initComputations(self):
 
