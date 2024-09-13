@@ -114,6 +114,7 @@ class fourierModel:
 
         self.t_initAO = 1000*(time.time() - tstart)
 
+        self.t_init = 0
         self.t_initFreq = 0
         self.t_atmo = 0
         self.t_powerSpectrumDensity = 0
@@ -145,8 +146,6 @@ class fourierModel:
         if doComputations:
             self.initComputations()
 
-        self.t_init = 1000*(time.time()  - tstart)
-
         # DISPLAYING EXECUTION TIMES
         if self.verbose:
             self.displayExecutionTime()
@@ -162,7 +161,6 @@ class fourierModel:
             self.freq = frequencyDomain(self.ao,nyquistSampling=self.nyquistSampling,computeFocalAnisoCov=self.computeFocalAnisoCov)
 
             self.t_initFreq = 1000*(time.time() - tstart)
-            tstart = time.time()
 
             # DEFINING THE GUIDE STAR AND THE STRECHING FACTOR
             if self.ao.lgs:
@@ -199,7 +197,7 @@ class fourierModel:
             self.ao.atm.wvl  = self.freq.wvlRef
             self.atm_mod.wvl = self.freq.wvlRef
 
-            self.t_atmo = 1000*(time.time() - tstart)
+            self.t_atmo = 1000*(time.time() - self.t_initFreq/1000 - tstart)
 
             vv = self.freq.psInMas
             rr = 2*self.freq.kcInMas/vv 
@@ -251,9 +249,9 @@ class fourierModel:
                     
         # DEFINING BOUNDS
         self.bounds = self.defineBounds()
-        
+
         self.t_init = 1000*(time.time()  - tstart)
-            
+
         # DISPLAYING EXECUTION TIMES
         if self.verbose:
             self.displayExecutionTime()
@@ -587,7 +585,8 @@ class fourierModel:
            
             # Cone effect
             if self.nGs == 1 and self.gs.height[0] != 0:
-                print('SLAO case adding cone effect')
+                if self.verbose:
+                    print('SLAO case adding cone effect')
                 self.psdCone = self.focalAnisoplanatismPSD()
                 psd += np.repeat(self.psdCone[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
             
@@ -1427,8 +1426,8 @@ class fourierModel:
     def displayExecutionTime(self):
         
         # total
-        print("Required time for total calculation (ms)\t : {:f}".format(self.t_init))
-        print("Required time for AO system model init (ms)\t : {:f}".format(self.t_initAO))
+        if self.t_init > 0: print("Required time for total calculation (ms)\t : {:f}".format(self.t_init))
+        if self.t_initAO > 0: print("Required time for AO system model init (ms)\t : {:f}".format(self.t_initAO))
         if self.ao.error == False:
             if self.t_initFreq > 0: print("Required time for frequency domain init (ms)\t : {:f}".format(self.t_initFreq))
             if self.t_atmo > 0: print("Required time for atmosphere nodel init (ms)\t : {:f}".format(self.t_atmo))
