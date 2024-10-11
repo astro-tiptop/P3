@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "astro-p3"
 authors = [
-    {name = "Olivier Beltramo-Martin"},
+    {name = "Olivier Beltramo-Martin, Benoit Neichel, Fabio Rossi, Guido Agapito, Cédric Plantet"},
 ]
 description = ""
 readme = "README.md"
