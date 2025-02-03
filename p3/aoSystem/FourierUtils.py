@@ -18,7 +18,6 @@ if not gpuEnabled:
 else:
     import cupy as cp
     import scipy.interpolate as interp        
-#    import cupyx.scipy.interpolate as interp        
     import cupyx.scipy.ndimage as scnd
     import cupyx.scipy.special as ssp
     import cupy.fft as fft
@@ -493,22 +492,22 @@ def interpolateSupport(image,nRes,kind='spline'):
             xin = np.real(image)
             if gpuEnabled:
                 xin = xin.get()
-            fun_real = interp.fitpack2.RectBivariateSpline(vinit, uinit, xin)
+            fun_real = interp.RectBivariateSpline(vinit, uinit, xin)
             if np.any(np.iscomplex(image)):
                 xin = np.imag(image)
                 if gpuEnabled:
                     xin = xin.get()
-                fun_imag = interp.fitpack2.RectBivariateSpline(vinit, uinit, xin)
+                fun_imag = interp.RectBivariateSpline(vinit, uinit, xin)
         else:
             xin = np.real(image)
             if gpuEnabled:
                 xin = xin.get()
-            fun_real = interp.interp2d(uinit, vinit, xin,kind=kind)
+            fun_real = interp.RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
             if np.any(np.iscomplex(image)):
                 xin = np.imag(image)
                 if gpuEnabled:
                     xin = xin.get()
-                fun_imag = interp.interp2d(uinit, vinit, xin,kind=kind)
+                fun_imag = interp.RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
     
         if np.any(np.iscomplex(image)):
             return np.asarray(fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew))
