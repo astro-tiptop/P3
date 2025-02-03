@@ -26,79 +26,9 @@ rad2arc = rad2mas / 1000
 
 class frequencyDomain():
     
-    # WAVELENGTH
-    @property
-    def wvl(self):
-        return self.__wvl
-    @wvl.setter
-    def wvl(self,val):
-        self.__wvl = val
-        if self.nyquistSampling == True:
-            self.samp  = 2.0 * np.ones_like(self.psInMas)
-        else:
-            self.samp  = val* rad2mas* 1/(self.psInMas*self.ao.tel.D)
 
-    @property
-    def wvlCen(self):
-        return self.__wvlCen
-    @wvlCen.setter
-    def wvlCen(self,val):
-        self.__wvlCen = val
-        if self.nyquistSampling == True:
-            self.sampCen  = 2.0 * np.ones(len(val))
-        else:
-            self.sampCen  = val* rad2mas * 1/(self.psInMasCen*self.ao.tel.D)
 
-    @property
-    def wvlRef(self):
-        return self.__wvlRef
-    @wvlRef.setter
-    def wvlRef(self,val):
-        self.__wvlRef = val
-        if self.nyquistSampling == True:
-            self.sampRef  = 2.0
-        else:
-            self.sampRef  = val* rad2mas * 1/(self.psInMas[0]*self.ao.tel.D)
-    # SAMPLING
-    @property
-    def samp(self):
-        return self.__samp
-    @samp.setter
-    def samp(self,val):
-        self.k_      = np.ceil(2.0/val).astype('int') # works for oversampling
-        self.__samp  = self.k_ * val
-        #if np.any(self.k_ > 2):
-        #    self.PSDstep= np.min(1/self.ao.tel.D/self.__samp)
-        #else:
-        #    self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)
-        PSDsteps = self.psInMas/(self.wvl_*rad2mas*self.k_)
-        if len(PSDsteps) > 1:
-            PSDstep= np.min(PSDsteps)
-        else:
-            PSDstep= np.asarray(PSDsteps)
-        self.PSDstep= np.asarray(PSDstep)
 
-    @property
-    def sampCen(self):
-        return self.__sampCen
-    @sampCen.setter
-    def sampCen(self,val):
-        self.kCen_      = np.ceil(2.0/val).astype('int')# works for oversampling
-        self.__sampCen  = self.kCen_ * val
-    @property
-    def sampRef(self):
-        return self.__sampRef
-    @sampRef.setter
-    def sampRef(self,val):
-        self.kRef_      = int(np.ceil(2.0/val)) # works for oversampling
-        self.__sampRef  = self.kRef_ * val
-        self.nOtf       = self.nPix * self.kRef_
-        #  ---- FULL DOMAIN OF FREQUENCY
-        self.kx_,self.ky_ = FourierUtils.freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
-        self.k2_          = self.kx_**2 + self.ky_**2
-        #piston filtering        
-        self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
-        self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
 
     # CUT-OFF FREQUENCY
     @property
@@ -158,39 +88,77 @@ class frequencyDomain():
         
         # PARSING INPUTS TO GET THE SAMPLING VALUES
         self.ao     = aoSys
-        
+
+        self.kcExt  = kcExt
+
         # MANAGING THE WAVELENGTH
         self.nBin    = self.ao.cam.nWvl # number of spectral bins for polychromatic PSFs
-        self.nWvlCen = len(np.unique(self.ao.src.wvl))
+        self.nWvlCen = len(nnp.unique(self.ao.src.wvl))
         self.nWvl    = self.nBin * self.nWvlCen #central wavelengths
-        wvlCen_      = np.unique(self.ao.src.wvl)
+        wvlCen_      = nnp.unique(self.ao.src.wvl)
         bw           = self.ao.cam.bandwidth
-        self.wvl_    = np.zeros(self.nWvl)
+        self.wvl_    = nnp.zeros(self.nWvl)
         for j in range(self.nWvlCen):
-            self.wvl_[j:(j+1)*self.nBin] = np.linspace(wvlCen_[j] - bw/2,wvlCen_[j] + bw/2,num=self.nBin)
-                
-        
-        # MANAGING THE PIXEL SCALE
+            self.wvl_[j:(j+1)*self.nBin] = nnp.linspace(wvlCen_[j] - bw/2,wvlCen_[j] + bw/2,num=self.nBin)
+
         t0 = time.time()
-        if nyquistSampling:
-            self.nyquistSampling = True
-            self.psInMas    = rad2mas*self.wvl_/self.ao.tel.D/2
+
+        self.nPix   = self.ao.cam.fovInPix
+       
+        
+        self.nyquistSampling = nyquistSampling
+
+        self.wvl    = np.asarray(self.wvl_)
+
+        self.wvlCen = np.asarray(wvlCen_)
+        if self.wvl_.shape[0] > 1:
+            self.wvlRef = nnp.min(self.wvl_)
+        else:
+            self.wvlRef = self.wvl_
+
+        if self.nyquistSampling == True:
+            self.psInMas    = rad2mas*self.wvl/self.ao.tel.D/2
             self.psInMasCen = rad2mas*wvlCen_/self.ao.tel.D/2
+            samp  = 2.0 * np.ones_like(self.psInMas)
+            sampCen  = 2.0 * np.ones(len(self.wvlCen))
+            sampRef  = 2.0 * np.ones(len(self.wvlCen))
+            
         else:
             self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl)
             self.psInMasCen = self.ao.cam.psInMas * np.ones(self.nWvlCen)
-            self.nyquistSampling = False
-                           
-        self.kcExt  = kcExt
-        self.nPix   = self.ao.cam.fovInPix
-        self.wvl    = self.wvl_
-        self.wvlCen = wvlCen_
-        if len(self.wvl_) > 1:
-            self.wvlRef = np.min(self.wvl_)
+            samp  = self.wvl* rad2mas* 1/(self.psInMas*self.ao.tel.D)
+            sampCen  = self.wvlCen* rad2mas * 1/(self.psInMasCen*self.ao.tel.D)
+            sampRef  = self.wvlRef* rad2mas * 1/(self.psInMas[0]*self.ao.tel.D)
+
+        self.k_      = np.ceil(2.0/samp).astype('int') # works for oversampling
+        self.samp = self.k_ * samp
+
+        self.kCen_    = np.ceil(2.0/sampCen).astype('int')# works for oversampling
+        self.sampCen  = self.kCen_ * sampCen
+
+        self.kRef_    = int(np.ceil(2.0/sampRef)) # works for oversampling
+        self.sampRef  = self.kRef_ * sampRef
+
+        self.nOtf       = self.nPix * self.kRef_
+
+        PSDsteps = self.psInMas/(self.wvl*rad2mas*self.k_)
+        if PSDsteps.shape[0] > 1:
+            PSDstep= nnp.min(PSDsteps)
         else:
-            self.wvlRef = self.wvl_
+            PSDstep= PSDsteps
+        self.PSDstep = np.asarray(PSDstep)
+
+        #  ---- FULL DOMAIN OF FREQUENCY
+        self.kx_,self.ky_ = FourierUtils.freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
+        self.k2_          = self.kx_**2 + self.ky_**2
+        #piston filtering        
+        self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
+        self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
+
+
         self.pitch  = self.ao.dms.pitch
-        
+
+        # MANAGING THE PIXEL SCALE                           
         self.tfreq = 1000*(time.time()-t0)
                 
         # DEFINING THE DOMAIN ANGULAR FREQUENCIES
