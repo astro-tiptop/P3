@@ -73,7 +73,7 @@ class frequencyDomain():
         #    self.PSDstep= np.min(self.psInMas/self.wvl_/rad2mas)
         PSDsteps = self.psInMas/(self.wvl_*rad2mas*self.k_)
         if len(PSDsteps) > 1:
-            PSDstep= np.min(PSDSteps)
+            PSDstep= np.min(PSDsteps)
         else:
             PSDstep= np.asarray(PSDsteps)
         self.PSDstep= np.asarray(PSDstep)
