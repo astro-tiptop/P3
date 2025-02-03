@@ -112,9 +112,9 @@ class frequencyDomain():
 
         self.wvlCen = np.asarray(wvlCen_)
         if self.wvl_.shape[0] > 1:
-            self.wvlRef = nnp.min(self.wvl_)
+            self.wvlRef = np.asarray(nnp.min(self.wvl_))
         else:
-            self.wvlRef = self.wvl_
+            self.wvlRef = np.asarray(self.wvl_)
 
         if self.nyquistSampling == True:
             self.psInMas    = rad2mas*self.wvl/self.ao.tel.D/2
@@ -122,7 +122,6 @@ class frequencyDomain():
             samp  = 2.0 * np.ones_like(self.psInMas)
             sampCen  = 2.0 * np.ones(len(self.wvlCen))
             sampRef  = 2.0 * np.ones(len(self.wvlCen))
-            
         else:
             self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl)
             self.psInMasCen = self.ao.cam.psInMas * np.ones(self.nWvlCen)
