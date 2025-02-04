@@ -617,14 +617,18 @@ class fourierModel:
                 print('extra error spatial frequency exponent (LO): ',self.ao.tel.extraErrorLoExp)
             if self.ao.tel.extraErrorNm > 0:
                 self.psdExtra = np.real(self.extraErrorPSD())
-            if self.ao.getPSDatNGSpositions and self.ao.tel.extraErrorLoNm >= 0:
+            errLOsum = nnp.sum(self.ao.tel.extraErrorLoNm)
+            if self.ao.getPSDatNGSpositions and errLOsum >= 0:
                 nLO = len(self.ao.azimuthGsLO)
-                self.psdExtraLo = np.real(self.extraErrorLoPSD())
+                self.psdExtraLo = self.extraErrorLoPSD()
             else:
                 nLO = 0
             for i in range(self.ao.src.nSrc):
-                if self.ao.tel.extraErrorLoNm >= 0 and self.ao.src.nSrc-i <= nLO:
-                    psd[:,:,i] += self.psdExtraLo
+                if nLO > 0 and errLOsum >= 0 and self.ao.src.nSrc-i <= nLO:
+                    if isinstance(self.psdExtraLo, list):
+                        psd[:,:,i] += self.psdExtraLo[i-self.ao.src.nSrc+nLO]
+                    else:
+                        psd[:,:,i] += self.psdExtraLo
                 elif self.ao.tel.extraErrorNm > 0:
                     psd[:,:,i] += self.psdExtra
             
@@ -1043,37 +1047,55 @@ class fourierModel:
         self.t_extra = 1000*(time.time() - tstart)
     
         return np.real(psd)
-    
+
     def extraErrorLoPSD(self):
         """%% extra error for LO
         """
+        tstart = time.time()
 
-        tstart  = time.time()
-    
-        k   = np.sqrt(self.freq.k2_)
-        psd = k**self.ao.tel.extraErrorLoExp
-        pf  = FourierUtils.pistonFilter(self.ao.tel.D,k)
-        psd = psd * pf
-        if self.ao.tel.extraErrorLoMin>0:
-            psd[np.where(k<self.ao.tel.extraErrorLoMin)] = 0
-        if self.ao.tel.extraErrorLoMax>0:
-            psd[np.where(k>self.ao.tel.extraErrorLoMax)] = 0
-        
-        psd = psd * self.ao.tel.extraErrorLoNm**2/np.sum(psd)
-        
-        #fig, ax1 = plt.subplots(1,1)
-        #im = ax1.imshow(np.log(np.abs(psd)), cmap='hot')
-        #ax1.set_title('extra error PSD', color='black') 
-        
-        # Derives wavefront error
-        rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi 
-        
-        psd = psd * 1/rad2nm**2
+        k = np.sqrt(self.freq.k2_)
+        pf = FourierUtils.pistonFilter(self.ao.tel.D, k)
+        rad2nm = (2 * self.freq.kcMax_ / self.freq.resAO) * self.freq.wvlRef * 1e9 / (2 * np.pi)
 
-        self.t_extraLo = 1000*(time.time() - tstart)
-    
-        return np.real(psd)
-    
+        psd = k**self.ao.tel.extraErrorLoExp * pf
+        if self.ao.tel.extraErrorLoMin > 0:
+            psd[k < self.ao.tel.extraErrorLoMin] = 0
+        if self.ao.tel.extraErrorLoMax > 0:
+            psd[k > self.ao.tel.extraErrorLoMax] = 0
+        psd *= 1/np.sum(psd)
+
+        # Check if extraErrorLoExp is a list
+        if isinstance(self.ao.tel.extraErrorLoNm, list):
+            psd_list = []
+            for ii in range(len(self.ao.zenithGsLO)):
+                x = nnp.array([0,self.ao.TechnicalFoV/2])
+                sqrtpower = nnp.interp(self.ao.zenithGsLO[ii], x, nnp.array(self.ao.tel.extraErrorLoNm))
+
+                psdI = psd*sqrtpower**2
+
+                # Derives wavefront error in rad
+                psdI *= 1 / rad2nm**2
+
+                psd_list.append(np.real(psdI))
+
+            result = psd_list  # return a list of 2d arrays
+
+        else:
+            psd *= self.ao.tel.extraErrorLoNm**2
+
+            #fig, ax1 = plt.subplots(1,1)
+            #im = ax1.imshow(np.log(np.abs(psd)), cmap='hot')
+            #ax1.set_title('extra error PSD', color='black')
+
+            # Derives wavefront error in rad
+            psd *= 1 / rad2nm**2
+
+            result = np.real(psd)  # a single 2d array
+
+        self.t_extraLo = 1000 * (time.time() - tstart)
+
+        return result
+
     def TiltFilter(self):
         """%% Spatial filter to remove tilt related errors
         """
