@@ -222,7 +222,7 @@ class aoSystem():
             extraErrorLoMax = self.get_config_value('telescope','extraErrorLoMax')
         else:
             extraErrorLoMax = 0
-            
+
         # ----- class definition     
         self.tel = telescope(self.D, nPup,
                              zenith_angle=zenithAngle,
@@ -242,6 +242,11 @@ class aoSystem():
                              extraErrorLoExp=extraErrorLoExp,
                              extraErrorLoMin=extraErrorLoMin,
                              extraErrorLoMax=extraErrorLoMax)                     
+
+        if self.check_config_key('telescope', 'TechnicalFoV'):
+            self.TechnicalFoV = self.get_config_value('telescope','TechnicalFoV')
+        else:
+            self.TechnicalFoV = 0
 
         #%% ATMOSPHERE
         if not(self.check_section_key('atmosphere')):
