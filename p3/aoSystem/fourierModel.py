@@ -15,17 +15,7 @@ Created on Thu Aug 16 15:00:44 2018
 """
 
 import numpy as nnp
-from . import gpuEnabled
-
-if not gpuEnabled:
-    np = nnp
-    import numpy.fft as fft
-    import scipy.special as spc
-else:
-    import cupy as cp
-    import cupy.fft as fft
-    import cupyx.scipy.special as spc
-    np = cp
+from . import gpuEnabled, np, nnp, fft, spc, cpuArray
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -57,11 +47,6 @@ rad2mas = 3600 * 180 * 1000 / np.pi
 rad2arc = rad2mas / 1000
 deg2rad = np.pi/180
 
-def cpuArray(v):
-    if isinstance(v,nnp.ndarray) or isinstance(v, list):
-        return v
-    else:
-        return v.get()
 
 def besselj__n(n, z):
     if n<0:
@@ -263,17 +248,17 @@ class fourierModel:
     def defineBounds(self):
           
         # Photometry
-        bounds_down = [-np.inf,-np.inf,-np.inf]
-        bounds_up = [np.inf,np.inf,np.inf]
+        bounds_down = [-nnp.inf,-nnp.inf,-nnp.inf]
+        bounds_up = [nnp.inf,nnp.inf,nnp.inf]
         # Photometry
-        bounds_down += np.zeros(self.ao.src.nSrc).tolist()
-        bounds_up += (np.inf*np.ones(self.ao.src.nSrc)).tolist()
+        bounds_down += nnp.zeros(self.ao.src.nSrc).tolist()
+        bounds_up += (nnp.inf*nnp.ones(self.ao.src.nSrc)).tolist()
         # Astrometry
         bounds_down += (-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc)).tolist()
         bounds_up += ( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc)).tolist()
         # Background
-        bounds_down += [-np.inf]
-        bounds_up += [np.inf]
+        bounds_down += [-nnp.inf]
+        bounds_up += [nnp.inf]
         
         return (bounds_down,bounds_up)
       
@@ -407,7 +392,7 @@ class fourierModel:
         to_inv  = np.matmul(np.matmul(MP,self.Cphi_mod),MP_t) + self.Cb 
         
         # Wtomo
-        inv = np.linalg.pinv(to_inv,rcond=1/self.ao.dms.opt_cond)
+        inv = np.linalg.pinv(to_inv.astype(np.complex64),rcond=1/self.ao.dms.opt_cond)
         Wtomo = np.matmul(np.matmul(self.Cphi_mod,MP_t),inv)        
         self.t_tomo = 1000*(time.time() - tstart)
         
@@ -446,7 +431,7 @@ class fourierModel:
             to_inv += np.matmul(Pdm_t,Pdm)*self.ao.dms.opt_weights[d_o]
             
         # Popt
-        mat2 = np.linalg.pinv(to_inv,rcond=1/self.ao.dms.opt_cond)
+        mat2 = np.linalg.pinv(to_inv.astype(np.complex64),rcond=1/self.ao.dms.opt_cond)
         Popt = np.matmul(mat2,mat1)
         
         self.t_opt = 1000*(time.time() - tstart)
@@ -652,7 +637,7 @@ class fourierModel:
         """ 
         
         tstart  = time.time()
-        psd = np.zeros((self.freq.resAO,self.freq.resAO))
+        
         i  = complex(0,1)
         d  = self.ao.wfs.optics[0].dsub
         T  = 1.0/self.ao.rtc.holoop['rate']
@@ -672,12 +657,16 @@ class fourierModel:
         else:
             tf = self.h1
             
+        '''        
+        # old, non vectorized computation, as a refernece
         # loops on frequency shifts
+        psd = np.zeros((self.freq.resAO,self.freq.resAO))
         for mi in range(-self.freq.nTimes,self.freq.nTimes):
             for ni in range(-self.freq.nTimes,self.freq.nTimes):
                 if (mi!=0) | (ni!=0):
                     km   = self.freq.kxAO_ - mi/d
                     kn   = self.freq.kyAO_ - ni/d
+                    print('km', km.shape)
                     PR   = FourierUtils.pistonFilter(self.ao.tel.D,np.hypot(km,kn),fm=mi/d,fn=ni/d)
                     W_mn = (km**2 + kn**2 + 1/self.ao.atm.L0**2)**(-11/6)     
                     Q    = (Rx*km + Ry*kn) * (np.sinc(d*km)*np.sinc(d*kn))
@@ -687,8 +676,57 @@ class fourierModel:
                         avr +=  weights[l] * (np.sinc(km*vx[l]*T) * np.sinc(kn*vy[l]*T)
                         * np.exp(2*i*np.pi*km*vx[l]*td)*np.exp(2*i*np.pi*kn*vy[l]*td)*tf)
                                                           
-                    psd += PR*W_mn * abs(Q*avr)**2
-        
+                    psd0 += PR*W_mn * abs(Q*avr)**2
+        '''
+        # Create grid of frequency shifts
+        mi, ni = np.meshgrid(
+            np.arange(-self.freq.nTimes, self.freq.nTimes),
+            np.arange(-self.freq.nTimes, self.freq.nTimes),
+            indexing="ij"
+        )
+        # Mask to exclude (0,0) shift
+        mask = (mi != 0) | (ni != 0)
+        # Reshape mi and ni for broadcasting
+        mi = mi[:, :, None]  # Shape (N, N, 1)
+        ni = ni[:, :, None]  # Shape (N, N, 1)
+        # Ensure kxAO_ and kyAO_ are 1D
+        kxAO = self.freq.kxAO_.ravel()  # Shape (K,)
+        kyAO = self.freq.kyAO_.ravel()  # Shape (K,)
+        # Broadcast km and kn correctly
+        km = kxAO[None, None, :] - mi / d  # Shape (N, N, K)
+        kn = kyAO[None, None, :] - ni / d  # Shape (N, N, K)
+        NN = Rx.shape
+        # Compute PR using vectorized function
+        PR = FourierUtils.pistonFilter(self.ao.tel.D, np.hypot(km, kn), fm=mi[:, :, None] / d, fn=ni[:, :, None] / d)
+        # Compute W_mn
+        W_mn = (km**2 + kn**2 + 1 / self.ao.atm.L0**2) ** (-11 / 6)
+        # Ensure Rx and Ry are 1D (flatten if needed)
+        Rx = Rx.ravel()  # Shape (K,)
+        Ry = Ry.ravel()  # Shape (K,)
+        # Ensure Rx and Ry are reshaped correctly for broadcasting
+        Rx = Rx[None, None, :]  # Shape (1, 1, K)
+        Ry = Ry[None, None, :]  # Shape (1, 1, K)
+        # Compute Q factor
+        Q = (Rx * km + Ry * kn) * (np.sinc(d * km) * np.sinc(d * kn))
+        # Compute avr using broadcasting
+        vx_exp = vx.ravel()
+        vy_exp = vy.ravel()
+        vx_exp = vx_exp[:, None, None, None]  # Shape (nL, 1, 1, 1)
+        vy_exp = vy_exp[:, None, None, None]  # Shape (nL, 1, 1, 1)
+        vx_exp = np.asarray(vx_exp)
+        vy_exp = np.asarray(vy_exp)
+        f1 = km * vx_exp * T
+        f2 = km * vx_exp * T
+        f3 = 2j * np.pi * km * vx_exp * td
+        f4 = 2j * np.pi * kn * vy_exp * td
+        # Ensure tf is correctly shaped for broadcasting
+        tf = np.asarray(tf.ravel()[None, None, None, :]) # Shape (1, 1, K)
+        avr = np.sum( np.asarray(weights[:, None, None, None]) * (np.sinc(f1) * np.sinc(f2) * np.exp(f3) * np.exp(f4) * tf), axis=0 )
+        # Compute final PSD
+        psd = np.sum(PR * W_mn * np.abs(Q * avr) ** 2 * mask[:, :, None], axis=(0, 1))
+        psd = np.reshape(psd, NN)
+#        test agaist old, non-vectorize computation
+#        print("Is PSD the same as old computation?", np.allclose(psd0, psd2,  rtol=1e-04, atol=1e-04))
         self.t_aliasingPSD = 1000*(time.time() - tstart)
         return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3)*0.0229 
     
@@ -1503,3 +1541,8 @@ class fourierModel:
 
             if self.calcPSF:
                 print("Required time for all PSFs calculation (ms)\t : {:f}".format(self.t_getPSF))
+
+import pathlib
+file_ini0 = str(pathlib.Path(__file__).parent.parent.parent.resolve()) + '/data/dummy.ini'
+print(file_ini0)
+faoDummy = fourierModel(path_ini=file_ini0, calcPSF=False, verbose=False, display=False, path_root="", doComputations=True)

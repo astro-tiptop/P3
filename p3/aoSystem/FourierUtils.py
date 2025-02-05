@@ -7,34 +7,13 @@ Created on Wed Jun 17 01:17:43 2020
 
 # Libraries
 import numpy as nnp
-from . import gpuEnabled
-
-if not gpuEnabled:
-    np = nnp
-    import scipy.interpolate as interp        
-    import scipy.ndimage as scnd
-    import scipy.special as ssp
-    import numpy.fft as fft
-else:
-    import cupy as cp
-    import scipy.interpolate as interp        
-    import cupyx.scipy.ndimage as scnd
-    import cupyx.scipy.special as ssp
-    import cupy.fft as fft
-    import scipy.special as spc
-    np = cp
+from . import gpuEnabled, np, nnp, RectBivariateSpline, fft, spc, cpuArray
 
 import matplotlib.pyplot as plt
 from astropy.modeling import models, fitting
 import matplotlib as mpl
 
 from matplotlib.path import Path
-
-def cpuArray(v):
-    if isinstance(v,nnp.ndarray) or isinstance(v, list):
-        return v
-    else:
-        return v.get()
 
 #%%  FOURIER TOOLS
 
@@ -193,8 +172,7 @@ def pistonFilter(D,f,fm=0,fn=0):
     #out[idx]    = spc.j1(F[idx])/F[idx]
     R         = sombrero(1,F)      
     pFilter   =  1 - 4 * R**2
-    if np.min(pFilter)<0:
-        pFilter[np.where(pFilter<0)] = 0
+    pFilter[np.where(pFilter<0)] = 0
 
     return pFilter
              
@@ -244,7 +222,7 @@ def shift_array(nX,nY,fact=2*np.pi*complex(0,1)):
 def sombrero(n,x):
     x = np.asarray(x)
     if n==0:
-        return ssp.jv(0,x)/x
+        return spc.jv(0,x)/x
     else:
         if n>1:
             out = np.zeros(x.shape)
@@ -253,7 +231,7 @@ def sombrero(n,x):
             
         out = np.zeros_like(x)
         idx = x!=0
-        out[idx] = ssp.j1(x[idx])/x[idx]
+        out[idx] = spc.j1(x[idx])/x[idx]
         return out
                  
 def telescopeOtf(pupil,samp):    
@@ -492,22 +470,22 @@ def interpolateSupport(image,nRes,kind='spline'):
             xin = np.real(image)
             if gpuEnabled:
                 xin = xin.get()
-            fun_real = interp.RectBivariateSpline(vinit, uinit, xin)
+            fun_real = RectBivariateSpline(vinit, uinit, xin)
             if np.any(np.iscomplex(image)):
                 xin = np.imag(image)
                 if gpuEnabled:
                     xin = xin.get()
-                fun_imag = interp.RectBivariateSpline(vinit, uinit, xin)
+                fun_imag = RectBivariateSpline(vinit, uinit, xin)
         else:
             xin = np.real(image)
             if gpuEnabled:
                 xin = xin.get()
-            fun_real = interp.RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
+            fun_real = RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
             if np.any(np.iscomplex(image)):
                 xin = np.imag(image)
                 if gpuEnabled:
                     xin = xin.get()
-                fun_imag = interp.RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
+                fun_imag = RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
     
         if np.any(np.iscomplex(image)):
             return np.asarray(fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew))

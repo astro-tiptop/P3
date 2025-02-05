@@ -6,15 +6,7 @@ Created on Thu Aug 16 16:34:02 2018
 @author: omartin
 """
 import numpy as nnp
-from . import gpuEnabled
-
-if not gpuEnabled:
-    np = nnp
-    from scipy.ndimage import rotate
-else:
-    import cupy as cp
-    np = cp
-    from cupyx.scipy.ndimage import rotate
+from . import gpuEnabled, cp, np, nnp, rotate
 
 from astropy.io import fits
 import os.path as ospath
@@ -101,14 +93,14 @@ class telescope:
             self.pupil = pupil
         else:
             # build an annular pupil model
-            th  = self.pupilAngle*np.pi/180
-            x   = np.linspace(-D/2,D/2,resolution)
-            X,Y = np.meshgrid(x,x)
-            Xr  = X*np.cos(th) + Y*np.sin(th)
-            Yr  = Y*np.cos(th) - X*np.sin(th)
-            R   = np.hypot(Xr,Yr)
+            th  = self.pupilAngle*nnp.pi/180
+            x   = nnp.linspace(-D/2,D/2,resolution)
+            X,Y = nnp.meshgrid(x,x)
+            Xr  = X*nnp.cos(th) + Y*nnp.sin(th)
+            Yr  = Y*nnp.cos(th) - X*nnp.sin(th)
+            R   = nnp.hypot(Xr,Yr)
             P   = (R <= self.R) * (R > self.R*self.obsRatio)
-            self.pupil = P
+            self.pupil = np.asarray(P)
             self.verb = False
             self.path_pupil= ''
     
