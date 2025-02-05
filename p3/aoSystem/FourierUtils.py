@@ -785,7 +785,7 @@ def radial_profile(image,ext=0,pixelscale=1,ee=False,center=None,stddev=False,bi
         so you should use (radius+binsize/2) for the radius of the EE curve if you want to be
         as precise as possible.
     """
-        
+
     if normalize.lower() == 'peak':
         if verbose:
             print("Calculating profile with PSF normalized to peak = 1")
@@ -810,6 +810,7 @@ def radial_profile(image,ext=0,pixelscale=1,ee=False,center=None,stddev=False,bi
 
     r = nnp.sqrt(x ** 2 + y ** 2) * pixelscale / binsize  # radius in bin size steps
 
+    image = cpuArray(image)
     if pa_range is None:
         # Use full image
         ind = nnp.argsort(r.flat)
@@ -919,9 +920,9 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     #Interpolation            
     Ny,Nx = psf.shape
     if rebin > 1:
-        im_hr = nnp.asarray(cpuArray(interpolateSupport(psf,rebin*nnp.array([Nx,Ny]))))
+        im_hr = cpuArray(interpolateSupport(psf,rebin*nnp.array([Nx,Ny])))
     else:
-        im_hr = nnp.asarray(psf)
+        im_hr = cpuArray(psf)
         
     ss = im_hr.shape
     sbx, sby = [[0,ss[1]],[0,ss[0]]]
