@@ -8,15 +8,9 @@ Created on Mon Apr 19 11:34:44 2021
 
 # IMPORTING PYTHON LIBRAIRIES
 import numpy as nnp
-from . import gpuEnabled
+from . import gpuEnabled, cp, np, nnp
 
-if not gpuEnabled:
-    np = nnp
-else:
-    import cupy as cp
-    np = cp
-
-import p3.aoSystem.FourierUtils as FourierUtils
+from p3.aoSystem.FourierUtils import *
 from p3.aoSystem.anisoplanatismModel import anisoplanatism_structure_function
 import time
 
@@ -26,10 +20,6 @@ rad2arc = rad2mas / 1000
 
 class frequencyDomain():
     
-
-
-
-
     # CUT-OFF FREQUENCY
     @property
     def pitch(self):
@@ -52,9 +42,9 @@ class frequencyDomain():
         # ---- SPATIAL FREQUENCY DOMAIN OF THE AO-CORRECTED AREA
         #import pdb
         #pdb.set_trace()
-        self.kxAO_,self.kyAO_ = FourierUtils.freq_array(self.resAO,offset=1e-10,L=self.PSDstep)
+        self.kxAO_,self.kyAO_ = freq_array(self.resAO,offset=1e-10,L=self.PSDstep)
         self.k2AO_            = self.kxAO_**2 + self.kyAO_**2   
-        self.pistonFilterAO_  = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2AO_))
+        self.pistonFilterAO_  = pistonFilter(self.ao.tel.D,np.sqrt(self.k2AO_))
         self.pistonFilterAO_[self.resAO//2,self.resAO//2] = 0
         # ---- DEFINING MASKS
         if self.ao.dms.AoArea == 'circle':
@@ -76,7 +66,7 @@ class frequencyDomain():
     def kcInMas(self):
         """DM cut-of frequency"""
         radian2mas = 180*3600*1e3/np.pi
-        return self.kc_*self.ao.atm.wvl*radian2mas
+        return self.kc_*np.asarray(self.ao.atm.wvl)*radian2mas
     
     @property
     def nTimes(self):
@@ -114,7 +104,7 @@ class frequencyDomain():
         if self.wvl_.shape[0] > 1:
             self.wvlRef = nnp.min(self.wvl_)
         else:
-            self.wvlRef = self.wvl_
+            self.wvlRef = self.wvl_[0]
 
         if self.nyquistSampling == True:
             self.psInMas    = rad2mas*self.wvl/self.ao.tel.D/2
@@ -126,9 +116,9 @@ class frequencyDomain():
         else:
             self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl)
             self.psInMasCen = self.ao.cam.psInMas * np.ones(self.nWvlCen)
-            samp  = self.wvl* rad2mas* 1/(self.psInMas*self.ao.tel.D)
-            sampCen  = self.wvlCen* rad2mas * 1/(self.psInMasCen*self.ao.tel.D)
-            sampRef  = self.wvlRef* rad2mas * 1/(self.psInMas[0]*self.ao.tel.D)
+            samp  = self.wvl* rad2mas / (self.psInMas*self.ao.tel.D)
+            sampCen  = self.wvlCen * rad2mas / (self.psInMasCen*self.ao.tel.D)
+            sampRef  = np.asarray(self.wvlRef * rad2mas) / np.asarray(self.psInMas[0]*self.ao.tel.D)
 
         self.k_      = np.ceil(2.0/samp).astype('int') # works for oversampling
         self.samp = self.k_ * samp
@@ -149,10 +139,10 @@ class frequencyDomain():
         self.PSDstep = np.asarray(PSDstep)
 
         #  ---- FULL DOMAIN OF FREQUENCY
-        self.kx_,self.ky_ = FourierUtils.freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
+        self.kx_,self.ky_ = freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
         self.k2_          = self.kx_**2 + self.ky_**2
         #piston filtering        
-        self.pistonFilter_ = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
+        self.pistonFilter_ = pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
         self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
 
 
@@ -163,10 +153,10 @@ class frequencyDomain():
                 
         # DEFINING THE DOMAIN ANGULAR FREQUENCIES
         t0 = time.time()
-        self.U_, self.V_, self.U2_, self.V2_, self.UV_=  FourierUtils.instantiateAngularFrequencies(self.nOtf,fact=2)
+        self.U_, self.V_, self.U2_, self.V2_, self.UV_=  instantiateAngularFrequencies(self.nOtf,fact=2)
               
         # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
-        self.otfNCPA, self.otfDL, self.phaseMap = FourierUtils.getStaticOTF(self.ao.tel,self.nOtf,self.sampRef,self.wvlRef)
+        self.otfNCPA, self.otfDL, self.phaseMap = getStaticOTF(self.ao.tel,self.nOtf,self.sampRef,self.wvlRef)
         self.totf = 1000*(time.time()-t0)
         
         # ANISOPLANATISM PHASE STRUCTURE FUNCTION
@@ -202,7 +192,7 @@ class frequencyDomain():
             return None
         elif self.ao.aoMode == 'SCAO':
             # NGS case : angular-anisoplanatism only              
-            if np.all(np.equal(np.asarray(self.ao.src.direction), np.asarray(self.ao.ngs.direction))):
+            if nnp.all(nnp.equal(nnp.asarray(self.ao.src.direction), nnp.asarray(self.ao.ngs.direction))):
                 self.isAniso = False
                 return None
             else:
