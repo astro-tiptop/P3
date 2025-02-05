@@ -1522,5 +1522,4 @@ class fourierModel:
 
 import pathlib
 file_ini0 = str(pathlib.Path(__file__).parent.parent.parent.resolve()) + '/data/dummy.ini'
-print(file_ini0)
 faoDummy = fourierModel(path_ini=file_ini0, calcPSF=False, verbose=False, display=False, path_root="", doComputations=True)
