@@ -136,7 +136,6 @@ class telescope:
             self.path_static_pos= ''
             
         #----- APODIZER
-        print(path_apodizer)
         if path_apodizer!= '' and ospath.isfile(path_apodizer) and re.search(".fits",path_apodizer)!=None:
             self.apodizer = np.asarray(fits.getdata(path_apodizer))
             self.apodizer[self.apodizer!=self.apodizer] = 0
