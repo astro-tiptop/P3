@@ -786,7 +786,6 @@ def radial_profile(image,ext=0,pixelscale=1,ee=False,center=None,stddev=False,bi
         as precise as possible.
     """
 
-
     if normalize.lower() == 'peak':
         if verbose:
             print("Calculating profile with PSF normalized to peak = 1")
