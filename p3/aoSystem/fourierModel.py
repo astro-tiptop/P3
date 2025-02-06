@@ -1599,5 +1599,5 @@ class fourierModel:
                 print("Required time for all PSFs calculation (ms)\t : {:f}".format(self.t_getPSF))
 
 import pathlib
-file_ini0 = str(pathlib.Path(__file__).parent.parent.parent.resolve()) + '/data/dummy.ini'
+file_ini0 = str(pathlib.Path(__file__).resolve().parent.parent.parent) + '/data/dummy.ini'
 faoDummy = fourierModel(path_ini=file_ini0, calcPSF=False, verbose=False, display=False, path_root="", doComputations=True)
