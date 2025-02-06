@@ -14,6 +14,7 @@ from astropy.modeling import models, fitting
 import matplotlib as mpl
 
 from matplotlib.path import Path
+from scipy.interpolate import interp1d
 
 #%%  FOURIER TOOLS
 
@@ -910,6 +911,29 @@ def getMSE(xtrue,xest,nbox=0,norm='L2'):
         print('The input norm={:s} is not recognized, choose L1 or L2'.format(norm))
         return []
 
+def fwhm_1d(profile):
+    """ FWHM of 1D profile """
+    max_val = profile.max()
+    half_max = max_val / 2
+    
+    # Find indices where the profile exceeds half the height
+    indices = nnp.where(profile >= half_max)[0]
+    
+    if len(indices) < 2:
+        return -1  # Error: not enough points above half height
+    
+    # Points at the left and right edges of the region above the threshold
+    left, right = indices[0], indices[-1]
+    
+    # Interpolation to obtain a more precise estimate
+    f = interp1d(profile[left-1:left+2], [left-1, left, left+1], kind='linear', bounds_error=False, fill_value="extrapolate")
+    x1 = f(half_max)
+
+    f = interp1d(profile[right-1:right+2], [right-1, right, right+1], kind='linear', bounds_error=False, fill_value="extrapolate")
+    x2 = f(half_max)
+    
+    return abs(x2 - x1)  # Distance between the two points FWHM
+
 def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_guess=2):
             
     # Gaussian and Moffat fitting are not really efficient on
@@ -935,18 +959,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     x_peak += x00
     y_peak += y00
     
-    if method == 'cutting':
-        # Brutal approach when the PSF is centered and aligned x-axis FWHM
-        imx     = im_hr[:,y_peak]
-        wx      = nnp.where(imx >= imx.max()/2)[0]
-        FWHMx   = (wx.max() - wx.min())/rebin*pixelScale
-        #y-axis FWHM
-        imy     = im_hr[x_peak,:]
-        wy      = nnp.where(imy >= imy.max()/2)[1]
-        FWHMy   = (wy.max() - wy.min())/rebin*pixelScale
-        theta   = 0
-
-    elif method == 'contour':
+    if method == 'contour':
         # Contour approach~: something wrong about the ellipse orientation
         mpl.interactive(False)
         try:
@@ -973,10 +986,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
             ym      = wy[wr.argmax()]
             theta   = nnp.mean(180*nnp.arctan2(ym,xm)/np.pi)
         except:
-            FWHMx = -1 
-            FWHMy = -1 
-            aRatio= -1
-            theta = -1
+            method = 'cutting'
         mpl.interactive(True)   
     elif method == 'gaussian':
         # initial guess of the FWHM
@@ -1010,7 +1020,18 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
         FWHMx = g.fwhm*pixelScale
         FWHMy = g.fwhm*pixelScale
         theta   = 0
-        
+    
+    if method == 'cutting':
+        # X and Y profiles passing through the max
+        y_max, x_max = nnp.unravel_index(np.argmax(im_hr), im_hr.shape)
+        profile_x = im_hr[y_max, :]
+        profile_y = im_hr[:, x_max]
+
+        # X and Y FWHM
+        FWHMx = fwhm_1d(profile_x) * pixelScale / rebin
+        FWHMy = fwhm_1d(profile_y) * pixelScale / rebin
+        theta   = 0
+    
     # Get Ellipticity
     aRatio      = nnp.max([FWHMx/FWHMy,FWHMy/FWHMx])
     
