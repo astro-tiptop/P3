@@ -112,6 +112,7 @@ class fourierModel:
         self.t_aliasingPSD = 0
         self.t_noisePSD = 0
         self.t_spatioTemporalPSD = 0
+        self.t_windShakePSD = 0
         self.t_focalAnisoplanatism = 0
         self.t_errorBreakDown = 0
         self.t_getPsfMetrics = 0
@@ -588,6 +589,11 @@ class fourierModel:
             self.psdFit = np.real(self.fittingPSD())
             psd += np.repeat(self.psdFit[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
             
+            # wind shake / vibrations
+            if self.applyTiltFilter is False and self.ao.windPsdFile != 0:
+                self.psdVib = self.windShakePSD()
+                psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + np.repeat(self.psdVib[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
+            
             # Tilt filter
             if self.applyTiltFilter == True:
                 tiltFilter = self.TiltFilter()                      
@@ -784,6 +790,49 @@ class fourierModel:
             psd = (1.0 + abs(F)**2*self.h2 - 2*np.real(F*self.h1))*Watm
         
         self.t_servoLagPSD = 1000*(time.time() - tstart)
+        return self.freq.mskInAO_ * abs(psd)
+    
+    def windShakePSD(self):
+        """ wind shake / vibrations power spectrum density.
+        """
+        tstart  = time.time()    
+        psd = np.zeros((self.freq.resAO,self.freq.resAO))     
+    
+        Wtilt1 = 1-self.TiltFilter() 
+        # AO correction area
+        id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
+        id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
+        Wtilt1 = Wtilt1[id1:id2,id1:id2] * self.freq.pistonFilterAO_ 
+        Wtilt1 *= 1/np.sum(Wtilt1)  
+
+        # wind-shake PSD
+        from astropy.io import fits
+        hdul = fits.open(self.ao.windPsdFile)
+        psd_data = np.asarray(hdul[0].data, np.float32)
+        hdul.close()
+        psd_freq = np.asarray(np.linspace(0.1, 0.5*self.ao.rtc.holoop['rate'], int(5*self.ao.rtc.holoop['rate'])))
+        psd_tip_wind = np.interp(psd_freq, psd_data[0,:], psd_data[1,:],left=0,right=0)
+        psd_tilt_wind = np.interp(psd_freq, psd_data[0,:], psd_data[2,:],left=0,right=0)
+
+        #rejection transfer function
+        ic      = complex(0,1)
+        z       = np.exp(-2*ic*np.pi/self.ao.rtc.holoop['rate']*psd_freq)
+        hInt    = self.ao.rtc.holoop['gain']/(1.0 - z**(-1.0))
+        rtfInt  = 1.0/(1.0 + hInt * z**(-self.ao.rtc.holoop['delay']))
+        
+        #fig, _ = plt.subplots()
+        #plt.loglog(psd_freq,np.abs(rtfInt))
+        #fig, _ = plt.subplots()
+        #plt.loglog(psd_freq,psd_tip_wind)
+        #plt.loglog(psd_freq,np.abs(rtfInt**2*psd_tip_wind))
+        
+        power = np.abs(np.sum(rtfInt**2*(psd_tip_wind+psd_tilt_wind))*(psd_freq[1]-psd_freq[0]))       
+        rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
+        power *= 1/rad2nm**2
+        
+        psd[:,:] = power*Wtilt1 
+        
+        self.t_windShakePSD = 1000*(time.time() - tstart)
         return self.freq.mskInAO_ * abs(psd)
     
     def spatioTemporalPSD(self):
@@ -1199,13 +1248,17 @@ class fourierModel:
                 self.wfeMcaoCone = np.sqrt(self.psdMcaoWFsensCone[:,:,0].sum())* rad2nm
             else:
                 self.wfeMcaoCone = 0
+            if self.applyTiltFilter is False and self.ao.windPsdFile != 0:
+                self.wfeWindShake = np.sqrt(self.psdVib.sum())* rad2nm
+            else:
+                self.wfeWindShake = 0
             self.wfeExtra  = self.ao.tel.extraErrorNm
             
             # Total wavefront error
             self.wfeTot = np.sqrt(self.wfeNCPA**2 + self.wfeFit**2 + self.wfeAl**2\
                                   + self.wfeST**2 + self.wfeN**2 + self.wfeDiffRef**2\
                                   + self.wfeChrom**2 + self.wfeJitter**2 + self.wfeMcaoCone**2\
-                                  + self.wfeExtra**2)
+                                  + self.wfeWindShake**2 + self.wfeExtra**2)
             
             # Maréchal appoximation to get the Strehl-ratio
             self.SRmar  = 100*np.exp(-(self.wfeTot*2*np.pi*1e-9/self.freq.wvlRef)**2)
@@ -1239,6 +1292,7 @@ class fourierModel:
                 else:
                     print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[idCenter])
                 print('.Spatio-temporal error:\t\t%4.2fnm'%self.wfeST[idCenter])
+                print('.Wind-shake error:\t\t%4.2fnm'%self.wfeWindShake)
                 print('.Additionnal jitter:\t\t%4.2fmas / %4.2fnm'%(nnp.mean(self.ao.cam.spotFWHM[0][0:2]),self.wfeJitter))
                 if self.ao.addMcaoWFsensConeError:
                     print('.Mcao Cone:\t\t\t%4.2fnm'%self.wfeMcaoCone)
@@ -1514,6 +1568,8 @@ class fourierModel:
                     print("Required time for noise PSD calculation (ms)\t : {:f}".format(self.t_noisePSD))
                 if self.t_spatioTemporalPSD > 0:
                     print("Required time for ST PSD calculation (ms)\t : {:f}".format(self.t_spatioTemporalPSD))
+                if self.t_windShakePSD > 0:
+                    print("Required time for wind shake calculation (ms)\t : {:f}".format(self.t_windShakePSD))
                 if self.t_focalAnisoplanatism > 0:
                     print("Required time for focal Aniso PSD calc. (ms)\t : {:f}".format(self.t_focalAnisoplanatism))
                 if self.t_mcaoWFsensCone > 0:
