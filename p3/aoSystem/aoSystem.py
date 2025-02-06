@@ -57,7 +57,7 @@ class aoSystem():
         self.error = False
         # verify if the file exists
         if ospath.isfile(path_config) == False:
-            raise ValueError('The parameter file (.ini or .yml) could not be found.')
+            raise ValueError('The parameter file (.ini or .yml) could not be found.' + str(path_config))
                 
         if path_config[-4::]=='.ini':
             # open the .ini file
