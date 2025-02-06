@@ -247,6 +247,11 @@ class aoSystem():
             self.TechnicalFoV = self.get_config_value('telescope','TechnicalFoV')
         else:
             self.TechnicalFoV = 0
+            
+        if self.check_config_key('telescope', 'windPsdFile'):
+            self.windPsdFile = self.get_config_value('telescope','windPsdFile')
+        else:
+            self.windPsdFile = 0
 
         #%% ATMOSPHERE
         if not(self.check_section_key('atmosphere')):
