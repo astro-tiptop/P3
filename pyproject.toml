@@ -23,7 +23,6 @@ dynamic = ["version"]
 
 [tool.setuptools.packages.find]
 namespaces = true
-exclude = ["data"]
 
 [tool.setuptools_scm]
 write_to = "p3/_version.py"
