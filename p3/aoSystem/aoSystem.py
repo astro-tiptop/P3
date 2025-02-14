@@ -51,9 +51,11 @@ class aoSystem():
     def get_config_value(self, primary, secondary):
         return self.my_data_map[primary][secondary]
     
-    def __init__(self,path_config,path_root='',nLayer=None,getPSDatNGSpositions=False,coo_stars=None):
+    def __init__(self,path_config,path_root='',nLayer=None,getPSDatNGSpositions=False,
+                PSDexpansion=False,coo_stars=None):
 
         self.coo_stars = coo_stars
+        self.PSDexpansion = PSDexpansion
         self.error = False
         # verify if the file exists
         if ospath.isfile(path_config) == False:
@@ -661,6 +663,8 @@ class aoSystem():
         
         if self.check_config_key('sensor_science','FieldOfView'):
             fov = self.get_config_value('sensor_science','FieldOfView')
+            if self.PSDexpansion and len(wvlSrc) > 1:
+                fov = int(np.ceil(fov * max(wvlSrc)/min(wvlSrc)/2)*2)
         else:
             self.raiseMissingRequiredOpt('sensor_science', 'FieldOfView')
         
