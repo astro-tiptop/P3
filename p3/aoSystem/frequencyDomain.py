@@ -133,7 +133,10 @@ class frequencyDomain():
             idxPmin = 0
         self.PSDstep = np.asarray(PSDsteps[idxPmin])
 
-        self.kRef_   = int(self.k_[idxPmin]) # works for oversampling
+        if self.ao.PSDexpansion:
+            self.kRef_   = int(self.k_[idxPmin]) # works for oversampling
+        else:
+            self.kRef_   = int(self.k_[idxWmin]) # works for oversampling
         self.sampRef = self.kRef_ * sampRef
 
         self.nOtf    = self.nPix * self.kRef_
