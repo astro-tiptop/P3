@@ -844,9 +844,7 @@ def radial_profile(image,ext=0,pixelscale=1,ee=False,center=None,stddev=False,bi
         radialprofile2[0] = csim[0]  # otherwise if there's just one then just take it.
     radialprofile2[1:] = radialprofile
 
-    rr = nnp.arange(ri.min(), ri.min()+len(radialprofile2)) * binsize + binsize * 0.5  # these should be centered in the bins, so add a half.
-
-
+    rr = nnp.arange(r.min(), r.min()+len(radialprofile2)) * binsize
     if maxradius is not None:
         crop = rr < maxradius
         rr = rr[crop]
