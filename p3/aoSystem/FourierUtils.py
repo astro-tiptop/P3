@@ -871,6 +871,7 @@ def radial_profile(image,ext=0,pixelscale=1,ee=False,center=None,stddev=False,bi
         return rr, radialprofile2
     else:
         ee = csim[rind]
+        ee /= nnp.max(ee)
         return rr, radialprofile2, ee
     
             

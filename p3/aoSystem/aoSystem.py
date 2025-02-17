@@ -664,7 +664,7 @@ class aoSystem():
         if self.check_config_key('sensor_science','FieldOfView'):
             fov = self.get_config_value('sensor_science','FieldOfView')
             if self.PSDexpansion and len(wvlSrc) > 1:
-                fov = int(np.ceil(fov * max(wvlSrc)/min(wvlSrc)/2)*2)
+                fov = int(fov * np.ceil(max(wvlSrc)/min(wvlSrc)))
         else:
             self.raiseMissingRequiredOpt('sensor_science', 'FieldOfView')
         
