@@ -121,13 +121,13 @@ def mcDonald(x):
 def Ialpha(x,y):
     return mcDonald(np.hypot(x,y))
 
-def otf2psf(otf):        
+def otf2psf(otf,psfInOnePixel=False):
     nX,nY   = otf.shape
     u1d     = fft.fftshift(fft.fftfreq(nX))
     v1d     = fft.fftshift(fft.fftfreq(nY))
     u2d,v2d = np.meshgrid(u1d,v1d)
     
-    if nX%2 == 0:
+    if nX%2 == 0 and psfInOnePixel==False:
         fftPhasor = np.exp(1*complex(0,1)*np.pi*(u2d+v2d))
     else:
         fftPhasor = 1
@@ -933,6 +933,91 @@ def fwhm_1d(profile):
     
     return abs(x2 - x1)  # Distance between the two points FWHM
 
+from scipy import ndimage
+def find_contour_points_fast(image, level):
+    """
+    Find contour points using radial interpolation from peak.
+    """
+    # Find the peak position
+    peak_y, peak_x = nnp.unravel_index(nnp.argmax(image), image.shape)
+    peak_val = image[peak_y, peak_x]
+
+    # Find points above threshold
+    above_threshold = image > level
+
+    # Find boundary points
+    kernel = nnp.array([[0,1,0], [1,1,1], [0,1,0]], dtype=bool)
+    dilated = ndimage.binary_dilation(above_threshold, kernel)
+    boundary_points = dilated & ~above_threshold
+
+    # Get coordinates of boundary points
+    boundary_y, boundary_x = nnp.where(boundary_points)
+
+    # Calculate distance from peak for each boundary point
+    distances = nnp.sqrt((boundary_y - peak_y)**2 + (boundary_x - peak_x)**2)
+
+    contour_points = []
+
+    # Get coordinates of above-threshold points
+    above_y, above_x = nnp.where(above_threshold)
+
+    # Per ogni punto di confine
+    for x, y, d in zip(boundary_x, boundary_y, distances):
+        # Trova i punti sopra soglia più vicini
+        dists_to_above = nnp.sqrt((above_y - y)**2 + (above_x - x)**2)
+        nearest_indices = nnp.argpartition(dists_to_above, 4)[:4]
+
+        # Calcola le distanze dal picco per questi punti
+        nearest_points = nnp.column_stack((above_x[nearest_indices], above_y[nearest_indices]))
+        dists_from_peak = nnp.sqrt(nnp.sum((nearest_points - [peak_x, peak_y])**2, axis=1))
+
+        # Prendi il punto più lontano dal picco
+        farthest_idx = nnp.argmax(dists_from_peak)
+        far_point = nearest_points[farthest_idx]
+        far_val = float(image[int(far_point[1]), int(far_point[0])])
+
+        # Punto corrente (sul bordo)
+        curr_val = float(image[y, x])
+
+        # Vettore direzione dal picco al punto più lontano
+        direction = nnp.array([far_point[0] - peak_x, far_point[1] - peak_y])
+        direction_norm = nnp.sqrt(nnp.sum(direction**2))
+        direction = direction / direction_norm if direction_norm > 0 else direction
+
+        # Interpolazione lungo la semiretta
+        if curr_val < level < far_val:
+            # Calcola il parametro di interpolazione
+            t = (level - curr_val)/(far_val - curr_val)
+
+            # Distanza dal picco al punto corrente
+            curr_dist = nnp.sqrt((x - peak_x)**2 + (y - peak_y)**2)
+            # Distanza dal picco al punto sopra soglia
+            far_dist = nnp.sqrt(nnp.sum((far_point - [peak_x, peak_y])**2))
+
+            # Interpolazione della distanza
+            interp_dist = curr_dist + t * (far_dist - curr_dist)
+
+            # Calcola il punto del contorno
+            px = peak_x + direction[0] * interp_dist
+            py = peak_y + direction[1] * interp_dist
+
+            contour_points.append([px, py])
+
+    if not contour_points:
+        raise ValueError("No contour points found")
+
+    contour_points = nnp.array(contour_points)
+
+    # Filter outliers
+    distances_from_peak = nnp.sqrt(nnp.sum((contour_points - [peak_x, peak_y])**2, axis=1))
+    med_distance = nnp.median(distances_from_peak)
+    std_distance = nnp.std(distances_from_peak)
+    mask = nnp.abs(distances_from_peak - med_distance) < 2 * std_distance
+    contour_points = contour_points[mask]
+
+    return contour_points
+
+
 def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_guess=2):
             
     # Gaussian and Moffat fitting are not really efficient on
@@ -986,7 +1071,35 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
             theta   = nnp.mean(180*nnp.arctan2(ym,xm)/np.pi)
         except:
             method = 'cutting'
-        mpl.interactive(True)   
+        mpl.interactive(True)
+    elif method == 'contour2':
+        # Find contour points at half maximum
+        contour_points = find_contour_points_fast(im_hr, peak_val/2)
+
+        if len(contour_points) < 3:  # Need at least 3 points for meaningful analysis
+            raise ValueError("Not enough contour points found")
+
+        xC = contour_points[:, 0]
+        yC = contour_points[:, 1]
+
+        # Centering the ellipse
+        mx = nnp.array([xC.max(), yC.max()])
+        mn = nnp.array([xC.min(), yC.min()])
+        cent = (mx + mn)/2
+        wx = xC - cent[0]
+        wy = yC - cent[1]
+
+        # Get the module
+        wr = nnp.hypot(wx, wy)/rebin*pixelScale
+
+        # Getting the FWHM
+        FWHMx = 2*wr.max()
+        FWHMy = 2*wr.min()
+
+        # Getting the ellipse orientation
+        xm = wx[wr.argmax()]
+        ym = wy[wr.argmax()]
+        theta = nnp.mean(180*nnp.arctan2(ym, xm)/nnp.pi)
     elif method == 'gaussian':
         # initial guess of the FWHM
         fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
@@ -1043,7 +1156,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     elif nargout == 4:
         return FWHMx,FWHMy,aRatio,theta
 
-def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf'):
+def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePixel=False):
     if recentering:    
         psf = centerPsf(psf0,2)
     else:
@@ -1062,7 +1175,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf'):
         # Get the Strehl
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
-        psfDL  = otf2psf(otfDL)
+        psfDL  = otf2psf(otfDL,psfInOnePixel=psfInOnePixel)
         psfDL[psfDL<0]  =0
         psfDL *= 1/psfDL.sum()
         psf[psf<0]  =0
