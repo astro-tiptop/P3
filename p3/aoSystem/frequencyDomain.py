@@ -94,7 +94,6 @@ class frequencyDomain():
         t0 = time.time()
 
         self.nPix   = self.ao.cam.fovInPix
-       
         
         self.nyquistSampling = nyquistSampling
 
@@ -102,9 +101,10 @@ class frequencyDomain():
 
         self.wvlCen = np.asarray(wvlCen_)
         if self.wvl_.shape[0] > 1:
-            self.wvlRef = nnp.min(self.wvl_)
+            idxWmin = nnp.argmin(self.wvl_)
         else:
-            self.wvlRef = self.wvl_[0]
+            idxWmin = 0
+        self.wvlRef = self.wvl_[idxWmin]
 
         if self.nyquistSampling == True:
             self.psInMas    = rad2mas*self.wvl/self.ao.tel.D/2
@@ -121,22 +121,25 @@ class frequencyDomain():
             sampRef  = np.asarray(self.wvlRef * rad2mas) / np.asarray(self.psInMas[0]*self.ao.tel.D)
 
         self.k_      = np.ceil(2.0/samp).astype('int') # works for oversampling
-        self.samp = self.k_ * samp
+        self.samp    = self.k_ * samp
 
-        self.kCen_    = np.ceil(2.0/sampCen).astype('int')# works for oversampling
-        self.sampCen  = self.kCen_ * sampCen
-
-        self.kRef_    = int(np.ceil(2.0/sampRef)) # works for oversampling
-        self.sampRef  = self.kRef_ * sampRef
-
-        self.nOtf       = self.nPix * self.kRef_
+        self.kCen_   = np.ceil(2.0/sampCen).astype('int') # works for oversampling
+        self.sampCen = self.kCen_ * sampCen
 
         PSDsteps = self.psInMas/(self.wvl*rad2mas*self.k_)
         if PSDsteps.shape[0] > 1:
-            PSDstep= nnp.min(PSDsteps)
+            idxPmin = nnp.argmin(PSDsteps)
         else:
-            PSDstep= PSDsteps
-        self.PSDstep = np.asarray(PSDstep)
+            idxPmin = 0
+        self.PSDstep = np.asarray(PSDsteps[idxPmin])
+
+        if self.ao.PSDexpansion:
+            self.kRef_   = int(self.k_[idxPmin]) # works for oversampling
+        else:
+            self.kRef_   = int(self.k_[idxWmin]) # works for oversampling
+        self.sampRef = self.kRef_ * sampRef
+
+        self.nOtf    = self.nPix * self.kRef_
 
         #  ---- FULL DOMAIN OF FREQUENCY
         self.kx_,self.ky_ = freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
