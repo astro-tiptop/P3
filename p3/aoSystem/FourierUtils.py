@@ -1022,7 +1022,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     
     if method == 'cutting':
         # X and Y profiles passing through the max
-        y_max, x_max = nnp.unravel_index(im_hr.argmax(), im_hr.shape)
+        y_max, x_max = nnp.unravel_index(nnp.argmax(im_hr), im_hr.shape)
         profile_x = im_hr[y_max, :]
         profile_y = im_hr[:, x_max]
 
