@@ -68,7 +68,7 @@ class fourierModel:
                  getErrorBreakDown=False, getFWHM=False, getEnsquaredEnergy=False,
                  getEncircledEnergy=False, fftphasor=False, MV=0, nyquistSampling=False,
                  addOtfPixel=False, computeFocalAnisoCov=True, TiltFilter=False,
-                 doComputations=True, PSDexpansion=False):
+                 doComputations=True, psdExpansion=False):
         
         tstart = time.time()
         
@@ -95,7 +95,7 @@ class fourierModel:
         
         # GRAB PARAMETERS
         self.ao = aoSystem(path_ini,path_root=path_root,getPSDatNGSpositions=getPSDatNGSpositions,
-                           PSDexpansion=PSDexpansion)
+                           psdExpansion=psdExpansion)
         self.my_data_map = self.ao.my_data_map
 
         self.t_initAO = 1000*(time.time() - tstart)

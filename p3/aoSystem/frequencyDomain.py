@@ -126,14 +126,14 @@ class frequencyDomain():
         self.kCen_   = np.ceil(2.0/sampCen).astype('int') # works for oversampling
         self.sampCen = self.kCen_ * sampCen
 
-        PSDsteps = self.psInMas/(self.wvl*rad2mas*self.k_)
-        if PSDsteps.shape[0] > 1:
-            idxPmin = nnp.argmin(PSDsteps)
+        psdSteps = self.psInMas/(self.wvl*rad2mas*self.k_)
+        if psdSteps.shape[0] > 1:
+            idxPmin = nnp.argmin(psdSteps)
         else:
             idxPmin = 0
-        self.PSDstep = np.asarray(PSDsteps[idxPmin])
+        self.PSDstep = np.asarray(psdSteps[idxPmin])
 
-        if self.ao.PSDexpansion:
+        if self.ao.psdExpansion:
             self.kRef_   = int(self.k_[idxPmin]) # works for oversampling
         else:
             self.kRef_   = int(self.k_[idxWmin]) # works for oversampling
