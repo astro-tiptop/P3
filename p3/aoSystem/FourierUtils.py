@@ -1008,7 +1008,8 @@ def find_contour_points(image, level):
             contour_points.append([px, py])
 
     if not contour_points:
-        raise ValueError("No contour points found")
+        contour_points.append(0)
+        return contour_points
 
     contour_points = nnp.array(contour_points)
 
