@@ -914,6 +914,10 @@ def getMSE(xtrue,xest,nbox=0,norm='L2'):
 def fwhm_1d(profile):
     """ FWHM of 1D profile """
     max_val = profile.max()
+    min_val = profile.max()
+    if min_val >= 0.5*max_val:
+        return profile.size
+
     half_max = max_val / 2
     
     # Find indices where the profile exceeds half the height
@@ -1041,116 +1045,122 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     sbx, sby = [[0,ss[1]],[0,ss[0]]]
 
     peak_val = nnp.max(im_hr)
-    # initial guess of PSF center
-    y_peak, x_peak = nnp.where(nnp.equal(im_hr, peak_val))
-    x00 = sbx[0]
-    y00 = sby[0]
-    x_peak += x00
-    y_peak += y00
-    
-    if method == 'oldContour':
-        # Old contour approach~: something wrong about the ellipse orientation
-        mpl.interactive(False)
-        try:
-            plt.figure(666)
-            C       = plt.contour(im_hr,levels=[im_hr.max()/2])
-            plt.close(666)
-            C       = C.collections[0].get_paths()[0]
-            C       = C.vertices
-            xC      = C[:,0]
-            yC      = C[:,1]
-            # centering the ellispe
-            mx      = nnp.array([xC.max(),yC.max()])
-            mn      = nnp.array([xC.min(),yC.min()])
-            cent    = (mx+mn)/2
-            wx      = xC - cent[0]
-            wy      = yC - cent[1] 
-            # Get the module
-            wr      = nnp.hypot(wx,wy)/rebin*pixelScale                
-            # Getting the FWHM
-            fwhmX   = 2*wr.max()
-            fwhmY   = 2*wr.min()
-            #Getting the ellipse orientation
-            xm      = wx[wr.argmax()]
-            ym      = wy[wr.argmax()]
-            theta   = nnp.mean(180*nnp.arctan2(ym,xm)/np.pi)
-        except:
-            print("oldContour method failed, falling back to cutting method")
-            method = 'cutting'
-        mpl.interactive(True)
-    elif method == 'contour':
-        # Find contour points at half maximum
-        contour_points = find_contour_points(im_hr, peak_val/2)
-
-        if len(contour_points) < 3:  # Need at least 3 points for meaningful analysis
-            print("Not enough contour points found, falling back to cutting method")
-            method = 'cutting'
-        else:
-            xC = contour_points[:, 0]
-            yC = contour_points[:, 1]
-    
-            # Centering the ellipse
-            mx = nnp.array([xC.max(), yC.max()])
-            mn = nnp.array([xC.min(), yC.min()])
-            cent = (mx + mn)/2
-            wx = xC - cent[0]
-            wy = yC - cent[1]
-    
-            # Get the module
-            wr = nnp.hypot(wx, wy)/rebin*pixelScale
-    
-            # Getting the FWHM
-            fwhmX = 2*wr.max()
-            fwhmY = 2*wr.min()
-    
-            # Getting the ellipse orientation
-            xm = wx[wr.argmax()]
-            ym = wy[wr.argmax()]
-            theta = nnp.mean(180*nnp.arctan2(ym, xm)/nnp.pi)
-    elif method == 'gaussian':
-        # initial guess of the FWHM
-        fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
+    min_val = nnp.min(im_hr)
+    if min_val >= 0.5*peak_val:
+        fwhmX = nnp.sqrt(2)*Nx*pixelScale
+        fwhmY = nnp.sqrt(2)*Ny*pixelScale
+        theta = 0
+    else:
+        # initial guess of PSF center
+        y_peak, x_peak = nnp.where(nnp.equal(im_hr, peak_val))
+        x00 = sbx[0]
+        y00 = sby[0]
+        x_peak += x00
+        y_peak += y00
         
-        stddev_guess = fwhm_guess/(2*nnp.sqrt(2*nnp.log(2)))
-        p_init = models.Gaussian2D(amplitude=peak_val, x_mean=x_peak[0], y_mean=y_peak[0],
-                                   x_stddev=stddev_guess, y_stddev=stddev_guess)
-        
-        fit_p = fitting.LevMarLSQFitter()
+        if method == 'oldContour':
+            # Old contour approach~: something wrong about the ellipse orientation
+            mpl.interactive(False)
+            try:
+                plt.figure(666)
+                C       = plt.contour(im_hr,levels=[im_hr.max()/2])
+                plt.close(666)
+                C       = C.collections[0].get_paths()[0]
+                C       = C.vertices
+                xC      = C[:,0]
+                yC      = C[:,1]
+                # centering the ellispe
+                mx      = nnp.array([xC.max(),yC.max()])
+                mn      = nnp.array([xC.min(),yC.min()])
+                cent    = (mx+mn)/2
+                wx      = xC - cent[0]
+                wy      = yC - cent[1] 
+                # Get the module
+                wr      = nnp.hypot(wx,wy)/rebin*pixelScale                
+                # Getting the FWHM
+                fwhmX   = 2*wr.max()
+                fwhmY   = 2*wr.min()
+                #Getting the ellipse orientation
+                xm      = wx[wr.argmax()]
+                ym      = wy[wr.argmax()]
+                theta   = nnp.mean(180*nnp.arctan2(ym,xm)/np.pi)
+            except:
+                print("oldContour method failed, falling back to cutting method")
+                method = 'cutting'
+            mpl.interactive(True)
+        elif method == 'contour':
+            # Find contour points at half maximum
+            contour_points = find_contour_points(im_hr, peak_val/2)
     
-        y,x = nnp.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
-        g = fit_p(p_init, x, y, im_hr)
+            if len(contour_points) < 3:  # Need at least 3 points for meaningful analysis
+                print("Not enough contour points found, falling back to cutting method")
+                method = 'cutting'
+            else:
+                xC = contour_points[:, 0]
+                yC = contour_points[:, 1]
         
-        fwhmX = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.x_stddev.value*pixelScale)
-        fwhmY = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.y_stddev.value*pixelScale)
-        theta = g.theta.value*180/np.pi
-    elif method == 'moffat':      
-        # initial guess of the FWHM
-        fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
+                # Centering the ellipse
+                mx = nnp.array([xC.max(), yC.max()])
+                mn = nnp.array([xC.min(), yC.min()])
+                cent = (mx + mn)/2
+                wx = xC - cent[0]
+                wy = yC - cent[1]
         
-        beta = 4.765    # expected beta value  for Seeing limited PSF
-        p_init = models.Moffat2D(amplitude=peak_val, x_0=x_peak[0], y_0=y_peak[0],
-                                 gamma=fwhm_guess/(2*nnp.sqrt(2**(1/beta)-1)))
+                # Get the module
+                wr = nnp.hypot(wx, wy)/rebin*pixelScale
         
-        fit_p = fitting.LevMarLSQFitter()
+                # Getting the FWHM
+                fwhmX = 2*wr.max()
+                fwhmY = 2*wr.min()
+        
+                # Getting the ellipse orientation
+                xm = wx[wr.argmax()]
+                ym = wy[wr.argmax()]
+                theta = nnp.mean(180*nnp.arctan2(ym, xm)/nnp.pi)
+        elif method == 'gaussian':
+            # initial guess of the FWHM
+            fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
+            
+            stddev_guess = fwhm_guess/(2*nnp.sqrt(2*nnp.log(2)))
+            p_init = models.Gaussian2D(amplitude=peak_val, x_mean=x_peak[0], y_mean=y_peak[0],
+                                       x_stddev=stddev_guess, y_stddev=stddev_guess)
+            
+            fit_p = fitting.LevMarLSQFitter()
+        
+            y,x = nnp.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
+            g = fit_p(p_init, x, y, im_hr)
+            
+            fwhmX = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.x_stddev.value*pixelScale)
+            fwhmY = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.y_stddev.value*pixelScale)
+            theta = g.theta.value*180/np.pi
+        elif method == 'moffat':      
+            # initial guess of the FWHM
+            fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
+            
+            beta = 4.765    # expected beta value  for Seeing limited PSF
+            p_init = models.Moffat2D(amplitude=peak_val, x_0=x_peak[0], y_0=y_peak[0],
+                                     gamma=fwhm_guess/(2*nnp.sqrt(2**(1/beta)-1)))
+            
+            fit_p = fitting.LevMarLSQFitter()
+        
+            y,x = nnp.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
+            g = fit_p(p_init, x, y, im_hr)
+            
+            fwhmX = g.fwhm*pixelScale
+            fwhmY = g.fwhm*pixelScale
+            theta   = 0
     
-        y,x = nnp.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
-        g = fit_p(p_init, x, y, im_hr)
-        
-        fwhmX = g.fwhm*pixelScale
-        fwhmY = g.fwhm*pixelScale
-        theta   = 0
-
-    # in a dedicated if clause as a fallback method when others have failed
-    if method == 'cutting':
-        # X and Y profiles passing through the max
-        y_max, x_max = nnp.unravel_index(nnp.argmax(im_hr), im_hr.shape)
-        profile_x = im_hr[y_max, :]
-        profile_y = im_hr[:, x_max]
-
-        # X and Y FWHM
-        fwhmX = fwhm_1d(profile_x) * pixelScale / rebin
-        fwhmY = fwhm_1d(profile_y) * pixelScale / rebin
-        theta   = 0
+        # in a dedicated if clause as a fallback method when others have failed
+        if method == 'cutting':
+            # X and Y profiles passing through the max
+            y_max, x_max = nnp.unravel_index(nnp.argmax(im_hr), im_hr.shape)
+            profile_x = im_hr[y_max, :]
+            profile_y = im_hr[:, x_max]
+    
+            # X and Y FWHM
+            fwhmX = fwhm_1d(profile_x) * pixelScale / rebin
+            fwhmY = fwhm_1d(profile_y) * pixelScale / rebin
+            theta   = 0
     
     # Get Ellipticity
     aRatio      = nnp.max([fwhmX/fwhmY,fwhmY/fwhmX])
