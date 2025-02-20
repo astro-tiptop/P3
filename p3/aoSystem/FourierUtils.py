@@ -122,13 +122,13 @@ def mcDonald(x):
 def Ialpha(x,y):
     return mcDonald(np.hypot(x,y))
 
-def otf2psf(otf,psfInOnePixel=False):
+def otf2psf(otf,psfInOnePix=False):
     nX,nY   = otf.shape
     u1d     = fft.fftshift(fft.fftfreq(nX))
     v1d     = fft.fftshift(fft.fftfreq(nY))
     u2d,v2d = np.meshgrid(u1d,v1d)
     
-    if nX%2 == 0 and psfInOnePixel==False:
+    if nX%2 == 0 and psfInOnePix==False:
         fftPhasor = np.exp(1*complex(0,1)*np.pi*(u2d+v2d))
     else:
         fftPhasor = 1
