@@ -1159,7 +1159,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
         return fwhmX,fwhmY,aRatio,theta
 
 def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',
-              psfInOnePix=False,psfDLmax=None):
+              psfInOnePix=False,psfDLmax=None,nargout=1):
     if recentering:    
         psf = centerPsf(psf0,2)
     else:
