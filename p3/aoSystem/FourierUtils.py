@@ -522,7 +522,7 @@ def normalizeImage(im,normType=1,param=None):
             param = abs(getFlux(im))
             im_n  = np.copy(im)/param
         elif normType == 4:
-            param = im[im>0].sum()
+            param = np.clip(im, 0, None).sum()
             im_n  = np.copy(im)/param
         else:
             param = normType
@@ -1178,13 +1178,13 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=Fa
         # Get the Strehl
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
-        psfDL  = otf2psf(otfDL,psfInOnePix=psfInOnePix)
-        psfDL[psfDL<0]  =0
-        psfDL *= 1/psfDL.sum()
-        maxPsfDL = psfDL.max()
-        psf[psf<0]  =0
-        psf   *= 1/psf.sum()
-        SR     = psf.max()/maxPsfDL
+        psfDL   = otf2psf(otfDL,psfInOnePix=psfInOnePix)
+        psfDL.clip(0, None)
+        psfDL  /= psfDL.sum()
+        psf.clip(0, None)
+        psf    /= psf.sum()
+        # Get the Strehl
+        SR      = psf.max()/psfDL.max()
     else:
         raise ValueError("Method must be 'otf' or 'max'")
 
