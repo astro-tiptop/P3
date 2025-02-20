@@ -1070,6 +1070,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
             ym      = wy[wr.argmax()]
             theta   = nnp.mean(180*nnp.arctan2(ym,xm)/np.pi)
         except:
+            print("oldContour method failed, falling back to cutting method")
             method = 'cutting'
         mpl.interactive(True)
     elif method == 'contour':
@@ -1077,7 +1078,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
         contour_points = find_contour_points(im_hr, peak_val/2)
 
         if len(contour_points) < 3:  # Need at least 3 points for meaningful analysis
-            print("Not enough contour points found, using cutting method")
+            print("Not enough contour points found, falling back to cutting method")
             method = 'cutting'
         else:
             xC = contour_points[:, 0]
