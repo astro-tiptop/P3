@@ -965,7 +965,11 @@ def find_contour_points(image, level):
     for x, y, d in zip(boundary_x, boundary_y, distances):
         # Find closest points above threshold
         dists_to_above = nnp.sqrt((above_y - y)**2 + (above_x - x)**2)
-        nearest_indices = nnp.argpartition(dists_to_above, 4)[:4]
+
+        if len(dists_to_above) > 4:
+            nearest_indices = nnp.argpartition(dists_to_above, 4)[:4]
+        else:
+            nearest_indices = nnp.argsort(dists_to_above)[:len(dists_to_above)]
 
         # Calculate distance from peak for these points
         nearest_points = nnp.column_stack((above_x[nearest_indices], above_y[nearest_indices]))
@@ -1004,7 +1008,8 @@ def find_contour_points(image, level):
             contour_points.append([px, py])
 
     if not contour_points:
-        raise ValueError("No contour points found")
+        contour_points.append(0)
+        return contour_points
 
     contour_points = nnp.array(contour_points)
 
