@@ -1158,8 +1158,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     elif nargout == 4:
         return fwhmX,fwhmY,aRatio,theta
 
-def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',
-              psfInOnePix=False,psfDLmax=None,nargout=1):
+def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=False):
     if recentering:    
         psf = centerPsf(psf0,2)
     else:
@@ -1178,23 +1177,17 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',
         # Get the Strehl
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
-        if psfDLmax is None:
-            psfDL  = otf2psf(otfDL,psfInOnePix=psfInOnePix)
-            psfDL[psfDL<0]  =0
-            psfDL *= 1/psfDL.sum()
-            maxPsfDL = psfDL.max()
-        else:
-            maxPsfDL = psfDLmax
+        psfDL  = otf2psf(otfDL,psfInOnePix=psfInOnePix)
+        psfDL[psfDL<0]  =0
+        psfDL *= 1/psfDL.sum()
+        maxPsfDL = psfDL.max()
         psf[psf<0]  =0
         psf   *= 1/psf.sum()
         SR     = psf.max()/maxPsfDL
     else:
         raise ValueError("Method must be 'otf' or 'max'")
 
-    if nargout == 1:
-        return nnp.round(SR,nR)
-    elif nargout == 2:
-        return nnp.round(SR,nR), maxPsfDL
+    return nnp.round(SR,nR)
 
 #%% Data treatment
     
