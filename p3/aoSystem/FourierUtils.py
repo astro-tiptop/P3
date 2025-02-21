@@ -914,7 +914,7 @@ def getMSE(xtrue,xest,nbox=0,norm='L2'):
 def fwhm_1d(profile):
     """ FWHM of 1D profile """
     max_val = profile.max()
-    min_val = profile.max()
+    min_val = profile.min()
     if min_val >= 0.5*max_val:
         return profile.size
 
@@ -922,9 +922,15 @@ def fwhm_1d(profile):
     
     # Find indices where the profile exceeds half the height
     indices = nnp.where(profile >= half_max)[0]
-    
+
     if len(indices) < 2:
-        return -1  # Error: not enough points above half height
+        print('fwhm_1d: not enough points above half height')
+        return 1  # Error: not enough points above half height
+                  # FWHM is 1 pixel
+    if len(indices) >= profile.size-1:
+        print('fwhm_1d: not enough points below half height')
+        return profile.size  # Error: not enough points below half height
+                             # FWHM is the size of the profile
     
     # Points at the left and right edges of the region above the threshold
     left, right = indices[0], indices[-1]
@@ -1047,16 +1053,35 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     peak_val = nnp.max(im_hr)
     min_val = nnp.min(im_hr)
     if min_val >= 0.5*peak_val:
+        print('getFWHM: not enough points below half height')
         fwhmX = nnp.sqrt(2)*Nx*pixelScale
         fwhmY = nnp.sqrt(2)*Ny*pixelScale
         theta = 0
     else:
         # initial guess of PSF center
-        y_peak, x_peak = nnp.where(nnp.equal(im_hr, peak_val))
+        y_max, x_max = nnp.unravel_index(nnp.argmax(im_hr), im_hr.shape)
         x00 = sbx[0]
         y00 = sby[0]
-        x_peak += x00
-        y_peak += y00
+        x_peak = int(x_max + x00)
+        y_peak = int(y_max + y00)
+
+        # -----------------------------------------------------------------------
+        # cutting method used first to check if FWHM is too large for other methods
+        # X and Y profiles passing through the max
+        profile_x = im_hr[y_max, :]
+        profile_y = im_hr[:, x_max]
+        # X and Y FWHM
+        fwhmXcut = fwhm_1d(profile_x)
+        fwhmYcut = fwhm_1d(profile_y)
+        thetaCut = 0
+        # -----------------------------------------------------------------------
+        if fwhmXcut >= profile_x.size-1 or fwhmYcut >= profile_y.size-1:
+            print("getFWHM: FWHM is too large, falling back to cutting method")
+            method = 'cutting'
+        if fwhmXcut == 1 and fwhmYcut == 1 and (method == 'contour' or method == 'oldContour'):
+            print("getFWHM: FWHM is too small, falling back to cutting method")
+            method = 'cutting'
+        # -----------------------------------------------------------------------
         
         if method == 'oldContour':
             # Old contour approach~: something wrong about the ellipse orientation
@@ -1085,34 +1110,34 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
                 ym      = wy[wr.argmax()]
                 theta   = nnp.mean(180*nnp.arctan2(ym,xm)/np.pi)
             except:
-                print("oldContour method failed, falling back to cutting method")
+                print("getFWHM: oldContour method failed, falling back to cutting method")
                 method = 'cutting'
             mpl.interactive(True)
         elif method == 'contour':
             # Find contour points at half maximum
             contour_points = find_contour_points(im_hr, peak_val/2)
-    
+
             if len(contour_points) < 3:  # Need at least 3 points for meaningful analysis
-                print("Not enough contour points found, falling back to cutting method")
+                print("getFWHM: not enough contour points found, falling back to cutting method")
                 method = 'cutting'
             else:
                 xC = contour_points[:, 0]
                 yC = contour_points[:, 1]
-        
+
                 # Centering the ellipse
                 mx = nnp.array([xC.max(), yC.max()])
                 mn = nnp.array([xC.min(), yC.min()])
                 cent = (mx + mn)/2
                 wx = xC - cent[0]
                 wy = yC - cent[1]
-        
+
                 # Get the module
                 wr = nnp.hypot(wx, wy)/rebin*pixelScale
-        
+
                 # Getting the FWHM
                 fwhmX = 2*wr.max()
                 fwhmY = 2*wr.min()
-        
+
                 # Getting the ellipse orientation
                 xm = wx[wr.argmax()]
                 ym = wy[wr.argmax()]
@@ -1120,51 +1145,45 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
         elif method == 'gaussian':
             # initial guess of the FWHM
             fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
-            
+
             stddev_guess = fwhm_guess/(2*nnp.sqrt(2*nnp.log(2)))
-            p_init = models.Gaussian2D(amplitude=peak_val, x_mean=x_peak[0], y_mean=y_peak[0],
+            p_init = models.Gaussian2D(amplitude=peak_val, x_mean=x_peak, y_mean=y_peak,
                                        x_stddev=stddev_guess, y_stddev=stddev_guess)
-            
+
             fit_p = fitting.LevMarLSQFitter()
-        
+
             y,x = nnp.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
             g = fit_p(p_init, x, y, im_hr)
-            
+
             fwhmX = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.x_stddev.value*pixelScale)
             fwhmY = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.y_stddev.value*pixelScale)
             theta = g.theta.value*180/np.pi
         elif method == 'moffat':      
             # initial guess of the FWHM
             fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
-            
+
             beta = 4.765    # expected beta value  for Seeing limited PSF
-            p_init = models.Moffat2D(amplitude=peak_val, x_0=x_peak[0], y_0=y_peak[0],
+            p_init = models.Moffat2D(amplitude=peak_val, x_0=x_peak, y_0=y_peak,
                                      gamma=fwhm_guess/(2*nnp.sqrt(2**(1/beta)-1)))
-            
+
             fit_p = fitting.LevMarLSQFitter()
-        
+
             y,x = nnp.mgrid[sby[0]:sby[1],sbx[0]:sbx[1]]
             g = fit_p(p_init, x, y, im_hr)
             
             fwhmX = g.fwhm*pixelScale
             fwhmY = g.fwhm*pixelScale
             theta   = 0
-    
+
         # in a dedicated if clause as a fallback method when others have failed
         if method == 'cutting':
-            # X and Y profiles passing through the max
-            y_max, x_max = nnp.unravel_index(nnp.argmax(im_hr), im_hr.shape)
-            profile_x = im_hr[y_max, :]
-            profile_y = im_hr[:, x_max]
-    
-            # X and Y FWHM
-            fwhmX = fwhm_1d(profile_x) * pixelScale / rebin
-            fwhmY = fwhm_1d(profile_y) * pixelScale / rebin
-            theta   = 0
-    
+            fwhmX = fwhmXcut * pixelScale / rebin
+            fwhmY = fwhmYcut * pixelScale / rebin
+            theta = thetaCut
+
     # Get Ellipticity
     aRatio      = nnp.max([fwhmX/fwhmY,fwhmY/fwhmX])
-    
+
     if nargout == 1:
         return 0.5 * (fwhmX+fwhmY)
     elif nargout == 2:
