@@ -38,6 +38,9 @@ else:
     cp = np
     import numpy.fft as fftI
     import scipy.special as spcI
+    from scipy.interpolate import RectBivariateSpline as RectBivariateSplineI
+    import scipy.ndimage as scndI
+    from scipy.ndimage import rotate as rotateI
 
 fft = fftI
 spc = spcI
