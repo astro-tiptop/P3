@@ -115,6 +115,26 @@ def anisokinetism_wfe(tel, atm, src, ngs, method="Sasiela"):
     else:
         raise ValueError("The method " + method + "is not supported." )
 
+def focal_anisoplanatism_variance(tel,atm,lgs):
+    '''
+        Compute the variance of the focal anisoplanatism due to the finite altitude of the LGS in SLAO mode
+        INPUTS:
+            - tel, atm and lgs objects
+        OUTPUTS
+            - wfe, the focal anisoplanatism error in nm
+    '''
+    
+    var = 0
+    zLgs = float(lgs.height[0])
+    for k in range(atm.nL):
+        if atm.heights[k] > 0:
+            var1 = 0.5*(atm.heights[k]/zLgs)**(5/3)
+            var2 = 0.425*(atm.heights[k]/zLgs)**2
+            var  += atm.weights[k] * (var1 - var2)
+              
+    wfe = np.sqrt(var * (tel.D/atm.r0)**(5/3)) * (atm.wvl*1e9/2/np.pi)
+    return wfe
+
 #%% PHASE STRUCTURE FUNCTION
 def anisoplanatism_structure_function(tel, atm, src, lgs, ngs,
                                       nOtf, samp, nActu, msk_in=1, Hfilter=1):
@@ -140,7 +160,7 @@ def anisoplanatism_structure_function(tel, atm, src, lgs, ngs,
         # NGS mode, angular anisoplanatism
         dani_ang = angular_function(tel, atm, src, ngs,
                                     nOtf, samp, msk_in=msk_in)
-        return dani_ang
+        return dani_ang, 0, 0
 
     else:
         # angular + focal anisoplanatism
