@@ -10,8 +10,8 @@ Created on Wed Mar  3 21:06:21 2021
 import numpy as np
 import os
 from astropy.io import fits
-from p3.psfao21.psfao21 import psfao21
-from p3.psfFitting.psfFitting import psfFitting
+from psfao21.psfao21 import psfao21
+from psfFitting.psfFitting import psfFitting
 
 #%%
 def verifyDataBase(savePath,path_ini=None,nTest=10,nPSD=6):
