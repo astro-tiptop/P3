@@ -463,8 +463,8 @@ class fourierModel:
 
         mat1 = np.zeros([nK, nK, nDm, nL], dtype=complex)
         to_inv = np.zeros([nK, nK, nDm, nDm], dtype=complex)
-        theta_x = self.ao.dms.opt_dir[0]/206264.8 * np.cos(self.ao.dms.opt_dir[1]*np.pi/180)
-        theta_y = self.ao.dms.opt_dir[0]/206264.8 * np.sin(self.ao.dms.opt_dir[1]*np.pi/180)
+        theta_x = self.ao.dms.opt_dir[0]/206264.8 * nnp.cos(self.ao.dms.opt_dir[1]*np.pi/180)
+        theta_y = self.ao.dms.opt_dir[0]/206264.8 * nnp.sin(self.ao.dms.opt_dir[1]*np.pi/180)
 
         for d_o in range(nDir):                 #loop on optimization directions
             Pdm = np.zeros([nK, nK, 1, nDm], dtype=complex)
@@ -500,8 +500,8 @@ class fourierModel:
         if self.ao.rtc.holoop['gain']:
 
             i = complex(0,1)
-            vx = self.ao.atm.wSpeed*np.cos(self.ao.atm.wDir*np.pi/180)
-            vy = self.ao.atm.wSpeed*np.sin(self.ao.atm.wDir*np.pi/180)
+            vx = self.ao.atm.wSpeed*nnp.cos(self.ao.atm.wDir*np.pi/180)
+            vy = self.ao.atm.wSpeed*nnp.sin(self.ao.atm.wDir*np.pi/180)
             nPts = self.freq.resAO
             thetaWind = np.linspace(0, 2*np.pi-2*np.pi/nTh, nTh)
             costh = np.cos(thetaWind)
@@ -703,8 +703,8 @@ class fourierModel:
         clock_rate = np.array([self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)])
         T = np.mean(clock_rate/self.ao.rtc.holoop['rate'])
         td = T * self.ao.rtc.holoop['delay']
-        vx = self.ao.atm.wSpeed*np.cos(self.ao.atm.wDir*np.pi/180)
-        vy = self.ao.atm.wSpeed*np.sin(self.ao.atm.wDir*np.pi/180)
+        vx = self.ao.atm.wSpeed*nnp.cos(self.ao.atm.wDir*np.pi/180)
+        vy = self.ao.atm.wSpeed*nnp.sin(self.ao.atm.wDir*np.pi/180)
         weights = self.ao.atm.weights
         w = 2*i*np.pi*d
 
@@ -1286,7 +1286,7 @@ class fourierModel:
             # Derives wavefront error
             rad2nm      = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
             
-            if np.any(self.ao.tel.opdMap_on):
+            if not self.ao.tel.opdMap_on is None:
                 self.wfeNCPA= np.std(self.ao.tel.opdMap_on[self.ao.tel.pupil!=0])
             else:
                 self.wfeNCPA = 0.0
