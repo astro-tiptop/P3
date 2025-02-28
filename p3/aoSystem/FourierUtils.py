@@ -1011,7 +1011,7 @@ def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):
 
 
 def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=False, binsize=None, maxradius=None,
-                   normalize='None', pa_range=None, nargout=2, verbose=False):
+                   normalize='None', pa_range=None, nargout=2, slice=slice, verbose=False):
     """ Compute a radial profile of the image.
 
     This computes a discrete radial profile evaluated on the provided binsize. For a version
