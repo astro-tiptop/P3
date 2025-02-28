@@ -200,10 +200,12 @@ class zernike:
             if ( (p==(q+1)) & (abs(z)<1) ) | ( (abs(z)==1) & (np.real(sum(a)-sum(b))<0) ) | (p<(q+1)):
 
                 if (p==len(a)) & (q==len(b)):
-                    if type(z) != list:
-                        z = [z]
+                    if np.isscalar(z):
+                        z = np.array([z])
+                    else:
+                        z = np.atleast_1d(z)
                     out = np.zeros(np.size(z))
-                    indz = list(np.where(z==0)[0])
+                    indz = list(np.where(z == 0)[0])
                     #import pdb
                     #pdb.set_trace()
                     if len(indz):
