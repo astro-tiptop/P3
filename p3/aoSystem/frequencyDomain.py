@@ -78,6 +78,9 @@ class frequencyDomain():
         # PARSING INPUTS TO GET THE SAMPLING VALUES
         self.ao = aoSys
 
+        self.kcExt  = kcExt
+        self.Hfilter = Hfilter
+
         # MANAGING THE WAVELENGTH
         self.nBin = self.ao.cam.nWvl # number of spectral bins for polychromatic PSFs
         self.nWvlCen = len(nnp.unique(self.ao.src.wvl))
@@ -90,12 +93,29 @@ class frequencyDomain():
 
         # MANAGING THE PIXEL SCALE
         t0 = time.time()
-        if nyquistSampling:
-            self.nyquistSampling = True
-            self.psInMas = rad2mas*self.wvl_/self.ao.tel.D/2
-            self.psInMasCen = rad2mas*wvlCen_/self.ao.tel.D/2
+
+        self.nPix   = self.ao.cam.fovInPix
+
+        self.nyquistSampling = nyquistSampling
+
+        self.wvl    = np.asarray(self.wvl_)
+
+        self.wvlCen = np.asarray(wvlCen_)
+        if self.wvl_.shape[0] > 1:
+            idxWmin = nnp.argmin(self.wvl_)
         else:
-            self.psInMas = self.ao.cam.psInMas * np.ones(self.nWvl)
+            idxWmin = 0
+        self.wvlRef = self.wvl_[idxWmin]
+
+        if self.nyquistSampling == True:
+            self.psInMas    = rad2mas*self.wvl/self.ao.tel.D/2
+            self.psInMasCen = rad2mas*wvlCen_/self.ao.tel.D/2
+            samp  = 2.0 * np.ones_like(self.psInMas)
+            sampCen  = 2.0 * np.ones(len(self.wvlCen))
+            sampRef  = 2.0 * np.ones(len(self.wvlCen))
+
+        else:
+            self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl)
             self.psInMasCen = self.ao.cam.psInMas * np.ones(self.nWvlCen)
             samp  = self.wvl* rad2mas / (self.psInMas*self.ao.tel.D)
             sampCen  = self.wvlCen * rad2mas / (self.psInMasCen*self.ao.tel.D)
