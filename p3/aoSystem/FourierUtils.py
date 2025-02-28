@@ -78,7 +78,7 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1):
     phaseMap = 0
     xStat = np.asarray(xStat)
     if not tel.statModes is None and nnp.any(tel.statModes):
-        if tel.statModes.shape[2]==len(xStat):
+        if tel.statModes.shape[2]==xStat.size:
             phaseMap = 2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)
             phaseStat += phaseMap
 
