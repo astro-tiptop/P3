@@ -108,9 +108,9 @@ class telescope:
             X,Y = nnp.meshgrid(x,x)
             Xr = X*nnp.cos(th) + Y*nnp.sin(th)
             Yr = Y*nnp.cos(th) - X*nnp.sin(th)
-            R = np.hypot(Xr, Yr)
+            R = nnp.hypot(Xr, Yr)
             P = (R <= self.R) * (R > self.R*self.obsRatio)
-            self.pupil = np.asarray(P)
+            self.pupil = nnp.asarray(P)
             self.verb = False
 
         #----- APODIZER
