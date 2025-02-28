@@ -28,7 +28,7 @@ class frequencyDomain():
     def pitch(self,val):
         self.__pitch = val
         # redefining the ao-corrected area
-        if np.all(self.kcExt !=None):
+        if not self.kcExt is None and np.all(self.kcExt):
             self.kc_= self.kcExt
         else:
             self.kc_ =  1/(2*val)
