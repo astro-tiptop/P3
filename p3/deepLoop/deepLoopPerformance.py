@@ -20,9 +20,9 @@ import pandas as pd
 from astropy.table import QTable
 from scipy.stats import linregress
 
-import aoSystem.FourierUtils as FourierUtils
-from psfao21.psfao21 import psfao21
-from psfFitting.psfFitting import psfFitting
+import p3.aoSystem.FourierUtils as FourierUtils
+from p3.psfao21.psfao21 import psfao21
+from p3.psfFitting.psfFitting import psfFitting
 np.random.seed(1)
 
 #%% CLASS

@@ -16,8 +16,8 @@ import random
 import numpy.fft as fft
 
 from astropy.io import fits
-from psfao21.psfao21 import psfao21
-import aoSystem.FourierUtils as FourierUtils
+from p3.psfao21.psfao21 import psfao21
+import p3.aoSystem.FourierUtils as FourierUtils
 np.random.seed(1)
 
 def generate_psf(path_ini, n_inter=10, main_param=["r0", "sig2"], n_psf_folder=3500,
