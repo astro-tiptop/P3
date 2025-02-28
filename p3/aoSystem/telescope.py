@@ -12,7 +12,6 @@ import numpy as nnp
 from . import gpuEnabled, cp, np, nnp, rotate
 
 from astropy.io import fits
-from scipy.ndimage import rotate
 import p3.aoSystem.FourierUtils as FourierUtils
 
 class Attribute(object):
@@ -89,7 +88,7 @@ class telescope:
             return is_ok
 
         def load_and_process_data(path_data):
-            data = fits.getdata(path_data)
+            data = np.asarray(fits.getdata(path_data))
             data[data!=data] = 0
             if self.pupilAngle != 0.0:
                 data = rotate(data, self.pupilAngle, reshape=False)
@@ -110,7 +109,7 @@ class telescope:
             Yr = Y*nnp.cos(th) - X*nnp.sin(th)
             R = nnp.hypot(Xr, Yr)
             P = (R <= self.R) * (R > self.R*self.obsRatio)
-            self.pupil = nnp.asarray(P)
+            self.pupil = np.asarray(P)
             self.verb = False
 
         #----- APODIZER
