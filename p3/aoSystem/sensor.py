@@ -40,6 +40,10 @@ class sensor:
             nph = [nph]
         elif nph is None:
             nph = [np.inf]
+            
+        if len(clock_rate)==1:
+            clock_rate = [clock_rate[0] for k in range(self.nWfs)]
+            
         self.detector = [detector(pixel_scale, fov, binning=binning, spotFWHM=spotFWHM,
                                  nph=nph[k], bandwidth=bandwidth, transmittance=transmittance,
                                  dispersion=dispersion, ron=ron, gain=gain,
@@ -75,7 +79,7 @@ class sensor:
             nph = np.array(self.detector[k].nph)
             # pixel per subaperture, N_s in Thomas et al. 2006
             # nPix**2 is the total number of pixels used in the CoG calculation
-            nPix = self.detector.fovInPix
+            nPix = self.detector[k].fovInPix
             dsub = self.optics[k].dsub
             
             if self.wfstype.upper() == 'SHACK-HARTMANN':
@@ -85,7 +89,7 @@ class sensor:
 
                 # The full width at half-maximum (FWHM) of the spot, N_T in Thomas et al. 2006
                 # For diffraction-limited spots nT = nD = 2
-                nT = max(1,np.hypot(max(self.detector.spotFWHM[0][0:2])/1e3,rad2arcsec*wvl/r0)/pixelScale)
+                nT = max(1,np.hypot(max(self.detector[k].spotFWHM[0][0:2])/1e3,rad2arcsec*wvl/r0)/pixelScale)
 
                 # for WCoG, Nw is the weighting function FWHM in pixel
                 nW = self.processing.settings[0]
@@ -100,24 +104,24 @@ class sensor:
                 # read-out noise calculation & photo-noise calculation
                 # from Thomas et al. 2006
                 if self.processing.algorithm == 'cog':
-                    varRON  = np.pi**2/3 * (ron**2 /nph[k]**2) * (nPix**2/nD)**2
-                    varShot  = np.pi**2/(2*np.log(2)*nph[k]) * (nT/nD)**2
+                    varRON  = np.pi**2/3 * (ron**2 /nph**2) * (nPix**2/nD)**2
+                    varShot  = np.pi**2/(2*np.log(2)*nph) * (nT/nD)**2
                 if self.processing.algorithm == 'tcog':
                     # Here we consider that the pixel used in the computation
                     # are the ones where the PSF is above the 0.5 w.r.t. the maximum value,
                     # so, nPix**2 is subsituted by np.ceil(nT**2*np.pi/4)
-                    varRON  = np.pi**2/3 * (ron**2 /nph[k]**2) * (np.ceil(nT**2*np.pi/4)/nD)**2
-                    varShot  = np.pi**2/(2*np.log(2)*nph[k]) * (nT/nD)**2
+                    varRON  = np.pi**2/3 * (ron**2 /nph**2) * (np.ceil(nT**2*np.pi/4)/nD)**2
+                    varShot  = np.pi**2/(2*np.log(2)*nph) * (nT/nD)**2
                 if self.processing.algorithm == 'wcog':
-                    varRON  = np.pi**3/(32*np.log(2)**2) * (ron**2 /nph[k]**2) * (nT**2+nW**2)**4/(nD**2*nW**4)
-                    varShot  = np.pi**2/(2*np.log(2)*nph[k]) * (nT/nD)**2 * (nT**2+nW**2)**4/((2*nT**2+nW**2)**2*nW**4)
+                    varRON  = np.pi**3/(32*np.log(2)**2) * (ron**2 /nph**2) * (nT**2+nW**2)**4/(nD**2*nW**4)
+                    varShot  = np.pi**2/(2*np.log(2)*nph) * (nT/nD)**2 * (nT**2+nW**2)**4/((2*nT**2+nW**2)**2*nW**4)
                 if self.processing.algorithm == 'qc':
                     if nT > nD:
                         k = np.sqrt(2*np.pi) * (nT/(2*np.sqrt(2*np.log(2))) / nD)
                     else:
                         k = 1
-                    varRON  = k *  4*np.pi**2 * (ron/nph[k])**2
-                    varShot  = k * np.pi**2/nph[k]
+                    varRON  = k *  4*np.pi**2 * (ron/nph)**2
+                    varShot  = k * np.pi**2/nph
                     
                 if varRON.any() > 3:
                     print('The read-out noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varRON))
@@ -127,9 +131,9 @@ class sensor:
                     print('The shot noise variance is very high (%.1f >3 rd^2), there is certainly smth wrong with your inputs, set to 0'%(varShot))
                     varShot = 0
             if self.wfstype.upper() == 'PYRAMID':
-                varRON  = 4*ron**2/np.mean(nph)**2
-                varShot = nph[k]/np.mean(nph)**2
+                varRON  = 4*ron**2/nph**2
+                varShot = nph/nph**2
 
-            varNoise[k] = varRON + self.detector.excess * varShot
+            varNoise[k] = varRON + self.detector[k].excess * varShot
         
         return varNoise
