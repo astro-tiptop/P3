@@ -59,7 +59,7 @@ def freq_array(nX,L=1,offset=1e-10):
     k2D     += offset
     return k2D[0],k2D[1]
 
-def getStaticOTF(tel, nOtf, samp, wvl, xStat=None, theta_ext=0, spatialFilter=1):
+def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1):
     """
     Returns the instrumental OTF including the static aberration and the
     diffraction-limited OTF.
@@ -69,35 +69,35 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=None, theta_ext=0, spatialFilter=1)
 
     # ADDING STATIC MAP
     phaseStat = np.zeros((nPup,nPup))
-    if np.any(tel.opdMap_on):
+    if not tel.opdMap_on is None and nnp.any(tel.opdMap_on):
         if theta_ext:
             tel.opdMap_on = scnd.rotate(tel.opdMap_on,theta_ext,reshape=False)
         phaseStat = (2*np.pi*1e-9/wvl) * tel.opdMap_on
 
     # ADDING USER-SPECIFIED STATIC MODES
     phaseMap = 0
-    if np.any(tel.statModes) and xStat is not None:
-        xStat = np.asarray(xStat)
+    xStat = np.asarray(xStat)
+    if not tel.statModes is None and nnp.any(tel.statModes):
         if tel.statModes.shape[2]==len(xStat):
             phaseMap = 2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)
             phaseStat += phaseMap
 
     # FILTERING
-    if not np.isscalar(spatialFilter):
+    if not nnp.isscalar(spatialFilter):
         phaseStat = (np.dot(spatialFilter,phaseStat.reshape(-1))).reshape((nPup,nPup))
 
     # INSTRUMENTAL OTF
     otfStat = pupil2otf(tel.pupil * tel.apodizer, phaseStat, samp)
-    if np.any(otfStat.shape != nOtf):
+    if not otfStat is None and nnp.any(otfStat.shape!=nOtf):
         otfStat = interpolateSupport(otfStat,nOtf)
     otfStat /= otfStat.max()
 
     # DIFFRACTION-LIMITED OTF
-    if np.all(phaseStat == 0):
+    if nnp.all(phaseStat == 0):
         otfDL = otfStat
     else:
         otfDL = np.real(pupil2otf(tel.pupil * tel.apodizer, 0*phaseStat, samp))
-        if np.any(otfDL.shape != nOtf):
+        if nnp.any(otfDL.shape !=nOtf):
             otfDL = interpolateSupport(otfDL, nOtf)
             otfDL/= otfDL.max()
 
@@ -1099,7 +1099,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
     radialprofile = tbin / nr
 
     # pre-pend the initial element that the above code misses.
-    radialprofile2 = np.empty(len(radialprofile) + 1)
+    radialprofile2 = nnp.empty(len(radialprofile) + 1)
     if rind[0] != 0:
         radialprofile2[0] = csim[rind[0]] / (
                 rind[0] + 1)  # if there are multiple elements in the center bin, average them
@@ -1121,7 +1121,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
                 wg = nnp.where(r < radius + binsize / 2)
             else:
                 wg = nnp.where((r_pix >= (radius - binsize / 2)) & (r_pix < (radius + binsize / 2)))
-                # wg = np.where( (r >= rr[i-1]) &  (r <rr[i] )))
+                # wg = nnp.where( (r >= rr[i-1]) &  (r <rr[i] )))
             stddevs[i] = nnp.nanstd(image[wg])
         return rr, stddevs
 
