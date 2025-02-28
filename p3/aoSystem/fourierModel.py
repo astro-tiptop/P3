@@ -157,10 +157,8 @@ class fourierModel:
             
             # DEFINING THE FREQUENCY DOMAIN
             self.wvl, self.nwvl = FourierUtils.create_wavelength_vector(self.ao)
-            if self.freq is None:
+            if not hasattr(self, 'freq'):
                 self.freq = frequencyDomain(self.ao,nyquistSampling=self.nyquistSampling,computeFocalAnisoCov=self.computeFocalAnisoCov)
-            else:
-                self.freq = freq
             self.t_initFreq = 1000*(time.time() - tstart)
 
             # DEFINING THE GUIDE STAR AND THE STRECHING FACTOR
@@ -240,7 +238,7 @@ class fourierModel:
             
             # COMPUTE THE PSF
             if self.calcPSF:
-                self.PSF, self.SR = self.pointSpreadFunction(verbose=self.verbose,fftphasor=self.fftphasor,addOtfPixel=self.addOtfPixel)
+                self.PSF, self.SR = self.point_spread_function(verbose=self.verbose,fftphasor=self.fftphasor,addOtfPixel=self.addOtfPixel)
                 
                 # GETTING METRICS
                 if self.getFWHM == True or self.getEnsquaredEnergy==True or self.getEncircledEnergy==True:
