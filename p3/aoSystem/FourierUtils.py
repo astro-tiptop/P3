@@ -237,15 +237,14 @@ def sombrero(n,x):
         return out
 
 def telescopeOtf(pupil,samp):
-    nSize = nnp.array(pupil.shape)
-
     if samp >1:
         pup_pad = enlargeSupport(pupil,samp)
+        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
     else:
         factor = nnp.ceil(1/samp)
-        pup = interpolateSupport(pupil,int(nnp.round(nSize[0]/factor)))
         pup_pad = enlargeSupport(pup,samp*factor)
-    otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+        otf = interpolateSupport(otf,int(nnp.round(otf.shape[0]/factor)))
     return otf/otf.max()
 
 def telescopePsf(pupil,samp,kind='spline'):
