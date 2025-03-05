@@ -42,9 +42,8 @@ class pupil:
     Create a segmented telescope pupil 
     """
     
-    def __init__(self,segClass=segment(6,1.4,100),segCoord=[(0,0)],
-                 D=[], cobs =0, spiderClass=[], 
-                 getPetal=False, fill_gap=True):
+    def __init__(self,segClass=segment(6,1.4,100),segCoord=[(0,0)],\
+                 D=[],cobs =0,spiderClass=[],getPetal=False,fill_gap=True):
         
         # PARSING INPUTS
         self.segRef     = segClass
@@ -318,7 +317,7 @@ class pupil:
         
 #%% MANAGE REFLEXIVITY AND ABERRATIONS
         
-    def computeModes(self, jIndex,area='segment'):
+    def computeModes(self,jIndex,area = 'segment'):
                
         if len(jIndex) == 0:
             print('Error : you must provide a valist list of Noll index')
@@ -343,7 +342,7 @@ class pupil:
                 
         return modes
         
-    def applyPhaseErrorSegment(self, indSeg, jIndex, modesCoeffs):
+    def applyPhaseErrorSegment(self,indSeg,jIndex,modesCoeffs):
         
         # CHECKING INPUTS
         if type(indSeg) == int:
@@ -539,17 +538,17 @@ class pupil:
     
     def displayPupil(self):
         
-        fig,axs = plt.subplots(1,2,figsize=(10,20), constrained_layout=True)
+        fig,axs = plt.subplots(1,2,figsize=(10,10), constrained_layout=True)
         
         pcm = axs[0].imshow(self.reflexivity,extent=[-self.radius,self.radius,-self.radius,self.radius])
         axs[0].set_title('Reflexivity')
         axs[0].set_xlabel('Position (m)')
         axs[0].set_ylabel('Position (m)')
-        fig.colorbar(pcm,ax=axs[0],shrink=0.1)
+        fig.colorbar(pcm,ax=axs[0],shrink=0.75)
         
         pcm = axs[1].imshow(self.phase,extent=[-self.radius,self.radius,-self.radius,self.radius])
         axs[1].set_title('Phase aberrations')
         axs[1].set_xlabel('Position (m)')
         axs[1].set_ylabel('Position (m)')
-        fig.colorbar(pcm,ax=axs[1],shrink=0.1)
+        fig.colorbar(pcm,ax=axs[1],shrink=0.75)
         plt.show()

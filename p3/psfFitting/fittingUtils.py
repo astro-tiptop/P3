@@ -10,7 +10,7 @@ Created on Mon May 3 13:30:49 2021
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-import math
+import math as math
 from random import random
 from configparser import ConfigParser
 import os
@@ -49,7 +49,7 @@ def split_fitting_psfao(im, path_ini, x0, fixed, weights,path_root='') :
     x0    = list(res_atm.x[0:7]) + [0,0,0,1.0,0,0,0] + list(np.zeros((psfao.ao.tel.nModes))) 
     fixed = (False, False, False, False, False, False, False) +(True,)*3 + (False,False,False,False) + (False,)*psfao.ao.tel.nModes
     # redefining bounds
-    bounds  = psfao.updateBounds(res_atm.x,res_atm.xerr,sig=5)
+    bounds  = psfao.update_bounds(res_atm.x,res_atm.xerr,sig=5)
     res_all = psfFitting(im,psfao,x0,verbose=2,fixed=fixed,bounds=bounds)
     
     return res_all
@@ -654,7 +654,7 @@ def fit_all_PSFs(pathData, x0, fixed, weights, statMode, path_ini, pathFilter, o
         
         if SR > 0.35 and FWHM > 35 : 
 
-            res = split_fitting(im, psfao, x0, fixed, weights)
+            res = split_fitting_psfao(im, path_ini, x0, fixed, weights)
 
             hdr = fits.getheader(pathFile)
             year, month, day = get_split_date(hdr)
