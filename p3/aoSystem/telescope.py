@@ -102,7 +102,7 @@ class telescope:
             self.pupil = load_and_process_data(path_pupil)
         else:
             # build an annular pupil model
-            th = self.pupilAngle*np.pi/180
+            th = self.pupilAngle*nnp.pi/180
             x = nnp.linspace(-D/2, D/2, resolution)
             X,Y = nnp.meshgrid(x,x)
             Xr = X*nnp.cos(th) + Y*nnp.sin(th)
