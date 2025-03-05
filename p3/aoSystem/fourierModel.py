@@ -527,7 +527,7 @@ class fourierModel:
             else:
                 self.ntfInt = self.atfInt/z
 
-            self.noiseGain = np.trapz(abs(self.ntfInt)**2, f)*2*Ts
+            self.noiseGain = np.trapezoid(abs(self.ntfInt)**2, f)*2*Ts
 
             # Get transfer functions
             for l in range(self.ao.atm.nL):
