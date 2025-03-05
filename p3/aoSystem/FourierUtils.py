@@ -7,7 +7,7 @@ Created on Wed Jun 17 01:17:43 2020
 
 # Libraries
 import numpy as nnp
-from . import gpuEnabled, np, nnp, RectBivariateSpline, fft, spc, cpuArray
+from . import gpuEnabled, np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray
 
 import matplotlib.pyplot as plt
 from astropy.modeling import models, fitting
@@ -237,15 +237,14 @@ def sombrero(n,x):
         return out
 
 def telescopeOtf(pupil,samp):
-    nSize = nnp.array(pupil.shape)
-
     if samp >1:
         pup_pad = enlargeSupport(pupil,samp)
+        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
     else:
         factor = nnp.ceil(1/samp)
-        pup = interpolateSupport(pupil,int(nnp.round(nSize[0]/factor)))
-        pup_pad = enlargeSupport(pup,samp*factor)
-    otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+        pup_pad = enlargeSupport(pupil,samp*factor)
+        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+        otf = interpolateSupport(otf,float(otf.shape[0]/factor),kind='bilinear')
     return otf/otf.max()
 
 def telescopePsf(pupil,samp,kind='spline'):
@@ -432,16 +431,16 @@ def inpolygon(xq, yq, xv, yv):
         return p.contains_points(q).reshape(shape)
     
 def interpolateSupport(image,nRes,kind='spline'):
-    
+
     nx,ny = image.shape
     # Define angular frequencies vectors
     if nnp.isscalar(nRes):
         mx = my = nRes
-    else:        
+    else:
         mx = nRes[0]
         my = nRes[1]
-                   
-            
+
+
     if kind == 'nearest':
         tmpReal = scnd.zoom(np.real(image),min([mx/nx,my/ny]),order=0)
         if np.any(np.iscomplex(image)):
@@ -449,8 +448,14 @@ def interpolateSupport(image,nRes,kind='spline'):
             return tmpReal + complex(0,1)*tmpImag
         else:
             return tmpReal
-    else:        
-        
+    elif kind == 'bilinear':
+        tmpReal = scnd.zoom(np.real(image),min([mx/nx,my/ny]),order=1)
+        if np.any(np.iscomplex(image)):
+            tmpImag = scnd.zoom(np.imag(image),min([mx/nx,my/ny]),order=1)
+            return tmpReal + complex(0,1)*tmpImag
+        else:
+            return tmpReal
+    else:
         # Initial frequencies grid    
         if nx%2 == 0:
             uinit = nnp.linspace(-nx/2,nx/2-1,nx)*2/nx
@@ -460,7 +465,7 @@ def interpolateSupport(image,nRes,kind='spline'):
             vinit = nnp.linspace(-ny/2,ny/2-1,ny)*2/ny
         else:
             vinit = nnp.linspace(-np.floor(ny/2),np.floor(ny/2),ny)*2/ny    
-             
+
         # Interpolated frequencies grid                  
         if mx%2 == 0:
             unew = nnp.linspace(-mx/2,mx/2-1,mx)*2/mx
@@ -470,9 +475,9 @@ def interpolateSupport(image,nRes,kind='spline'):
             vnew = nnp.linspace(-my/2,my/2-1,my)*2/my
         else:
             vnew = nnp.linspace(-np.floor(my/2),np.floor(my/2),my)*2/my
-                   
+
         # Interpolation
-    
+
         if kind == 'spline':
             # Surprinsingly v and u vectors must be shifted when using
             # RectBivariateSpline. See:https://github.com/scipy/scipy/issues/3164
