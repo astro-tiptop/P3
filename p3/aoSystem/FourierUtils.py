@@ -235,15 +235,22 @@ def sombrero(n,x):
         idx = x!=0
         out[idx] = spc.j1(x[idx])/x[idx]
         return out
-                 
-def telescopeOtf(pupil,samp):    
-    pup_pad  = enlargeSupport(pupil,samp)
-    otf      = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+
+def telescopeOtf(pupil,samp):
+    nSize = nnp.array(pupil.shape)
+
+    if samp >1:
+        pup_pad = enlargeSupport(pupil,samp)
+    else:
+        factor = nnp.ceil(1/samp)
+        pup = interpolateSupport(pupil,int(nnp.round(nSize[0]/factor)))
+        pup_pad = enlargeSupport(pup,samp*factor)
+    otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
     return otf/otf.max()
-           
+
 def telescopePsf(pupil,samp,kind='spline'):
     nSize = nnp.array(pupil.shape)
-    
+
     if samp >=2:
         otf = telescopeOtf(pupil,samp)
         return otf2psf(interpolateSupport(otf,nSize,kind=kind))
@@ -1200,7 +1207,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=Fa
         psf = psf0
 
     npsf   = nnp.array(psf.shape)
-
+    
     # Get the OTF
     otfDL = telescopeOtf(pupil,samp)
         

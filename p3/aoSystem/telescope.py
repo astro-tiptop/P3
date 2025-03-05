@@ -99,14 +99,14 @@ class telescope:
             Xr  = X*nnp.cos(th) + Y*nnp.sin(th)
             Yr  = Y*nnp.cos(th) - X*nnp.sin(th)
             R   = nnp.hypot(Xr,Yr)
-            P   = (R <= self.R) * (R > self.R*self.obsRatio)
+            P   = ((R <= self.R) * (R > self.R * self.obsRatio)).astype(int)
             self.pupil = np.asarray(P)
             self.verb = False
             self.path_pupil= ''
-    
-    
+
+
         #----- NCPA
-        
+
         if path_static_on != None and ospath.isfile(path_static_on) == True and re.search(".fits",path_static_on)!=None:
             self.opdMap_on = np.asarray(fits.getdata(path_static_on))
             self.opdMap_on[self.opdMap_on!=self.opdMap_on] = 0
