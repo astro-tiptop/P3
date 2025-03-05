@@ -51,19 +51,11 @@ plt.rcParams.update({
 rad2mas = 3600 * 180 * 1e3/np.pi
 
 #%% MANAGING PATHS
-
-if sys.platform[0:3] == 'win':
-    path_root  = '\\'.join(psfao21Main.__file__.split('\\')[0:-3]) + '\\'
-    path_p3    = '\\'.join(psfao21Main.__file__.split('\\')[0:-2])
-    path_ini   = path_p3 + '\aoSystem\parFiles\KECKII_NIRC2_20130801_12_00_19.254.ini'
-    path_img   = path_p3 + '\data\20130801_n0004.fits'
-    path_calib = path_p3 + '\aoSystem\data\KECK_CALIBRATION\\'
-else:
-    path_root = str(pathlib.Path(psfao21Main.__file__).parent.parent.parent.absolute()) +"/"
-    path_p3 = str(pathlib.Path(psfao21Main.__file__).parent.parent.absolute())
-    path_ini = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
-    path_img   = path_p3 + '/../data/20130801_n0004.fits'
-    path_calib = path_p3 + '/aoSystem/data/KECK_CALIBRATION/'
+path_root = str(pathlib.Path(psfao21Main.__file__).parent.parent.parent.absolute()) +"/"
+path_p3 = str(pathlib.Path(psfao21Main.__file__).parent.parent.absolute())
+path_ini = path_p3 + '/aoSystem/parFiles/KECKII_NIRC2_20130801_12_00_19.254.ini'
+path_img = path_p3 + '/data/20130801_n0004.fits'
+path_calib = path_p3 + '/aoSystem/data/KECK_CALIBRATION/'
 
 im_nirc2 = fits.getdata(path_img, ignore_missing_simple=True)
 filename   = 'n0004_fullNGS_trs.sav'
