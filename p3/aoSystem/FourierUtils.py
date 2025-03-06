@@ -435,11 +435,10 @@ def interpolateSupport(image,nRes,kind='spline'):
     nx,ny = image.shape
     # Define angular frequencies vectors
     if nnp.isscalar(nRes):
-        mx = my = nRes
+        mx = my = int(nRes)
     else:
-        mx = nRes[0]
-        my = nRes[1]
-
+        mx = int(nRes[0])
+        my = int(nRes[1])
 
     if kind == 'nearest':
         tmpReal = scnd.zoom(np.real(image),min([mx/nx,my/ny]),order=0)
@@ -448,33 +447,26 @@ def interpolateSupport(image,nRes,kind='spline'):
             return tmpReal + complex(0,1)*tmpImag
         else:
             return tmpReal
-    elif kind == 'bilinear':
-        tmpReal = scnd.zoom(np.real(image),min([mx/nx,my/ny]),order=1)
-        if np.any(np.iscomplex(image)):
-            tmpImag = scnd.zoom(np.imag(image),min([mx/nx,my/ny]),order=1)
-            return tmpReal + complex(0,1)*tmpImag
-        else:
-            return tmpReal
     else:
         # Initial frequencies grid    
         if nx%2 == 0:
             uinit = nnp.linspace(-nx/2,nx/2-1,nx)*2/nx
         else:
-            uinit = nnp.linspace(-np.floor(nx/2),np.floor(nx/2),nx)*2/nx
+            uinit = nnp.linspace(-nnp.floor(nx/2),nnp.floor(nx/2),nx)*2/nx
         if ny%2 == 0:
             vinit = nnp.linspace(-ny/2,ny/2-1,ny)*2/ny
         else:
-            vinit = nnp.linspace(-np.floor(ny/2),np.floor(ny/2),ny)*2/ny    
+            vinit = nnp.linspace(-nnp.floor(ny/2),nnp.floor(ny/2),ny)*2/ny
 
         # Interpolated frequencies grid                  
         if mx%2 == 0:
             unew = nnp.linspace(-mx/2,mx/2-1,mx)*2/mx
         else:
-            unew = nnp.linspace(-np.floor(mx/2),np.floor(mx/2),mx)*2/mx
+            unew = nnp.linspace(-nnp.floor(mx/2),nnp.floor(mx/2),mx)*2/mx
         if my%2 == 0:
             vnew = nnp.linspace(-my/2,my/2-1,my)*2/my
         else:
-            vnew = nnp.linspace(-np.floor(my/2),np.floor(my/2),my)*2/my
+            vnew = nnp.linspace(-nnp.floor(my/2),nnp.floor(my/2),my)*2/my
 
         # Interpolation
 
@@ -482,30 +474,22 @@ def interpolateSupport(image,nRes,kind='spline'):
             # Surprinsingly v and u vectors must be shifted when using
             # RectBivariateSpline. See:https://github.com/scipy/scipy/issues/3164
             xin = np.real(image)
-            if gpuEnabled:
-                xin = xin.get()
-            fun_real = RectBivariateSpline(vinit, uinit, xin)
-            if np.any(np.iscomplex(image)):
+            fun_real = RectBivariateSpline(vinit, uinit, cpuArray(xin))
+            if nnp.any(np.iscomplex(image)):
                 xin = np.imag(image)
-                if gpuEnabled:
-                    xin = xin.get()
-                fun_imag = RectBivariateSpline(vinit, uinit, xin)
+                fun_imag = RectBivariateSpline(vinit, uinit, cpuArray(xin))
         else:
             xin = np.real(image)
-            if gpuEnabled:
-                xin = xin.get()
-            fun_real = RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
-            if np.any(np.iscomplex(image)):
+            fun_real = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
+            if nnp.any(np.iscomplex(image)):
                 xin = np.imag(image)
-                if gpuEnabled:
-                    xin = xin.get()
-                fun_imag = RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
+                fun_imag = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
     
         if np.any(np.iscomplex(image)):
             return np.asarray(fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew))
         else:
             return np.asarray(fun_real(unew,vnew))
-            
+
 
 def normalizeImage(im,normType=1,param=None):
     ''' Returns the normalized PSF :
