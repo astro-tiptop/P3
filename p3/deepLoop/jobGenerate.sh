@@ -9,4 +9,4 @@
 #SBATCH --mail-type=BEGIN,END  
 #SBATCH --mail-user=olivier.beltramo-martin@lam.fr
 
-python3 ./dataGeneratorBatch.py --ini='/home/omartin/Projects/APPLY/CODES/_ANN/dataGen/nirc2.ini' --mag=0 --addStat=0 --nPSFperFolder=100 --ntest=0.2 --savePath='/home/omartin/Projects/APPLY/' > 'genStatus.txt'
+python3 ./dataGeneratorBatch.py --ini='/home/omartin/Projects/APPLY/CODES/_ANN/dataGen/nirc2.ini' --mag=10 --addStat=0 --nPSFperFolder=10 --ntest=0.1 --savePath='/home/omartin/Projects/APPLY/' > '/home/omartin/Projects/APPLY/genStatus.txt'

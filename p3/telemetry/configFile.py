@@ -10,22 +10,22 @@ import os
 from configparser import ConfigParser
 
 class configFile():
-    
 
-    def __init__(self,sysdiag):
-        
+
+    def __init__(self, sysdiag, verbose=False):
+
         # create the .ini file
         file = sysdiag.trs.tel.name + '_' + sysdiag.trs.cam.name + '_' + sysdiag.trs.obsdate + '_' + sysdiag.trs.acqtime + '.ini'
         self.path_ini = sysdiag.trs.path_save + '/'+ file
-        if os.path.exists(self.path_ini):
+        if os.path.exists(self.path_ini) and verbose:
             print('WARNING: the .ini file already exists')
 
         # open the .ini file
         parser = ConfigParser()
         parser.optionxform = str
         parser.read(self.path_ini)
-        
-        #%% TELESCOPE 
+
+        #%% TELESCOPE
         if not parser.has_section('telescope'):
             parser.add_section('telescope')
         parser.set('telescope','TelescopeDiameter',str(sysdiag.trs.tel.D))
@@ -33,14 +33,22 @@ class configFile():
         parser.set('telescope','ZenithAngle', str(sysdiag.trs.tel.zenith_angle))
         parser.set('telescope','Resolution', str(sysdiag.trs.tel.resolution))
         parser.set('telescope','PupilAngle', str(sysdiag.trs.tel.pupilAngle))
-        parser.set('telescope','PathPupil','\'' + sysdiag.trs.tel.path_pupil + '\'')
-        parser.set('telescope','PathStaticOn','\'' + sysdiag.trs.cam.path_ncpa + '\'')
-        parser.set('telescope','PathStatModes','\'' + sysdiag.trs.tel.path_telstat + '\'')
-        
-        #%% ATMOSPHERE         
+        if sysdiag.trs.tel.path_pupil is not None:
+            parser.set('telescope','PathPupil','\'' + sysdiag.trs.tel.path_pupil + '\'')
+        else:
+            parser.remove_option('telescope','PathPupil')
+        if sysdiag.trs.cam.path_ncpa is not None:
+            parser.set('telescope','PathStaticOn','\'' + sysdiag.trs.cam.path_ncpa + '\'')
+        else:
+            parser.remove_option('telescope','PathStaticOn')
+        if sysdiag.trs.tel.path_telstat is not None:
+            parser.set('telescope','PathStatModes','\'' + sysdiag.trs.tel.path_telstat + '\'')
+        else:
+            parser.remove_option('telescope','PathStatModes')
+        #%% ATMOSPHERE
         if not parser.has_section('atmosphere'):
             parser.add_section('atmosphere')
-            
+
         parser.set('atmosphere','Wavelength', str(sysdiag.trs.atm.wvl))
         parser.set('atmosphere','Seeing', str(sysdiag.trs.atm.seeing))
         parser.set('atmosphere','L0', str(sysdiag.trs.atm.L0))
@@ -56,8 +64,7 @@ class configFile():
         parser.set('sources_science','Wavelength', str([np.mean(sysdiag.trs.cam.wvl)]))
         parser.set('sources_science','Zenith', str(sysdiag.trs.cam.zenith))
         parser.set('sources_science','Azimuth', str(sysdiag.trs.cam.azimuth))
-        
-        
+
         #%% GUIDE STARS
         if not parser.has_section('sources_HO'):
             parser.add_section('sources_HO')
@@ -76,8 +83,8 @@ class configFile():
             parser.set('sources_HO','Zenith',str(sysdiag.trs.ngs.zenith))
             parser.set('sources_HO','Azimuth',str(sysdiag.trs.ngs.azimuth))
             parser.set('sources_HO','Height',str(0))
-            
-         #%% WFS 
+
+         #%% WFS
         # updating the HO WFS config
         if not parser.has_section('sensor_HO'):
             parser.add_section('sensor_HO')
@@ -103,7 +110,7 @@ class configFile():
         parser.set('sensor_HO','WindowRadiusWCoG', str(sysdiag.trs.wfs.win))
         parser.set('sensor_HO','ThresholdWCoG', str(sysdiag.trs.wfs.thres))
         parser.set('sensor_HO','NewValueThrPix', str(sysdiag.trs.wfs.new))
-        
+
         if sysdiag.trs.aoMode == 'LGS':
             if not parser.has_section('sensor_LO'):
                 parser.add_section('sensor_LO')
@@ -127,8 +134,8 @@ class configFile():
             parser.set('sensor_LO','WindowRadiusWCoG', str(sysdiag.trs.tipTilt.win))
             parser.set('sensor_LO','ThresholdWCoG', str(sysdiag.trs.tipTilt.thres))
             parser.set('sensor_LO','NewValueThrPix', str(sysdiag.trs.tipTilt.new))
-        
-        
+
+
          #%% DMS
         if not parser.has_section('DM'):
             parser.add_section('DM')
@@ -136,7 +143,7 @@ class configFile():
         parser.set('DM','DmPitchs', str(sysdiag.trs.dm.pitch))
         parser.set('DM','InfModel', '\''+sysdiag.trs.dm.modes+'\'')
         parser.set('DM','InfCoupling', str(sysdiag.trs.dm.mechCoupling))
-        
+
         parser.set('DM','DmHeights', str(sysdiag.trs.dm.heights))
         parser.set('DM','OptimizationZenith', str(sysdiag.trs.dm.opt_zen))
         parser.set('DM','OptimizationAzimuth', str(sysdiag.trs.dm.opt_azi))
@@ -144,8 +151,8 @@ class configFile():
         parser.set('DM','OptimizationConditioning', str(sysdiag.trs.dm.opt_cond))
         parser.set('DM','NumberReconstructedLayers', str(sysdiag.trs.dm.nrec))
         parser.set('DM','AoArea', '\''+sysdiag.trs.dm.area+'\'')
-        
-        #%% RTC    
+
+        #%% RTC
         if not parser.has_section('RTC'):
             parser.add_section('RTC')
         parser.set('RTC','LoopGain_HO', str(sysdiag.trs.holoop.gain))
@@ -156,8 +163,8 @@ class configFile():
             parser.set('RTC','LoopGain_LO', str(sysdiag.trs.ttloop.gain))
             parser.set('RTC','SensorFrameRate_LO', str(sysdiag.trs.ttloop.freq))
             parser.set('RTC','LoopDelaySteps_LO', str(sysdiag.trs.ttloop.lat * sysdiag.trs.ttloop.freq))
-            
-        #%% SCIENCE SOURCES AND DETECTOR    
+
+        #%% SCIENCE SOURCES AND DETECTOR
         if not parser.has_section('sensor_science'):
             parser.add_section('sensor_science')
         parser.set('sensor_science','Name', str('\''+sysdiag.trs.cam.name+'\''))
@@ -168,25 +175,25 @@ class configFile():
         parser.set('sensor_science','Transmittance', str(list(sysdiag.trs.cam.transmission)))
         parser.set('sensor_science','SpectralBandwidth', str(sysdiag.trs.cam.bw))
         parser.set('sensor_science','Dispersion', str(sysdiag.trs.cam.dispersion))
-       
+
         # jitter
         Cj = np.dot(sysdiag.trs.tipTilt.slopes.T,sysdiag.trs.tipTilt.slopes)/sysdiag.trs.tipTilt.slopes.shape[0]
         Cj*= (1000/sysdiag.trs.tipTilt.tilt2meter)**2
-        #psInMas = sysdiag.trs.cam.psInMas 
+        #psInMas = sysdiag.trs.cam.psInMas
         #1 mas = rad2mas * 4/D * 1e-9 * 1nm
         parser.set('sensor_science','SpotFWHM', \
-        str([[np.sqrt(Cj[0,0]), np.sqrt(Cj[1,1]), 
+        str([[np.sqrt(Cj[0,0]), np.sqrt(Cj[1,1]),
               np.sign(Cj[0,1]) * np.sqrt(abs(Cj[0,1])) ]]))
-    
+
         #%% EXTERNAL PROFILER
         if not parser.has_section('external'):
             parser.add_section('external')
         parser.set('external','Seeing', str(sysdiag.trs.atm.seeing_dimm))
         parser.set('external','SeeingAlt', str(sysdiag.trs.atm.seeing_mass))
         parser.set('external','Cn2Weights', str(sysdiag.trs.atm.Cn2_mass))
-        
+
         #%% WRITING
         with open(self.path_ini, 'w') as configfile:
             parser.write(configfile)
-            
+
         sysdiag.trs.path_ini = self.path_ini

@@ -51,8 +51,11 @@ class aoSystem():
     def get_config_value(self, primary, secondary):
         return self.my_data_map[primary][secondary]
     
-    def __init__(self,path_config,path_root='',nLayer=None,getPSDatNGSpositions=False,
+    def __init__(self,path_config,path_root='',getPSDatNGSpositions=False,
                 psdExpansion=False,coo_stars=None):
+
+        if path_root is None:
+            path_root = ''
 
         self.coo_stars = coo_stars
         self.psdExpansion = psdExpansion
