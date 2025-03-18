@@ -105,10 +105,10 @@ class telescope:
             th = self.pupilAngle*nnp.pi/180
             x = nnp.linspace(-D/2, D/2, resolution)
             X,Y = nnp.meshgrid(x,x)
-            Xr = X*nnp.cos(th) + Y*nnp.sin(th)
-            Yr = Y*nnp.cos(th) - X*nnp.sin(th)
-            R = nnp.hypot(Xr, Yr)
-            P = (R <= self.R) * (R > self.R*self.obsRatio)
+            Xr  = X*nnp.cos(th) + Y*nnp.sin(th)
+            Yr  = Y*nnp.cos(th) - X*nnp.sin(th)
+            R   = nnp.hypot(Xr,Yr)
+            P   = ((R <= self.R) * (R > self.R * self.obsRatio)).astype(int)
             self.pupil = np.asarray(P)
             self.verb = False
 

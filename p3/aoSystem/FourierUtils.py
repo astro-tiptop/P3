@@ -7,7 +7,7 @@ Created on Wed Jun 17 01:17:43 2020
 
 # Libraries
 import numpy as nnp
-from . import gpuEnabled, np, nnp, RectBivariateSpline, fft, spc, cpuArray
+from . import gpuEnabled, np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray
 
 import matplotlib.pyplot as plt
 from astropy.modeling import models, fitting
@@ -276,6 +276,7 @@ def sombrero(n,x):
         out[idx] = spc.j1(x[idx])/x[idx]
         return out
 
+
 def sort_params_from_labels(psfModelInst, x0):
     '''
         Returns lists of parameters for the PSF model, static aberrations and the object
@@ -358,10 +359,15 @@ def sort_params_from_labels(psfModelInst, x0):
 
     return (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat)
 
-
 def telescopeOtf(pupil,samp):
-    pup_pad  = enlargeSupport(pupil,samp)
-    otf      = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+    if samp >1:
+        pup_pad = enlargeSupport(pupil,samp)
+        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+    else:
+        factor = nnp.ceil(1/samp)
+        pup_pad = enlargeSupport(pupil,samp*factor)
+        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+        otf = interpolateSupport(otf,float(otf.shape[0]/factor),kind='bilinear')
     return otf/otf.max()
 
 def telescopePsf(pupil,samp,kind='spline'):
@@ -448,7 +454,9 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
             psf_ = psf
 
         # managing the field of view
-        if nPix < ao.cam.fovInPix:
+        if nPix 
+        
+        ao.cam.fovInPix:
             psf = np.zeros((nPix,nPix,ao.src.nSrc))
             nC  = psf_.shape[0]/nPix
             for iSrc in range(ao.src.nSrc):
@@ -682,20 +690,16 @@ def inpolygon(xq, yq, xv, yv):
         q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
         p = Path([(xv[i], yv[i]) for i in range(xv.shape[0])])
         return p.contains_points(q).reshape(shape)
-
+    
 def interpolateSupport(image, n_out, kind='spline'):
-    """
-    Returns the interpolated image over a n_out x n_out cartesian grid
-    """
 
-    # ---- checking the size
-    n_x, n_y = image.shape
+    n_x,n_y = image.shape
     # Define angular frequencies vectors
-    if np.isscalar(n_out):
-        m_x = m_y = n_out
+    if nnp.isscalar(n_out):
+        m_x = m_y = int(n_out)
     else:
-        m_x = n_out[0]
-        m_y = n_out[1]
+        m_x = int(n_out[0])
+        m_y = int(n_out[1])
 
     if n_x==m_x and n_y==m_y:
         return image
@@ -708,26 +712,25 @@ def interpolateSupport(image, n_out, kind='spline'):
         else:
             return tmpReal
     else:
-
         # Initial frequencies grid
         if n_x%2 == 0:
             uinit = nnp.linspace(-n_x/2,n_x/2-1,n_x)*2/n_x
         else:
-            uinit = nnp.linspace(-np.floor(n_x/2),np.floor(n_x/2),n_x)*2/n_x
+            uinit = nnp.linspace(-nnp.floor(n_x/2),nnp.floor(n_x/2),n_x)*2/n_x
         if n_y%2 == 0:
             vinit = nnp.linspace(-n_y/2,n_y/2-1,n_y)*2/n_y
         else:
-            vinit = nnp.linspace(-np.floor(n_y/2),np.floor(n_y/2),n_y)*2/n_y
+            vinit = nnp.linspace(-nnp.floor(n_y/2),nnp.floor(n_y/2),n_y)*2/n_y
 
         # Interpolated frequencies grid
         if m_x%2 == 0:
             unew = nnp.linspace(-m_x/2,m_x/2-1,m_x)*2/m_x
         else:
-            unew = nnp.linspace(-np.floor(m_x/2),np.floor(m_x/2),m_x)*2/m_x
+            unew = nnp.linspace(-nnp.floor(m_x/2),nnp.floor(m_x/2),m_x)*2/m_x
         if m_y%2 == 0:
             vnew = nnp.linspace(-m_y/2,m_y/2-1,m_y)*2/m_y
         else:
-            vnew = nnp.linspace(-np.floor(m_y/2),np.floor(m_y/2),m_y)*2/m_y
+            vnew = nnp.linspace(-nnp.floor(m_y/2),nnp.floor(m_y/2),m_y)*2/m_y
 
         # Interpolation
 
@@ -735,30 +738,22 @@ def interpolateSupport(image, n_out, kind='spline'):
             # Surprinsingly v and u vectors must be shifted when using
             # RectBivariateSpline. See:https://github.com/scipy/scipy/issues/3164
             xin = np.real(image)
-            if gpuEnabled:
-                xin = xin.get()
-            fun_real = RectBivariateSpline(vinit, uinit, xin)
-            if np.any(np.iscomplex(image)):
+            fun_real = RectBivariateSpline(vinit, uinit, cpuArray(xin))
+            if nnp.any(np.iscomplex(image)):
                 xin = np.imag(image)
-                if gpuEnabled:
-                    xin = xin.get()
-                fun_imag = RectBivariateSpline(vinit, uinit, xin)
+                fun_imag = RectBivariateSpline(vinit, uinit, cpuArray(xin))
         else:
             xin = np.real(image)
-            if gpuEnabled:
-                xin = xin.get()
-            fun_real = RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
-            if np.any(np.iscomplex(image)):
+            fun_real = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
+            if nnp.any(np.iscomplex(image)):
                 xin = np.imag(image)
-                if gpuEnabled:
-                    xin = xin.get()
-                fun_imag = RectBivariateSpline(uinit, vinit, xin, kx=1, ky=1)
+                fun_imag = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
 
         if np.any(np.iscomplex(image)):
             return np.asarray(fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew))
         else:
             return np.asarray(fun_real(unew,vnew))
-            
+
 
 def normalizeImage(im, normType=1, param=None):
     ''' Returns the normalized PSF :
@@ -1462,7 +1457,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=Fa
         psf = psf0
 
     npsf   = nnp.array(psf.shape)
-
+    
     # Get the OTF
     otfDL = telescopeOtf(pupil,samp)
         
