@@ -12,6 +12,7 @@ from astropy.io import fits
 import os.path as ospath
 import re
 import p3.aoSystem.FourierUtils as FourierUtils
+from p3.aoSystem.zernike import zernike
 
 class Attribute(object):
     pass
@@ -53,10 +54,10 @@ class telescope:
     
     # CONSTRUCTOR
     def __init__(self,D,resolution, zenith_angle=0.0,obsRatio=0.0,pupilAngle = 0.0,\
-                 path_pupil='', path_static_on='', path_static_off='', path_static_pos='',\
-                 path_apodizer='', path_statModes='', extraErrorNm=0.0, extraErrorExp=-2, \
-                 extraErrorMin=0.0, extraErrorMax=0.0, extraErrorLoNm=0.0, extraErrorLoExp=-2, \
-                 extraErrorLoMin=0.0, extraErrorLoMax=0.0, verbose=True):
+                 path_pupil='', path_static_on='', zcoef_static_on=[], path_static_off='', \
+                 path_static_pos='',path_apodizer='', path_statModes='', extraErrorNm=0.0, \
+                 extraErrorExp=-2, extraErrorMin=0.0, extraErrorMax=0.0, extraErrorLoNm=0.0, \
+                 extraErrorLoExp=-2, extraErrorLoMin=0.0, extraErrorLoMax=0.0, verbose=True):
         
         # PARSING INPUTS
         self.D                 = D            # primary mirror diameter in meters
@@ -67,6 +68,7 @@ class telescope:
         self.pupilAngle        = pupilAngle
         self.path_pupil        = path_pupil
         self.path_static_on    = path_static_on
+        self.zcoef_static_on   = zcoef_static_on
         self.path_static_pos   = path_static_off
         self.path_apodizer     = path_apodizer
         self.path_statModes    = path_statModes
@@ -106,7 +108,7 @@ class telescope:
 
 
         #----- NCPA
-
+        # 2D map from a fits file on disk
         if path_static_on != None and ospath.isfile(path_static_on) == True and re.search(".fits",path_static_on)!=None:
             self.opdMap_on = np.asarray(fits.getdata(path_static_on))
             self.opdMap_on[self.opdMap_on!=self.opdMap_on] = 0
@@ -116,7 +118,36 @@ class telescope:
         else:
             self.opdMap_on = None
             self.path_static_on= ''
-            
+
+        # 2D map from a vector of Zernike coefficients
+        if self.zcoef_static_on and len(self.zcoef_static_on) > 0:
+            n_zern = len(zcoef_static_on)
+            zern_idx = list(np.linspace(2,n_zern+1,n_zern).astype(int))
+            zern_obj = zernike(zern_idx,resolution,D=None,pupil=[],unitNorm=False,radius=[],angle=[],cobs=0)
+            zern_base = zern_obj.modes
+            #
+            # mask and orthonormalize the zernike modes
+            for i in range(zern_base.shape[0]):
+                zern_base[i] *= np.array(self.pupil)
+            zern_base = zern_base.reshape((zern_base.shape[0],resolution**2))
+            size_base = np.shape(zern_base)
+            if size_base[1] > size_base[0]:
+                Q, R = np.linalg.qr(zern_base.T)
+                Q = Q.T
+            else:
+                Q, R = np.linalg.qr(zern_base)
+            zern_base = zern_base.reshape((zern_base.shape[0],resolution,resolution))
+            # Normalize Zernike modes
+            for ii in range(zern_base.shape[0]):
+                zern_base[ii, :] -= np.mean(zern_base[ii, :])
+                zern_base[ii, :] /= np.sqrt(np.mean(zern_base[ii, :]**2))
+            #
+            # build the phase map
+            if self.opdMap_on is None:
+                self.opdMap_on = np.zeros((resolution,resolution))
+            for i in range(zern_base.shape[0]):
+                self.opdMap_on += zcoef_static_on[i] * zern_base[i]
+        
         #----- FIELD-DEPENDANT STATIC ABERRATIONS
         if path_static_off != None and ospath.isfile(path_static_off) == True and re.search(".fits",path_static_off)!=None:   
             if path_static_pos != None and ospath.isfile(path_static_pos) == True and re.search(".fits",path_static_pos)!=None:   
