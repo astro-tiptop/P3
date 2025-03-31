@@ -7,7 +7,8 @@ Created on Thu Jan 28 11:21:10 2021
 """
 
 #%% MANAGE PYTHON LIBRAIRIES
-import numpy as np
+import numpy as nnp
+from . import gpuEnabled, cp, np, nnp, rotate
 import math
 import scipy.special as ssp
 from scipy import integrate
