@@ -60,7 +60,7 @@ class aoSystem():
         # verify if the file exists
         if ospath.isfile(path_config) == False:
             raise ValueError('The parameter file (.ini or .yml) could not be found.' + str(path_config))
-                
+  
         if path_config[-4::]=='.ini':
             # open the .ini file
             config = ConfigParser()
@@ -71,14 +71,14 @@ class aoSystem():
                 self.my_data_map[section] = {}
                 for name,value in config.items(section):
                     self.my_data_map[section].update({name:eval(value)})            
-            
+
         elif path_config[-4::]=='.yml':
             with open(path_config) as f:
                 my_yaml_dict = yaml.safe_load(f)        
             self.my_data_map = my_yaml_dict
 
         self.getPSDatNGSpositions = getPSDatNGSpositions
-        
+
         #%% TELESCOPE
         #----- grabbing main parameters
         if not(self.check_section_key('telescope')):
@@ -88,28 +88,28 @@ class aoSystem():
             self.D = self.get_config_value('telescope','TelescopeDiameter')
         else:
             self.raiseMissingRequiredOpt('telescope','TelescopeDiameter')
-        
+
         if self.check_config_key('telescope','ZenithAngle'):
             zenithAngle = self.get_config_value('telescope','ZenithAngle')
             if zenithAngle >= 90:
                 raise ValueError("'zenithAngle' [deg] cannot be greater than or equal to 90.")
         else:
             zenithAngle = 0.0
-        
+
         airmass = 1/np.cos(zenithAngle*np.pi/180)
-        
+
         if self.check_config_key('telescope','ObscurationRatio'):
             obsRatio = self.get_config_value('telescope','ObscurationRatio')
         else:
             obsRatio = 0.0
-        
+
         if self.check_config_key('telescope','Resolution'):
             nPup = self.get_config_value('telescope','Resolution')
         else:
             self.raiseMissingRequiredOpt('telescope','Resolution')
-            
+
         path_p3 = str(pathlib.Path(__file__).parent.parent.absolute())
-            
+
         #----- PUPIL
         if self.check_config_key('telescope','PathPupil'):
             PathPupil = self.get_config_value('telescope','PathPupil')
@@ -121,12 +121,12 @@ class aoSystem():
                 path_pupil = path_root + PathPupil
         else:
             path_pupil = ''
-                  
+  
         if self.check_config_key('telescope','PupilAngle'):
             pupilAngle = self.get_config_value('telescope','PupilAngle')
         else:
             pupilAngle = 0.0
-        
+
         if self.check_config_key('telescope','PathStaticOn'):
             PathStaticOn = self.get_config_value('telescope','PathStaticOn')
             if path_root == '' and PathStaticOn[0:9]=='/aoSystem' :
@@ -136,8 +136,13 @@ class aoSystem():
             else:
                 path_static_on = path_root + PathStaticOn
         else:
-            path_static_on = None       
-        
+            path_static_on = None
+
+        if self.check_config_key('telescope','zCoefStaticOn'):
+            zCoefStaticOn = self.get_config_value('telescope','zCoefStaticOn')
+        else:
+            zCoefStaticOn = []
+
         if self.check_config_key('telescope','PathStaticOff'):
             PathStaticOff = self.get_config_value('telescope','PathStaticOff')
             if path_root == '' and PathStaticOff[0:9]=='/aoSystem' :
@@ -148,7 +153,7 @@ class aoSystem():
                 path_static_off = path_root + PathStaticOff
         else:
             path_static_off = None
-        
+
         if self.check_config_key('telescope','PathStaticPos'):
             PathStaticPos = self.get_config_value('telescope','PathStaticPos')
             if path_root == '' and PathStaticPos[0:9]=='/aoSystem' :
@@ -159,7 +164,7 @@ class aoSystem():
                 path_static_pos = path_root + PathStaticPos
         else:
             path_static_pos = None
-            
+
         #----- APODIZER
         if self.check_config_key('telescope','PathApodizer'):
             PathApodizer = self.get_config_value('telescope','PathApodizer')
@@ -171,7 +176,7 @@ class aoSystem():
                 path_apodizer = path_root + PathApodizer
         else:
             path_apodizer = ''
-                
+  
         #----- TELESCOPE ABERRATIONS
         if self.check_config_key('telescope', 'PathStatModes'):
             PathStatModes = self.get_config_value('telescope','PathStatModes')
@@ -183,43 +188,43 @@ class aoSystem():
                 path_statModes = path_root + PathStatModes
         else:
             path_statModes = ''
-            
+
         #----- EXTRA ERROR
         if self.check_config_key('telescope', 'extraErrorNm'):       
             extraErrorNm = self.get_config_value('telescope','extraErrorNm')
         else:
             extraErrorNm = 0
-            
+
         if self.check_config_key('telescope', 'extraErrorExp'):
             extraErrorExp = self.get_config_value('telescope','extraErrorExp')
         else:
             extraErrorExp = -2
-            
+
         if self.check_config_key('telescope', 'extraErrorMin'):
             extraErrorMin = self.get_config_value('telescope','extraErrorMin')
         else:
             extraErrorMin = 0
-            
+
         if self.check_config_key('telescope', 'extraErrorMax'):
             extraErrorMax = self.get_config_value('telescope','extraErrorMax')
         else:
             extraErrorMax = 0
-            
+   
         if self.check_config_key('telescope', 'extraErrorLoNm'):       
             extraErrorLoNm = self.get_config_value('telescope','extraErrorLoNm')
         else:
             extraErrorLoNm = extraErrorNm  
-            
+
         if self.check_config_key('telescope', 'extraErrorLoExp'):
             extraErrorLoExp = self.get_config_value('telescope','extraErrorLoExp')
         else:
             extraErrorLoExp = extraErrorExp
-            
+
         if self.check_config_key('telescope', 'extraErrorLoMin'):
             extraErrorLoMin = self.get_config_value('telescope','extraErrorLoMin')
         else:
             extraErrorLoMin = 0
-            
+
         if self.check_config_key('telescope', 'extraErrorLoMax'):
             extraErrorLoMax = self.get_config_value('telescope','extraErrorLoMax')
         else:
@@ -232,6 +237,7 @@ class aoSystem():
                              pupilAngle=pupilAngle,
                              path_pupil=path_pupil,
                              path_static_on=path_static_on,
+                             zcoef_static_on=zCoefStaticOn,
                              path_static_off=path_static_off,
                              path_static_pos=path_static_pos,
                              path_apodizer=path_apodizer,
