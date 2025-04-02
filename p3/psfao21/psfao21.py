@@ -7,222 +7,242 @@ Created on Thu Feb 11 17:50:20 2021
 """
 
 #%% MANAGE PYTHON LIBRAIRIES
-#from amiral import parameter
-# TODO - Move some amiral native functions in here!
+import time
 import numpy as np
 import numpy.fft as fft
-import time
-import sys
-
+from maoppy.psfmodel import Psfao
+from maoppy.instrument import Instrument
 import p3.aoSystem.FourierUtils as FourierUtils
 from p3.aoSystem.aoSystem import aoSystem as aoSys
-from p3.aoSystem.zernike import zernike
-from p3.aoSystem.frequencyDomain import frequencyDomain as frequencyDomain
+from p3.aoSystem.frequencyDomain import frequencyDomain
 
 #%%
-rad2mas = 3600 * 180 * 1000 / np.pi
-rad2arc = rad2mas / 1000
+RAD2MAS = 3600 * 180 * 1000 / np.pi
 
 class psfao21:
     # INIT
-    def __init__(self,path_ini,path_root='',antiAlias=False,fitCn2=False,otfPixel=1,coo_stars=None,filter_tt=False):
-
+    def __init__(self, path_ini, path_root='', otfPixel=1, coo_stars=None):
+        '''
+            Instantiating the psfao21 model :
+                - creating the spatial frequency domain,
+                  including the computation of the static OTF and anisoplanatism
+                - instantiating the psfao19 model
+                - instantiating the bounds
+        '''
         tstart = time.time()
+        self.tag = 'PSFAO21 MODEL'
+        self.param_labels = ['Cn2', 'C', 'A', 'ax', 'p', 'theta', 'beta',
+                             'jitterX', 'jitterY', 'jitterXY',
+                             'F', 'dx', 'dy', 'bkg', 'stat']
 
-        # PARSING INPUTS
-        self.file      = path_ini
-        self.antiAlias = antiAlias
-        self.ao        = aoSys(path_ini,path_root=path_root,coo_stars=coo_stars)
-        self.isStatic  = self.ao.tel.nModes > 0
-        self.tag       = 'PSFAO21'
-        self.otfPixel  = otfPixel
+        # INSTANTIATING THE AOSYSTEM CLASS
+        self.file = path_ini
+        self.ao = aoSys(path_ini, path_root=path_root, coo_stars=coo_stars)
 
-        if self.ao.error==False:
+        # GETTING INPUTS
+        self.isStatic = self.ao.tel.nModes>0
+        self.otfPixel = otfPixel
 
-            # DEFINING THE FREQUENCY DOMAIN
+        # INSTANTIATING THE MAOPPY MODEL
+        self.npix = self.ao.cam.fovInPix
+        system = Instrument(D=self.ao.tel.D,
+                            occ=self.ao.tel.obsRatio,
+                            res=self.ao.tel.resolution,
+                            Nact=self.ao.dms.nActu1D,
+                            gain=self.ao.cam.gain,
+                            ron=self.ao.cam.ron)
+
+        self.wvl, self.nwvl = FourierUtils.create_wavelength_vector(self.ao)
+        samp = RAD2MAS * self.wvl/(self.ao.cam.psInMas*self.ao.tel.D)
+
+        if self.nwvl > 1:
+            self.psfao_19 = []
+            self.freq = []
+            src_wvl = self.wvl
+            for n in range(self.nwvl):
+                # CREATING INSTANCES OF THE MAOPPY MODEL
+                self.psfao_19.append(Psfao((self.npix, self.npix),
+                                    system=system, samp=samp[n]))
+
+                # DEFINING THE FREQUENCY DOMAIN
+                self.ao.cam.nWvl = 1
+                self.ao.src.wvl = [src_wvl[n]]
+                self.ao.src.nWvl = 1
+                self.ao.cam.bandwidth = 0
+                self.freq.append(frequencyDomain(self.ao))
+        else:
+            self.psfao_19 = Psfao((self.npix, self.npix),
+                                  system=system, samp=samp)
             self.freq = frequencyDomain(self.ao)
 
-            # ONE OF SEVERAL FRAMES
-            self.isCube = any(rad2mas * self.ao.src.direction[0]/self.ao.cam.psInMas > self.freq.nPix) \
-            or all(rad2mas * self.ao.src.direction[1]/self.ao.cam.psInMas > self.freq.nPix)
+        # DEFINING THE NUMBER OF PSF PARAMETERS
+        self.n_param_atm = min(self.ao.atm.nL, self.ao.dms.nRecLayers)
+        self.n_param_dphi = 6
 
-            # DEFINING BOUNDS
-            self.bounds = self.defineBounds()
-
-            # DEFINING THE PHASE SPATIAL FILTER
-            if filter_tt:
-                nPup = self.ao.tel.resolution
-                z = zernike([2,3],nPup,pupil=self.ao.tel.pupil.astype(bool))
-                M = z.modes.reshape((2,nPup**2)).T
-                H = np.linalg.pinv(M)
-                self.spatialFilter = np.eye(nPup**2) - np.dot(M,H)
-            else:
-                self.spatialFilter = 1
+        # DEFINING BOUNDS
+        self.bounds = self.define_bounds()
 
         self.t_init = 1000*(time.time()  - tstart)
 
-    def _repr__(self):
-        return 'PSFAO21 model'
+    def __repr__(self):
+        s = '---------------------------------------------' \
+            + self.tag  + '--------------------------------------------- \n\n'
+        s += self.ao.__repr__() + '\n'
+        s += self.freq.__repr__() + '\n'
+        return s
 
-    def defineBounds(self):
+    def define_bounds(self):
         """
         Defining bounds on the PSFAO21 parameters based physics-based a priori
         """
         #Cn2/r0 , C , A , ax , p , theta , beta , sx , sy , sxy , F , dx , dy , bg , stat
-        _EPSILON = np.sqrt(sys.float_info.epsilon)
-
         # Bounds on r0
-        bounds_down = list(np.ones(self.ao.atm.nL)*_EPSILON)
-        bounds_up   = list(np.inf * np.ones(self.ao.atm.nL))
+        nL = min(self.ao.atm.nL, self.ao.dms.nRecLayers)
+        bounds_down = list(np.ones(nL)*1e-3)
+        bounds_up = list(np.inf * np.ones(nL))
         # PSD Parameters
-        bounds_down += [0,0,_EPSILON,_EPSILON,-np.pi,1+_EPSILON]
-        bounds_up   += [np.inf,np.inf,np.inf,np.inf,np.pi,10]
+        bounds_down += [0, 0, 1e-3, 1e-2, -np.pi, 1.01]
+        bounds_up += [np.inf, np.inf, np.inf, 1e2, np.pi, 5]
         # Jitter
-        bounds_down += [0,0,-1]
-        bounds_up   += [np.inf,np.inf,1]
+        bounds_down += [0, 0, -np.inf]
+        bounds_up += [np.inf, np.inf, np.inf]
         # Photometry
-        bounds_down += list(np.zeros(self.ao.src.nSrc * self.freq.nWvl))
-        bounds_up   += list(np.inf*np.ones(self.ao.src.nSrc * self.freq.nWvl))
+        bounds_down += list(np.zeros(self.ao.src.nSrc * self.nwvl))
+        bounds_up += list(np.inf*np.ones(self.ao.src.nSrc * self.nwvl))
         # Astrometry
-        bounds_down += list(-self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc * self.freq.nWvl))
-        bounds_up   += list( self.freq.nPix//2 * np.ones(2*self.ao.src.nSrc * self.freq.nWvl))
+        bounds_down += list(-self.npix//2 * np.ones(2*self.ao.src.nSrc * self.nwvl))
+        bounds_up += list(self.npix//2 * np.ones(2*self.ao.src.nSrc * self.nwvl))
         # Background
-        bounds_down += list(-np.inf * np.ones(self.freq.nWvl))
-        bounds_up   += list(np.inf * np.ones(self.freq.nWvl))
+        bounds_down += list(-np.inf * np.ones(self.nwvl))
+        bounds_up += list(np.inf * np.ones(self.nwvl))
         # Static aberrations
-        bounds_down += list(-self.freq.wvlRef/2*1e9 * np.ones(self.ao.tel.nModes))
-        bounds_up   += list(self.freq.wvlRef/2 *1e9 * np.ones(self.ao.tel.nModes))
+        bounds_down += list(-max(self.wvl)/2*1e9 * np.ones(self.ao.tel.nModes))
+        bounds_up += list(max(self.wvl)/2 *1e9 * np.ones(self.ao.tel.nModes))
 
-        return (bounds_down,bounds_up)
+        return (bounds_down, bounds_up)
 
-    def updateBounds(self,xfinal,xerr,sig=5):
+    def update_bounds(self, xfinal, xerr, fixed=None, sig=5):
         '''
-            Defining bounds on the PSFAO21 parameters based on the first step of the split fitting
+            Defining bounds on the PSFAO21 parameters based on the first step
+            of the split fitting.
         '''
-
+        bounds = np.array(self.bounds)
         # lower bounds
-        bounds_low_psd = list(xfinal[0:7] - sig/3*xerr[0:7])
-        bounds_low     = bounds_low_psd\
-                        + [-np.inf,-np.inf,-np.inf,0,-np.inf,-np.inf,-np.inf]\
-                        + [-self.freq.wvlRef*1e9/2,]*self.ao.tel.nModes
+        bounds_low_psd = list(np.maximum(xfinal[:7] - sig/3*xerr[:7], bounds[0, :7]))
+        bounds_low = bounds_low_psd\
+                    + [-np.inf, -np.inf, -np.inf, 0, -np.inf, -np.inf, -np.inf]\
+                    + [-max(self.wvl)*1e9/2,]*self.ao.tel.nModes
 
         #upper bounds
-        bounds_up_psd  = list(xfinal[0:7] + sig/3*xerr[0:7])
-        bounds_up      = bounds_up_psd\
-                        + [np.inf,np.inf,np.inf,np.inf,np.inf,np.inf,np.inf]\
-                        + [self.freq.wvlRef*1e9/2,]*self.ao.tel.nModes
+        bounds_up_psd = list(np.minimum(xfinal[:7] + sig/3*xerr[:7], bounds[1, :7]))
+        bounds_up = bounds_up_psd\
+                    + [np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]\
+                    + [max(self.wvl)*1e9/2,]*self.ao.tel.nModes
 
-        return (bounds_low,bounds_up)
+        self.psfao_19.bounds = (bounds_low_psd, bounds_up_psd)
+        return (bounds_low, bounds_up)
 
-    def getPSD(self,x0):
-        # Get the moffat PSD
+    def get_power_spectrum_density(self, x0, psd_model, freq, grad=False):
+        '''
+            Define the model of the AO-corrected power spectrum density of the
+            electric field phase in the pupil plan.
+        '''
+        if grad:
+            psd, self.wfe, grad, integral_grad = psd_model.psd(x0, grad=True)
+        else:
+            psd, self.wfe = psd_model.psd(x0, grad=False)
 
-        psd = self.moffat(self.freq.kx_,self.freq.ky_,list(x0[3:])+[0,0])
-        # Piston filtering
-        psd = self.freq.pistonFilter_ * psd
-        # Combination
-        A_emp = np.trapz(np.trapz(psd,self.freq.ky_[0]),self.freq.ky_[0])
-        psd   = x0[0]**(-5/3) * self.freq.psdKolmo_ + self.freq.mskIn_ * (x0[1] + psd/A_emp * x0[2] )
-        # Wavefront error
-        self.wfe     = np.sqrt( np.trapz(np.trapz(psd,self.freq.kx_[:,0]),self.freq.kx_[:,0]) ) * self.freq.wvlRef*1e9/2/np.pi
-        self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * self.freq.wfe_fit_norm  * self.freq.wvlRef*1e9/2/np.pi
+        # wavefront errors
+        cte = freq.wvl*1e9/2/np.pi
+        self.wfe = np.sqrt(self.wfe) * cte
+        self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * freq.wfe_fit_norm  * cte
+
         return psd
 
-    def getSF(self,Cn2=[]):
+    def get_opd_structure_function(self, freq, Cn2=None):
+        '''
+            Define the spatially-variable phase structure function from the
+            psd model and the anisoplanatism model
+        '''
+
         #covariance map
-        Bphi  = fft.fft2(fft.fftshift(self.psd)) / (self.ao.tel.D * self.freq.sampRef)**2
+        real_fft = fft.rfft2(fft.fftshift(self.psd)) / (self.ao.tel.D * freq.sampRef)**2
+        Bphi = fft.fftshift(FourierUtils._rfft2_to_fft2(self.psd.shape, real_fft))
+        #Bphi = fft.fft2(fft.fftshift(self.psd)) / (self.ao.tel.D * freq.sampRef)**2
         # On-axis phase structure function
-        SF   = fft.fftshift(np.real(2*(Bphi.max() - Bphi)))
+        SF = np.real(2*(Bphi.max() - Bphi))
+
         # Anisoplanatism phase structure function
-        if self.freq.isAniso and (len(Cn2) == self.freq.dani_ang.shape[1]):
-            SF = SF[:,:,np.newaxis] + (self.freq.dphi_ani * Cn2).sum(axis=2)
+        if freq.isAniso and Cn2 is not None and (len(Cn2) == freq.dani_ang.shape[1]):
+            SF = SF[:, :, np.newaxis] + (freq.dphi_ani * Cn2).sum(axis=2)
         else:
-            SF = np.repeat(SF[:,:,np.newaxis],self.ao.src.nSrc,axis=2)
-        return SF /(2*np.pi*1e-9/self.freq.wvlRef)**2
+            SF = np.repeat(SF[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
+        return SF
 
-    def __call__(self,x0,nPix=None):
+    def __call__(self, x0, nPix=None):
+        '''
+            Returns the 4D array containing 2D psf for each wavelength
+            and field direction
+        '''
 
         # ----------------- GETTING THE PARAMETERS
-        xall = x0
-        # Cn2 profile
-        nL   = self.ao.atm.nL
-        if nL > 1 and self.ao.dms.nRecLayers > 1: # fit the Cn2 profile
-            Cn2  = np.asarray(x0[0:nL])
-            r0   = np.sum(Cn2)**(-3/5)
-        else: #fit the r0
-            Cn2= []
-            r0 = x0[0]
-            nL = 1
+        (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat) = \
+        FourierUtils.sort_params_from_labels(self, x0)
 
-        # PSD
-        x0_psd = list(xall[nL:nL+6])
+        if self.nwvl == 1:
 
-        # Jitter
-        x0_jitter = list(xall[nL+6:nL+9])
+            # ----------------- SELECTING THE OBJECT PARAMETERS
+            x0_stellar_1D = [x0_stellar[0][:, 0].reshape(-1),
+                             x0_stellar[1][:, 0].reshape(-1),
+                             x0_stellar[2][:, 0].reshape(-1),
+                             x0_stellar[3][0]]
 
-        # Astrometry/Photometry/Background
-        x0_stellar = np.array(xall[nL+9:nL+10+3*self.ao.src.nSrc*self.freq.nWvl])
+            # ----------------- GETTING THE PHASE STRUCTURE FUNCTION
+            self.psd = self.get_power_spectrum_density([r0]+ x0_dphi,
+                                                       self.psfao_19,
+                                                       self.freq)
+            self.SF = self.get_opd_structure_function(self.freq, Cn2=Cn2)
 
-        if len(x0_stellar):
-            nn = self.ao.src.nSrc*self.freq.nWvl
-            F  = x0_stellar[0:nn].reshape((self.ao.src.nSrc,self.freq.nWvl))
-            dx = x0_stellar[nn:2*nn].reshape((self.ao.src.nSrc,self.freq.nWvl))
-            dy = x0_stellar[2*nn:3*nn].reshape((self.ao.src.nSrc,self.freq.nWvl))
-            if self.freq.nWvl == 1:
-                F  = x0_stellar[0:self.ao.src.nSrc*self.freq.nWvl][:,np.newaxis] * np.array(self.ao.cam.transmittance)[np.newaxis,:]
-                dx = x0_stellar[self.ao.src.nSrc:2*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[0])[np.newaxis,:]
-                dy = x0_stellar[2*self.ao.src.nSrc:3*self.ao.src.nSrc][:,np.newaxis] + np.array(self.ao.cam.dispersion[1])[np.newaxis,:]
-            bkg= x0_stellar[3*nn:]
+            # ----------------- COMPUTING THE PSF
+            PSF, self.SR = FourierUtils.sf_3D_to_psf_3D(self.SF,
+                                                        self.freq,
+                                                        self.ao,
+                                                        x_jitter=x0_jitter,
+                                                        x_stat=x0_stat,
+                                                        x_stellar=x0_stellar_1D,
+                                                        nPix=nPix,
+                                                        otfPixel=self.otfPixel)
         else:
-            F  = np.repeat(np.array(self.ao.cam.transmittance)[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
-            dx = np.repeat(np.array(self.ao.cam.dispersion[0])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
-            dy = np.repeat(np.array(self.ao.cam.dispersion[1])[np.newaxis,:]* np.ones(self.freq.nWvl),self.ao.src.nSrc,axis=0)
-            bkg= 0.0
+            PSF = []
+            for n in range(self.nwvl):
+                # ----------------- SCALING FACTOR
+                wvl_ratio = (self.wvl[0]/self.wvl[n])**2
 
-        # Static aberrations
-        if self.isStatic:
-            x0_stat = list(xall[nL+10+3*self.ao.src.nSrc:])
-        else:
-            x0_stat = []
+                # ----------------- SELECTING THE OBJECT PARAMETERS
+                if len(self.ao.src.wvl)>1:
+                    x0_stellar_n = [x0_stellar[0][:, n], x0_stellar[1][:, n],
+                                    x0_stellar[2][:, n], x0_stellar[3][n]]
 
-        # ----------------- GETTING THE PHASE STRUCTURE FUNCTION
-        self.psd = self.getPSD([r0]+ x0_psd)
+                else:
+                    x0_stellar_n = [x0_stellar[0][:, n], x0_stellar[1][:, n],
+                                    x0_stellar[2][:, n], x0_stellar[3]]
 
-        if self.antiAlias:
-            	self.psd = np.pad(self.psd,(self.freq.nOtf//2,self.freq.nOtf//2))
-        self.SF = self.getSF(Cn2=Cn2)
-        if self.antiAlias:
-            	self.SF   = FourierUtils.interpolateSupport(self.Dphi,self.freq.nOtf)
+                # ----------------- GETTING THE PHASE STRUCTURE FUNCTION
+                self.psd = self.get_power_spectrum_density([r0]+ x0_dphi,
+                                                           self.psfao_19[n],
+                                                           self.freq[n])
+                self.SF = self.get_opd_structure_function(self.freq[n], Cn2=Cn2)
 
-        # ----------------- COMPUTING THE PSF
-        PSF, self.SR = FourierUtils.SF2PSF(self.SF,self.freq,self.ao,\
-                        jitterX=x0_jitter[0],jitterY=x0_jitter[1],jitterXY=x0_jitter[2],\
-                        F=F,dx=dx,dy=dy,bkg=bkg,nPix=nPix,xStat=x0_stat,otfPixel=self.otfPixel,
-                        spatialFilter=self.spatialFilter)
-
+                # ----------------- COMPUTING THE PSF
+                psf, self.SR = FourierUtils.sf_3D_to_psf_3D(self.SF * wvl_ratio,
+                                                            self.freq[n],
+                                                            self.ao,
+                                                            x_jitter=x0_jitter,
+                                                            x_stat=x0_stat,
+                                                            x_stellar=x0_stellar_n,
+                                                            nPix=nPix,
+                                                            otfPixel=self.otfPixel)
+                PSF.append(psf)
+            PSF = np.array(PSF).transpose((1, 2, 3, 0))
         return PSF
-
-    def moffat(self,kx,ky,x0):
-
-        # parsing inputs
-        a       = x0[0]
-        p       = x0[1]
-        theta   = x0[2]
-        beta    = x0[3]
-        dx      = x0[4]
-        dy      = x0[5]
-
-        # updating the geometry
-        ax      = a*p
-        ay      = a/p
-        c       = np.cos(theta)
-        s       = np.sin(theta)
-        s2      = np.sin(2.0 * theta)
-
-        Rxx = (c/ax)**2 + (s/ay)**2
-        Ryy = (c/ay)**2 + (s/ax)**2
-        Rxy =  s2/ay**2 -  s2/ax**2
-
-        u = Rxx * (kx - dx)**2 + Rxy * (kx - dx)* (ky - dy) + Ryy * (ky - dy)**2
-        return (1.0 + u) ** (-beta)
