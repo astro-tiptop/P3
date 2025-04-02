@@ -741,15 +741,10 @@ def interpolateSupport(image, n_out, kind='spline'):
             xin = np.real(image)
             fun_real = RectBivariateSpline(vinit, uinit, cpuArray(xin))
             if nnp.any(np.iscomplex(image)):
-            fun_real = RectBivariateSpline(vinit, uinit, cpuArray(xin))
-            if nnp.any(np.iscomplex(image)):
                 xin = np.imag(image)
-                fun_imag = RectBivariateSpline(vinit, uinit, cpuArray(xin))
                 fun_imag = RectBivariateSpline(vinit, uinit, cpuArray(xin))
         else:
             xin = np.real(image)
-            fun_real = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
-            if nnp.any(np.iscomplex(image)):
             fun_real = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
             if nnp.any(np.iscomplex(image)):
                 xin = np.imag(image)
