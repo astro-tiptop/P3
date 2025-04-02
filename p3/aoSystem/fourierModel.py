@@ -578,7 +578,7 @@ class fourierModel:
         tstart  = time.time()
         
         dk     = 2*self.freq.kcMax_/self.freq.resAO
-        rad2nm = self.ao.atm.wvl*1e9/2/np.pi
+        rad2nm = self.freq.wvlRef*1e9/2/np.pi
 
         if self.ao.rtc.holoop['gain']==0:
             # OPEN-LOOP
