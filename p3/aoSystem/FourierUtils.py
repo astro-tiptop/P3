@@ -8,6 +8,7 @@ Created on Wed Jun 17 01:17:43 2020
 # Libraries
 import numpy as nnp
 from . import gpuEnabled, np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray
+from . import gpuEnabled, np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray
 
 import matplotlib.pyplot as plt
 from astropy.modeling import models, fitting
@@ -370,8 +371,10 @@ def telescopeOtf(pupil,samp):
         otf = interpolateSupport(otf,float(otf.shape[0]/factor),kind='bilinear')
     return otf/otf.max()
 
+
 def telescopePsf(pupil,samp,kind='spline'):
     nSize = nnp.array(pupil.shape)
+
 
     if samp >=2:
         otf = telescopeOtf(pupil,samp)
@@ -454,9 +457,7 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
             psf_ = psf
 
         # managing the field of view
-        if nPix 
-        
-        ao.cam.fovInPix:
+        if nPix < ao.cam.fovInPix:
             psf = np.zeros((nPix,nPix,ao.src.nSrc))
             nC  = psf_.shape[0]/nPix
             for iSrc in range(ao.src.nSrc):
@@ -740,10 +741,15 @@ def interpolateSupport(image, n_out, kind='spline'):
             xin = np.real(image)
             fun_real = RectBivariateSpline(vinit, uinit, cpuArray(xin))
             if nnp.any(np.iscomplex(image)):
+            fun_real = RectBivariateSpline(vinit, uinit, cpuArray(xin))
+            if nnp.any(np.iscomplex(image)):
                 xin = np.imag(image)
+                fun_imag = RectBivariateSpline(vinit, uinit, cpuArray(xin))
                 fun_imag = RectBivariateSpline(vinit, uinit, cpuArray(xin))
         else:
             xin = np.real(image)
+            fun_real = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
+            if nnp.any(np.iscomplex(image)):
             fun_real = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
             if nnp.any(np.iscomplex(image)):
                 xin = np.imag(image)
@@ -753,6 +759,7 @@ def interpolateSupport(image, n_out, kind='spline'):
             return np.asarray(fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew))
         else:
             return np.asarray(fun_real(unew,vnew))
+
 
 
 def normalizeImage(im, normType=1, param=None):
@@ -1457,6 +1464,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=Fa
         psf = psf0
 
     npsf   = nnp.array(psf.shape)
+    
     
     # Get the OTF
     otfDL = telescopeOtf(pupil,samp)
