@@ -68,6 +68,7 @@ class telescope:
         self.pupilAngle = pupilAngle
         self.path_pupil = path_pupil
         self.path_static_on = path_static_on
+        self.zcoef_static_on = zcoef_static_on
         self.path_static_off = path_static_off
         self.path_static_pos = path_static_pos
         self.path_apodizer = path_apodizer
