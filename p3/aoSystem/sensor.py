@@ -43,7 +43,10 @@ class sensor:
             
         if len(clock_rate)==1:
             clock_rate = [clock_rate[0] for k in range(self.nWfs)]
-            
+
+        if len(nph) < self.nWfs:
+            nph.append([0] * (self.nWfs - len(nph)))
+
         self.detector = [detector(pixel_scale, fov, binning=binning, spotFWHM=spotFWHM,
                                  nph=nph[k], bandwidth=bandwidth, transmittance=transmittance,
                                  dispersion=dispersion, ron=ron, gain=gain,
