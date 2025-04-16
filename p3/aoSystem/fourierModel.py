@@ -441,7 +441,7 @@ class fourierModel:
         to_inv  = np.matmul(np.matmul(MP, self.Cphi_mod), MP_t) + self.Cb
 
         # Wtomo
-        inv = np.linalg.pinv(to_inv.astype(np.complex64),rcond=1/self.ao.dms.opt_cond)
+        inv = np.linalg.pinv(to_inv.astype(np.complex64),rcond=np.finfo(np.float32).eps)
         Wtomo = np.matmul(np.matmul(self.Cphi_mod, MP_t), inv)
         self.t_tomo = 1000*(time.time() - tstart)
 
