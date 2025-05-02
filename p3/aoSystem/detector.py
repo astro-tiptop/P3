@@ -23,7 +23,10 @@ class detector:
         # scales
         self.psInMas = pixel_scale
         self.fovInPix = fov
-        self.fovInArcsec = pixel_scale * fov/1e3
+        if isinstance(fov, list):
+            self.fovInArcsec = [pixel_scale * f/1e3 for f in fov]
+        else:
+            self.fovInArcsec = pixel_scale * fov/1e3
         self.spotFWHM = spotFWHM
         self.saturation = saturation
         self.clock_rate = clock_rate
