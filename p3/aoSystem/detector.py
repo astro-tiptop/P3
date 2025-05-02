@@ -23,8 +23,12 @@ class detector:
         # scales
         self.psInMas = pixel_scale
         self.fovInPix = fov
-        if isinstance(fov, list):
+        if isinstance(fov, list) and isinstance(pixel_scale, list):
+            self.fovInArcsec = [pixel_scale[i] * f/1e3 for i,f in enumerate(fov)]
+        elif isinstance(fov, list):
             self.fovInArcsec = [pixel_scale * f/1e3 for f in fov]
+        elif isinstance(pixel_scale, list):
+            self.fovInArcsec = [p * fov/1e3 for p in pixel_scale]
         else:
             self.fovInArcsec = pixel_scale * fov/1e3
         self.spotFWHM = spotFWHM
