@@ -306,7 +306,7 @@ class aoSystem():
         if self.check_config_key('atmosphere','WindDirection'):
             wDir = self.get_config_value('atmosphere','WindDirection') 
         else:
-            wDir = [0.0]
+            wDir = list(np.array(wSpeed)*0.)
 
         #-----  verification
         if not (len(weights) == len(heights) == len(wSpeed) == len(wDir)):
@@ -586,17 +586,28 @@ class aoSystem():
         if not(self.check_section_key('DM')):
             self.raiseMissingRequiredSec('DM')
 
-        if self.check_config_key('DM','NumberActuators'):
-            nActu = self.get_config_value('DM','NumberActuators')
-        else:
-            self.raiseMissingRequiredOpt('DM', 'NumberActuators')
-        
         if self.check_config_key('DM','DmPitchs'):
             DmPitchs = np.array(self.get_config_value('DM','DmPitchs'))
         else:
             self.raiseMissingRequiredOpt('DM','DmPitchs')
             self.error = True
             return
+
+        if self.check_config_key('DM','DmHeights'):
+            DmHeights = self.get_config_value('DM','DmHeights')
+        else:
+            if len(DmPitchs) > 1:
+                DmHeights = self.raiseMissingRequiredOpt('DM','DmHeights')
+            else:
+                DmHeights = [0.0]
+
+        if self.check_config_key('DM','NumberActuators'):
+            nActu = self.get_config_value('DM','NumberActuators')
+        else:
+            asec2rad = np.pi / (3600 * 180)
+            DmSize = list(self.TechnicalFoV * asec2rad * np.array(DmHeights) + self.D)
+            nActu = list(np.array(DmSize)/np.array(DmSize))
+            print('nActu')
         
         if self.check_config_key('DM','InfModel'):
             InfModel = self.get_config_value('DM','InfModel') 
@@ -607,11 +618,6 @@ class aoSystem():
             InfCoupling = self.get_config_value('DM','InfCoupling') 
         else:
             InfCoupling = [0.2]
-            
-        if self.check_config_key('DM','DmHeights'):
-            DmHeights = self.get_config_value('DM','DmHeights') 
-        else:
-            DmHeights = [0.0]
             
         if self.check_config_key('DM','OptimizationWeight'):
             opt_w = self.get_config_value('DM','OptimizationWeight') 
