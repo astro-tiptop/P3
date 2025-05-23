@@ -109,7 +109,7 @@ class aoSystem():
         if self.check_config_key('telescope','Resolution'):
             nPup = self.get_config_value('telescope','Resolution')
         else:
-            self.raiseMissingRequiredOpt('telescope','Resolution')
+            nPup = 256
 
         path_p3 = str(pathlib.Path(__file__).parent.parent.absolute())
 
