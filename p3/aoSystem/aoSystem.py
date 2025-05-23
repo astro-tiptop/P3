@@ -109,7 +109,7 @@ class aoSystem():
         if self.check_config_key('telescope','Resolution'):
             nPup = self.get_config_value('telescope','Resolution')
         else:
-            self.raiseMissingRequiredOpt('telescope','Resolution')
+            nPup = 256
 
         path_p3 = str(pathlib.Path(__file__).parent.parent.absolute())
 
@@ -306,7 +306,7 @@ class aoSystem():
         if self.check_config_key('atmosphere','WindDirection'):
             wDir = self.get_config_value('atmosphere','WindDirection') 
         else:
-            wDir = [0.0]
+            wDir = list(np.array(wSpeed)*0.)
 
         #-----  verification
         if not (len(weights) == len(heights) == len(wSpeed) == len(wDir)):
@@ -586,49 +586,54 @@ class aoSystem():
         if not(self.check_section_key('DM')):
             self.raiseMissingRequiredSec('DM')
 
-        if self.check_config_key('DM','NumberActuators'):
-            nActu = self.get_config_value('DM','NumberActuators')
-        else:
-            self.raiseMissingRequiredOpt('DM', 'NumberActuators')
-        
         if self.check_config_key('DM','DmPitchs'):
             DmPitchs = np.array(self.get_config_value('DM','DmPitchs'))
         else:
             self.raiseMissingRequiredOpt('DM','DmPitchs')
             self.error = True
             return
+
+        if self.check_config_key('DM','DmHeights'):
+            DmHeights = self.get_config_value('DM','DmHeights')
+        else:
+            if len(DmPitchs) > 1:
+                DmHeights = self.raiseMissingRequiredOpt('DM','DmHeights')
+            else:
+                DmHeights = [0.0]
+
+        if self.check_config_key('DM','NumberActuators'):
+            nActu = self.get_config_value('DM','NumberActuators')
+        else:
+            asec2rad = np.pi / (3600 * 180)
+            DmSize = list(self.TechnicalFoV * asec2rad * np.array(DmHeights) + self.D)
+            nActu = list((np.array(DmSize) / np.array(DmPitchs)).round().astype(int))
         
         if self.check_config_key('DM','InfModel'):
             InfModel = self.get_config_value('DM','InfModel') 
         else:
             InfModel = 'gaussian'
-            
+
         if self.check_config_key('DM','InfCoupling'):
             InfCoupling = self.get_config_value('DM','InfCoupling') 
         else:
             InfCoupling = [0.2]
-            
-        if self.check_config_key('DM','DmHeights'):
-            DmHeights = self.get_config_value('DM','DmHeights') 
-        else:
-            DmHeights = [0.0]
-            
+
         if self.check_config_key('DM','OptimizationWeight'):
             opt_w = self.get_config_value('DM','OptimizationWeight') 
         else:
             opt_w = [0.0]
-            
+
         if self.check_config_key('DM','OptimizationAzimuth'):
             opt_az = self.get_config_value('DM','OptimizationAzimuth') 
         else:
             opt_az = [0.0]
-            
+
         if self.check_config_key('DM','OptimizationZenith'):
             opt_zen = self.get_config_value('DM','OptimizationZenith') 
         else:
             opt_zen = [0.0]
 
-         # ----- verification
+        # ----- verification
         if (len(opt_zen) != len(opt_az)) or (len(opt_zen) != len(opt_w)):
             self.raiseNotSameLength('DM', ['OptimizationZenith','OptimizationAzimuth','OptimizationWeight'])
               
