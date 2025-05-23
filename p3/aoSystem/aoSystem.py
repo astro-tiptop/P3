@@ -606,35 +606,34 @@ class aoSystem():
         else:
             asec2rad = np.pi / (3600 * 180)
             DmSize = list(self.TechnicalFoV * asec2rad * np.array(DmHeights) + self.D)
-            nActu = list(np.array(DmSize)/np.array(DmSize))
-            print('nActu')
+            nActu = list((np.array(DmSize) / np.array(DmPitchs)).round().astype(int))
         
         if self.check_config_key('DM','InfModel'):
             InfModel = self.get_config_value('DM','InfModel') 
         else:
             InfModel = 'gaussian'
-            
+
         if self.check_config_key('DM','InfCoupling'):
             InfCoupling = self.get_config_value('DM','InfCoupling') 
         else:
             InfCoupling = [0.2]
-            
+
         if self.check_config_key('DM','OptimizationWeight'):
             opt_w = self.get_config_value('DM','OptimizationWeight') 
         else:
             opt_w = [0.0]
-            
+
         if self.check_config_key('DM','OptimizationAzimuth'):
             opt_az = self.get_config_value('DM','OptimizationAzimuth') 
         else:
             opt_az = [0.0]
-            
+
         if self.check_config_key('DM','OptimizationZenith'):
             opt_zen = self.get_config_value('DM','OptimizationZenith') 
         else:
             opt_zen = [0.0]
 
-         # ----- verification
+        # ----- verification
         if (len(opt_zen) != len(opt_az)) or (len(opt_zen) != len(opt_w)):
             self.raiseNotSameLength('DM', ['OptimizationZenith','OptimizationAzimuth','OptimizationWeight'])
               
