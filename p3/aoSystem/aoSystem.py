@@ -119,9 +119,9 @@ class aoSystem():
             if path_root == '' and PathPupil.startswith('/aoSystem'):
                 path_pupil = ospath.join(path_p3, PathPupil.lstrip('/'))
             elif path_root == '' and PathPupil.startswith('aoSystem'):
-                path_pupil = ospath(path_p3, PathPupil)
+                path_pupil = ospath.join(path_p3, PathPupil)
             else:
-                path_pupil = ospath(path_root, PathPupil)                
+                path_pupil = ospath.join(path_root, PathPupil)                
             if not ospath.isfile(path_pupil):
                 raise ValueError(f"PathPupil file not found: {path_pupil}")
         else:
@@ -152,9 +152,9 @@ class aoSystem():
 
         if self.check_config_key('telescope','PathStaticOff'):
             PathStaticOff = self.get_config_value('telescope','PathStaticOff')
-            if path_root == '' and PathStaticOff.startwith('/aoSystem'):
+            if path_root == '' and PathStaticOff.startswith('/aoSystem'):
                 path_static_off = ospath.join(path_p3, PathStaticOff.lstrip('/'))
-            elif path_root == '' and PathStaticOff.startwith('aoSystem') :
+            elif path_root == '' and PathStaticOff.startswith('aoSystem') :
                 path_static_off = ospath.join(path_p3, PathStaticOff)
             else:
                 path_static_off = ospath.join(path_root, PathStaticOff)
@@ -165,9 +165,9 @@ class aoSystem():
 
         if self.check_config_key('telescope','PathStaticPos'):
             PathStaticPos = self.get_config_value('telescope','PathStaticPos')
-            if path_root == '' and PathStaticPos.startwith('/aoSystem'):
+            if path_root == '' and PathStaticPos.startswith('/aoSystem'):
                 path_static_pos = ospath.join(path_p3, PathStaticPos.lstrip('/'))
-            elif path_root == '' and PathStaticPos.startwith('aoSystem'):
+            elif path_root == '' and PathStaticPos.startswith('aoSystem'):
                 path_static_pos = ospath.join(path_p3, PathStaticPos)
             else:
                 path_static_pos = ospath.join(path_root, PathStaticPos)
@@ -179,9 +179,9 @@ class aoSystem():
         #----- APODIZER
         if self.check_config_key('telescope','PathApodizer'):
             PathApodizer = self.get_config_value('telescope','PathApodizer')
-            if path_root == '' and PathApodizer.startwith('/aoSystem'):
+            if path_root == '' and PathApodizer.startswith('/aoSystem'):
                 path_apodizer = ospath.join(path_p3, PathApodizer.lstrip('/'))
-            elif path_root == '' and PathApodizer.startwith('aoSystem'):
+            elif path_root == '' and PathApodizer.startswith('aoSystem'):
                 path_apodizer = ospath.join(path_p3, PathApodizer)
             else:
                 path_apodizer = ospath.join(path_root, PathApodizer)
@@ -193,9 +193,9 @@ class aoSystem():
         #----- TELESCOPE ABERRATIONS
         if self.check_config_key('telescope', 'PathStatModes'):
             PathStatModes = self.get_config_value('telescope','PathStatModes')
-            if path_root == '' and PathStatModes.startwith('/aoSystem'):
+            if path_root == '' and PathStatModes.startswith('/aoSystem'):
                 path_statModes = ospath.join(path_p3, PathStatModes.lstrip('/'))
-            elif path_root == '' and PathStatModes.startwith('aoSystem'):
+            elif path_root == '' and PathStatModes.startswith('aoSystem'):
                 path_statModes = ospath.join(path_p3, PathStatModes)
             else:
                 path_statModes = ospath.join(path_root, PathStatModes)
