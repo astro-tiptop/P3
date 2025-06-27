@@ -116,12 +116,14 @@ class aoSystem():
         #----- PUPIL
         if self.check_config_key('telescope','PathPupil'):
             PathPupil = self.get_config_value('telescope','PathPupil')
-            if path_root == '' and PathPupil[0:9]=='/aoSystem' :
-                path_pupil = path_p3 + PathPupil
-            elif path_root == '' and PathPupil[0:8]=='aoSystem' :
-                path_pupil = path_p3 +'/'+ PathPupil
+            if path_root == '' and PathPupil.startswith('/aoSystem'):
+                path_pupil = ospath.join(path_p3, PathPupil.lstrip('/'))
+            elif path_root == '' and PathPupil.startswith('aoSystem'):
+                path_pupil = ospath.join(path_p3, PathPupil)
             else:
-                path_pupil = path_root + PathPupil
+                path_pupil = ospath.join(path_root, PathPupil)                
+            if not ospath.isfile(path_pupil):
+                raise ValueError(f"PathPupil file not found: {path_pupil}")
         else:
             path_pupil = ''
   
@@ -132,12 +134,14 @@ class aoSystem():
 
         if self.check_config_key('telescope','PathStaticOn'):
             PathStaticOn = self.get_config_value('telescope','PathStaticOn')
-            if path_root == '' and PathStaticOn[0:9]=='/aoSystem' :
-                path_static_on = path_p3 + PathStaticOn
-            elif path_root == '' and PathStaticOn[0:8]=='aoSystem' :
-                path_static_on = path_p3 +'/'+ PathStaticOn
+            if path_root == '' and PathStaticOn.startswith('/aoSystem'):
+                path_static_on = ospath.join(path_p3, PathStaticOn.lstrip('/'))
+            elif path_root == '' and PathStaticOn.startswith('aoSystem') :
+                path_static_on = ospath.join(path_p3, PathStaticOn)
             else:
-                path_static_on = path_root + PathStaticOn
+                path_static_on = ospath.join(path_root, PathStaticOn)
+            if not ospath.isfile(path_static_on):
+                raise ValueError(f"PathStaticOn file not found: {path_static_on}")
         else:
             path_static_on = None
 
@@ -148,47 +152,55 @@ class aoSystem():
 
         if self.check_config_key('telescope','PathStaticOff'):
             PathStaticOff = self.get_config_value('telescope','PathStaticOff')
-            if path_root == '' and PathStaticOff[0:9]=='/aoSystem' :
-                path_static_off = path_p3 + PathStaticOff
-            elif path_root == '' and PathStaticOff[0:8]=='aoSystem' :
-                path_static_off = path_p3 +'/'+ PathStaticOff
+            if path_root == '' and PathStaticOff.startswith('/aoSystem'):
+                path_static_off = ospath.join(path_p3, PathStaticOff.lstrip('/'))
+            elif path_root == '' and PathStaticOff.startswith('aoSystem') :
+                path_static_off = ospath.join(path_p3, PathStaticOff)
             else:
-                path_static_off = path_root + PathStaticOff
+                path_static_off = ospath.join(path_root, PathStaticOff)
+            if not ospath.isfile(path_static_off):
+                raise ValueError(f"PathStaticOff file not found: {path_static_off}")
         else:
             path_static_off = None
 
         if self.check_config_key('telescope','PathStaticPos'):
             PathStaticPos = self.get_config_value('telescope','PathStaticPos')
-            if path_root == '' and PathStaticPos[0:9]=='/aoSystem' :
-                path_static_pos = path_p3 + PathStaticPos
-            elif path_root == '' and PathStaticPos[0:8]=='aoSystem' :
-                path_static_pos = path_p3 +'/'+ PathStaticPos
+            if path_root == '' and PathStaticPos.startswith('/aoSystem'):
+                path_static_pos = ospath.join(path_p3, PathStaticPos.lstrip('/'))
+            elif path_root == '' and PathStaticPos.startswith('aoSystem'):
+                path_static_pos = ospath.join(path_p3, PathStaticPos)
             else:
-                path_static_pos = path_root + PathStaticPos
+                path_static_pos = ospath.join(path_root, PathStaticPos)
+            if not ospath.isfile(path_static_pos):
+                raise ValueError(f"PathStaticPos file not found: {path_static_pos}")            
         else:
             path_static_pos = None
 
         #----- APODIZER
         if self.check_config_key('telescope','PathApodizer'):
             PathApodizer = self.get_config_value('telescope','PathApodizer')
-            if path_root == '' and PathApodizer[0:9]=='/aoSystem' :
-                path_apodizer = path_p3 + PathApodizer
-            elif path_root == '' and PathApodizer[0:8]=='aoSystem' :
-                path_apodizer = path_p3 +'/'+ PathApodizer
+            if path_root == '' and PathApodizer.startswith('/aoSystem'):
+                path_apodizer = ospath.join(path_p3, PathApodizer.lstrip('/'))
+            elif path_root == '' and PathApodizer.startswith('aoSystem'):
+                path_apodizer = ospath.join(path_p3, PathApodizer)
             else:
-                path_apodizer = path_root + PathApodizer
+                path_apodizer = ospath.join(path_root, PathApodizer)
+            if not ospath.isfile(path_apodizer):
+                raise ValueError(f"PathApodizer file not found: {path_apodizer}")
         else:
             path_apodizer = ''
   
         #----- TELESCOPE ABERRATIONS
         if self.check_config_key('telescope', 'PathStatModes'):
             PathStatModes = self.get_config_value('telescope','PathStatModes')
-            if path_root == '' and PathStatModes[0:9]=='/aoSystem' :
-                path_statModes = path_p3 + PathStatModes
-            elif path_root == '' and PathStatModes[0:8]=='aoSystem' :
-                path_statModes = path_p3 +'/'+ PathStatModes
+            if path_root == '' and PathStatModes.startswith('/aoSystem'):
+                path_statModes = ospath.join(path_p3, PathStatModes.lstrip('/'))
+            elif path_root == '' and PathStatModes.startswith('aoSystem'):
+                path_statModes = ospath.join(path_p3, PathStatModes)
             else:
-                path_statModes = path_root + PathStatModes
+                path_statModes = ospath.join(path_root, PathStatModes)
+            if not ospath.isfile(path_statModes):
+                raise ValueError(f"PathStatModes file not found: {path_statModes}")
         else:
             path_statModes = ''
 
@@ -261,6 +273,8 @@ class aoSystem():
             
         if self.check_config_key('telescope', 'windPsdFile'):
             self.windPsdFile = self.get_config_value('telescope','windPsdFile')
+            if not ospath.isfile(self.windPsdFile):
+                raise ValueError(f"windPsdFile not found: {self.windPsdFile}")
         else:
             self.windPsdFile = 0
 
