@@ -24,6 +24,7 @@ if systemDisable=='FALSE':
         import cupyx.scipy.ndimage as scndI
         from cupyx.scipy.ndimage import rotate as rotateI
         np = cp
+        trapz = cp.trapz
     except:
         print("Cupy import failed. P3 will fall back to CPU use.")
         cp = np
@@ -32,7 +33,10 @@ if systemDisable=='FALSE':
         from scipy.interpolate import RectBivariateSpline as RectBivariateSplineI
         import scipy.ndimage as scndI
         from scipy.ndimage import rotate as rotateI
-
+        try:
+            trapz = np.trapezoid
+        except AttributeError:
+            trapz = np.trapz
 else:
     print("env variable P3_DISABLE_GPU prevents using the GPU.")
     cp = np
@@ -41,6 +45,10 @@ else:
     from scipy.interpolate import RectBivariateSpline as RectBivariateSplineI
     import scipy.ndimage as scndI
     from scipy.ndimage import rotate as rotateI
+    try:
+        trapz = np.trapezoid
+    except AttributeError:
+        trapz = np.trapz
 
 fft = fftI
 spc = spcI

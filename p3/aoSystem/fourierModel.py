@@ -15,7 +15,7 @@ Created on Thu Aug 16 15:00:44 2018
 """
 
 import numpy as nnp
-from . import gpuEnabled, np, nnp, fft, spc, cpuArray
+from . import gpuEnabled, np, nnp, fft, spc, cpuArray, trapz
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
@@ -535,7 +535,7 @@ class fourierModel:
             else:
                 self.ntfInt = self.atfInt/z
 
-            self.noiseGain = np.trapz(abs(self.ntfInt)**2, f)*2*Ts
+            self.noiseGain = trapz(abs(self.ntfInt)**2, f)*2*Ts
 
             # Get transfer functions
             for l in range(self.ao.atm.nL):
