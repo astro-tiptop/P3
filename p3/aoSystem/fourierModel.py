@@ -70,13 +70,13 @@ class fourierModel:
                  getEnsquaredEnergy=False, getEncircledEnergy=False, fftphasor=False,
                  MV=0, nyquistSampling=False, addOtfPixel=False, freq=None, ao=None,
                  computeFocalAnisoCov=True, TiltFilter=False, doComputations=True,
-                 psdExpansion=False):
+                 psdExpansion=False, reduce_memory=False):
 
         tstart = time.time()
 
         # COLLECTING INPUTS
         self.verbose = verbose
-        self.path_ini = path_ini  
+        self.path_ini = path_ini
         self.display = display
         self.displayContour = displayContour
         self.getErrorBreakDown = getErrorBreakDown
@@ -90,10 +90,11 @@ class fourierModel:
         self.TiltFilterP = TiltFilter
         self.normalizePSD = normalizePSD
         self.fftphasor = fftphasor
-
         self.getFWHM = getFWHM
         self.getEnsquaredEnergy = getEnsquaredEnergy
         self.getEncircledEnergy = getEncircledEnergy
+        self.reduce_memory = reduce_memory
+
         if freq is not None:
             self.freq = freq
 
@@ -142,7 +143,6 @@ class fourierModel:
         self.t_focusFilter = 0
         self.t_errorBreakDown = 0
         self.t_getPsfMetrics = 0
-
         self.nGs = 0
 
         if doComputations:
@@ -154,7 +154,7 @@ class fourierModel:
         tstart = time.time()
 
         if self.ao.error==False:
-            
+
             # DEFINING THE FREQUENCY DOMAIN
             self.wvl, self.nwvl = FourierUtils.create_wavelength_vector(self.ao)
             if not hasattr(self, 'freq'):
@@ -173,7 +173,7 @@ class fourierModel:
                 self.gs = self.ao.ngs
                 self.nGs = self.ao.ngs.nSrc
                 self.strechFactor = 1.0
-                           
+   
             # DEFINING THE MODELED ATMOSPHERE 
             if (self.ao.dms.nRecLayers!=None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
                 weights_mod,heights_mod = FourierUtils.eqLayers(self.ao.atm.weights,self.ao.atm.heights,self.ao.dms.nRecLayers)
@@ -196,63 +196,63 @@ class fourierModel:
                 wSpeed_mod     = self.ao.atm.wSpeed
                 wDir_mod       = self.ao.atm.wDir
                 self.strechFactor_mod = self.strechFactor
-            
+
             self.atm_mod = atmosphere(self.ao.atm.wvl,self.ao.atm.r0,cpuArray(weights_mod),cpuArray(heights_mod),cpuArray(wSpeed_mod),cpuArray(wDir_mod),self.ao.atm.L0)
-            
+
             #updating the atmosphere wavelength !
             self.ao.atm.wvl  = self.freq.wvlRef
             self.atm_mod.wvl = self.freq.wvlRef
 
             self.t_atmo = 1000*(time.time() - self.t_initFreq/1000 - tstart)
-  
+
             vv = self.freq.psInMas
-            rr = 2*self.freq.kcInMas/vv 
+            rr = 2*self.freq.kcInMas/vv
             if rr[0] > self.freq.nOtf:
                 raise ValueError('Error : the PSF field of view is too small to simulate the AO correction area\n')
-                
+
             # DEFINING THE NOISE AND ATMOSPHERE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
                 self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0 ,self.ao.atm.wvl)
-            
+
             self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMax_)**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
-            
+
             # DEFINE THE RECONSTRUCTOR
             self.spatialReconstructor(MV=self.MV)
-                
+
             # DEFINE THE CONTROLLER
             self.controller(display=self.display)
-                            
+          
             #set tilt filter key before computing the PSD
             self.applyTiltFilter = self.TiltFilterP
-            
+
             # COMPUTE THE PSD
             if self.normalizePSD == True:
                 wfe = self.ao.rtc.holoop['wfe']
             else:
                 wfe = None
             self.PSD = self.powerSpectrumDensity(wfe=wfe)
-            
+
             # COMPUTE THE PHASE STRUCTURE FUNCTION
             self.SF  = self.phaseStructureFunction()
-            
+
             # COMPUTE THE PSF
             if self.calcPSF:
                 self.PSF, self.SR = self.point_spread_function(verbose=self.verbose,fftphasor=self.fftphasor,addOtfPixel=self.addOtfPixel)
-                
+
                 # GETTING METRICS
                 if self.getFWHM == True or self.getEnsquaredEnergy==True or self.getEncircledEnergy==True:
                     self.getPsfMetrics(getEnsquaredEnergy=self.getEnsquaredEnergy,\
                         getEncircledEnergy=self.getEncircledEnergy,getFWHM=self.getFWHM)
-    
+
                 # DISPLAYING THE PSFS
                 if self.display:
                     self.displayResults(displayContour=self.displayContour)
-                
+
             # COMPUTE THE ERROR BREAKDOWN
             if self.getErrorBreakDown:
                 self.errorBreakDown(verbose=self.verbose)
-                    
+   
         # DEFINING BOUNDS
         self.bounds = self.define_bounds()
 
@@ -288,7 +288,7 @@ class fourierModel:
         # Background
         bounds_down += [-nnp.inf]
         bounds_up += [nnp.inf]
-        
+
         return (bounds_down,bounds_up)
 
 #%% RECONSTRUCTOR DEFINITION
@@ -420,6 +420,9 @@ class fourierModel:
                                         + self.freq.kyAO_*self.gs.direction[1, j]))
         self.M = M
         MP = np.matmul(self.M,P)
+        if self.reduce_memory:
+            self.M = None
+        
         MP_t = np.conj(MP.transpose(0, 1, 3, 2))
 
         # Noise covariance matrix
@@ -576,7 +579,7 @@ class fourierModel:
         """ Total power spectrum density in nm^2.m^2
         """
         tstart  = time.time()
-        
+
         dk     = 2*self.freq.kcMax_/self.freq.resAO
         rad2nm = self.freq.wvlRef*1e9/2/np.pi
 
@@ -600,30 +603,54 @@ class fourierModel:
             else:
                 psd[id1:id2,id1:id2,:] = self.psdNoise
 
+            # --- free memory
+            if self.reduce_memory and not self.getErrorBreakDown:
+                self.psdNoise = None
+
             # Aliasing
             self.psdAlias = np.real(self.aliasingPSD())
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:]\
             + np.repeat(self.psdAlias[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
+            # --- free memory
+            if self.reduce_memory and not self.getErrorBreakDown:
+                self.psdAlias = None
+                
             # Differential refractive anisoplanatism
             self.psdDiffRef = self.differentialRefractionPSD()
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdDiffRef
+
+            # --- free memory
+            if self.reduce_memory and not self.getErrorBreakDown:
+                self.psdDiffRef = None
 
             # Chromatism
             self.psdChromatism = self.chromatismPSD()
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdChromatism
 
+            # --- free memory
+            if self.reduce_memory and not self.getErrorBreakDown:
+                self.psdChromatism = None
+
             # Add the noise and spatioTemporal PSD
             self.psdSpatioTemporal = np.real(self.spatioTemporalPSD())
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdSpatioTemporal
-                       
+
+            # --- free memory
+            if self.reduce_memory and not self.getErrorBreakDown:
+                self.psdSpatioTemporal = None
+
             # Cone effect
             if self.nGs == 1 and self.gs.height[0] != 0:
                 if self.verbose:
                     print('SLAO case adding cone effect')
                 self.psdCone = self.focalAnisoplanatismPSD()
                 psd += np.repeat(self.psdCone[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
-            
+
+                # --- free memory
+                if self.reduce_memory and not self.getErrorBreakDown:
+                    self.psdCone = None
+
             # additional error for MCAO system with laser GS:
             # reduced volume for WF sensing due to the cone effect
             if self.ao.addMcaoWFsensConeError and self.nGs != 1 and self.gs.height[0] != 0:
@@ -632,6 +659,9 @@ class fourierModel:
                 self.psdMcaoWFsensCone = self.mcaoWFsensConePSD(psd)
                 psd += self.psdMcaoWFsensCone
 
+                # --- free memory
+                if self.reduce_memory and not self.getErrorBreakDown:
+                    self.psdMcaoWFsensCone = None
 
             # NORMALIZATION
             if wfe != None:
@@ -642,17 +672,25 @@ class fourierModel:
             self.psdFit = np.real(self.fittingPSD())
             psd += np.repeat(self.psdFit[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
+            # --- free memory
+            if self.reduce_memory and not self.getErrorBreakDown:
+                self.psdFit = None
+
             # wind shake / vibrations
             if self.applyTiltFilter is False and self.ao.windPsdFile != 0:
                 self.psdVib = self.windShakePSD()
                 psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + np.repeat(self.psdVib[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
-            
+
+                # --- free memory
+                if self.reduce_memory and not self.getErrorBreakDown:
+                    self.psdVib = None
+
             # Tilt filter
             if self.applyTiltFilter == True:
                 tiltFilter = self.TiltFilter()                      
                 for i in range(self.ao.src.nSrc):
                     psd[:,:,i] *= tiltFilter
-            
+
             # Extra error
             if self.verbose:
                 print('extra error in nm RMS: ',self.ao.tel.extraErrorNm)
@@ -676,6 +714,11 @@ class fourierModel:
                 elif self.ao.tel.extraErrorNm > 0:
                     psd[:,:,i] += self.psdExtra
 
+            # --- free memory
+            if self.reduce_memory and not self.getErrorBreakDown:
+                self.psdExtra = None
+                self.psdExtraLo = None
+                    
         self.t_powerSpectrumDensity = 1000*(time.time() - tstart)
 
         # Return the 3D PSD array in nm^2
@@ -717,7 +760,7 @@ class fourierModel:
             tf = 1
         else:
             tf = self.h1
-            
+
         '''        
         # old, non vectorized computation, as a refernece
         # loops on frequency shifts
@@ -846,19 +889,19 @@ class fourierModel:
 
         self.t_servoLagPSD = 1000*(time.time() - tstart)
         return self.freq.mskInAO_ * abs(psd)
-    
+
     def windShakePSD(self):
         """ wind shake / vibrations power spectrum density.
         """
         tstart  = time.time()    
-        psd = np.zeros((self.freq.resAO,self.freq.resAO))     
-    
-        Wtilt1 = 1-self.TiltFilter() 
+        psd = np.zeros((self.freq.resAO,self.freq.resAO))
+
+        Wtilt1 = 1-self.TiltFilter()
         # AO correction area
         id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
         id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
-        Wtilt1 = Wtilt1[id1:id2,id1:id2] * self.freq.pistonFilterAO_ 
-        Wtilt1 *= 1/np.sum(Wtilt1)  
+        Wtilt1 = Wtilt1[id1:id2,id1:id2] * self.freq.pistonFilterAO_
+        Wtilt1 *= 1/np.sum(Wtilt1)
 
         # wind-shake PSD
         from astropy.io import fits
@@ -874,7 +917,7 @@ class fourierModel:
         z       = np.exp(-2*ic*np.pi/self.ao.rtc.holoop['rate']*psd_freq)
         hInt    = self.ao.rtc.holoop['gain']/(1.0 - z**(-1.0))
         rtfInt  = 1.0/(1.0 + hInt * z**(-self.ao.rtc.holoop['delay']))
-        
+
         #fig, _ = plt.subplots()
         #plt.loglog(psd_freq,np.abs(rtfInt))
         #fig, _ = plt.subplots()
@@ -916,7 +959,7 @@ class fourierModel:
                 else:
                     A = np.ones((self.freq.resAO, self.freq.resAO))
 
-                if (self.ao.rtc.holoop['gain'] == 0):  
+                if (self.ao.rtc.holoop['gain'] == 0):
                     psd[:, :, s] = abs(1-F)**2 * Watm
                 else:
                     psd[:, :, s] = self.freq.mskInAO_ * (1 + abs(F)**2*self.h2 - 2*np.real(F*self.h1*A))*Watm
@@ -1033,12 +1076,12 @@ class fourierModel:
         """%% Focal Anisoplanatism power spectrum density
         """
         tstart  = time.time()
-        
+
         #Instantiate the function output
         psd      = np.zeros((self.freq.nOtf,self.freq.nOtf))
-        # atmo PSD 
-        psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))    
-        
+        # atmo PSD
+        psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))
+
         nPoints = 1001
         nPhase = 5 # number of phase shift cases
         x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
@@ -1097,65 +1140,227 @@ class fourierModel:
         self.t_focalAnisoplanatism = 1000*(time.time() - tstart)
 
         return np.real(psd)
-    
-    def mcaoWFsensConePSD(self,psdRes):
-        """%% power spectrum density related to the reduced volume sensed
-              by the LGS WFS due to cone effect in MCAO systems.
-              This effect is related to the cone effect and it depends on
-              the LGS geometry and the uncorrected part of the input PSD.
-        """
-        tstart  = time.time()
 
-        #Instantiate the function output
-        psd      = np.zeros((self.freq.nOtf,self.freq.nOtf,self.ao.src.nSrc))
-        # atmo PSD 
+    def mcaoWFsensConePSD_old(self, psdRes):
+        """%% power spectrum density related to the reduced volume sensed
+            by the LGS WFS due to cone effect in MCAO systems.
+            This effect is related to the cone effect and it depends on
+            the LGS geometry and the uncorrected part of the input PSD.
+        """
+        tstart = time.time()
+
+        # Instantiate the function output
+        psd = np.zeros((self.freq.nOtf, self.freq.nOtf, self.ao.src.nSrc))
+
+        # atmo PSD
         psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))
+
         # AO correction area
         id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
         id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
+
         # geometry
         lfov = 2 * np.max(self.gs.zenith)
-        # effective FoV
-        eFoV = ( lfov*(1/rad2arc) -  self.ao.tel.D * (1/self.gs.height[0]) ) * rad2arc
-        # filter considering the maximum cut off frequency
-        k  = np.sqrt(self.freq.k2_)
-        fs = np.max(k)*2.
-        x  = k/(fs/2.)*np.pi
-        xc = 1j * x
-        z  = np.exp(xc)
-        sPoleMax = 2*np.pi*self.freq.kcMax_
-        zPoleMax = np.exp(sPoleMax/fs)
-        lpFilterMax = z * (1 - zPoleMax) / (z - zPoleMax)
-        # number of layers
-        nCn2 = len(self.ao.atm.heights)
-        # piston filter
-        pf = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.freq.k2_))
-        pf = pf[id1:id2,id1:id2]
-        
-        for i in range(self.ao.src.nSrc):
-            if eFoV > 0:
-                deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV/2
-            else:
-                deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV
-            deltaAngleL = self.ao.src.zenith[i] - lfov/2
-            if deltaAngleL < 0: deltaAngleL = 0
-            deltaPsd = psd_atmo[id1:id2,id1:id2]-psdRes[id1:id2,id1:id2,i]
-            deltaPsd[np.where(deltaPsd<0)] = 0
-            deltaPsdPf = deltaPsd * pf
-            for j in range(nCn2):
-                if self.ao.atm.heights[j] > 0 and deltaAngleE > 0:
-                    fCut = rad2arc/(deltaAngleE * self.ao.atm.heights[j])
-                    eqD = self.ao.tel.D - deltaAngleL * self.ao.atm.heights[j] * (1/rad2arc)
-                    if eqD > self.ao.tel.D: eqD = self.ao.tel.D
-                    if fCut < self.freq.kcMax_ and eqD > 0:
-                        sPole = 2*np.pi*fCut
-                        zPole = np.exp(sPole/fs)
-                        lpFilter = z *  (1 - zPole) / (z - zPole)
-                        lpFilter2 = (1-np.abs(lpFilter[id1:id2,id1:id2])**2.) * (eqD/self.ao.tel.D)**2
-                        lpFilter2[np.where(lpFilter2<0)] = 0
-                        psd[id1:id2,id1:id2,i] += self.ao.atm.weights[j] * lpFilter2 * deltaPsdPf
 
-        self.t_mcaoWFsensCone = 1000*(time.time() - tstart)
+        # effective FoV
+        eFoV = (lfov * (1/rad2arc) - self.ao.tel.D * (1/self.gs.height[0])) * rad2arc
+
+        # filter setup for z values in AO correction area
+        k_ao = np.sqrt(self.freq.k2_[id1:id2, id1:id2])
+        fs = np.max(k_ao) * 2.
+        x_ao = k_ao / (fs/2.) * np.pi
+        z_ao = np.exp(1j * x_ao)  # Shape: (resAO, resAO)
+
+        # piston filter
+        pf = FourierUtils.pistonFilter(self.ao.tel.D, k_ao)
+
+        # Vectorize source and layer calculations
+        src_zenith = np.array(self.ao.src.zenith)  # Shape: (nSrc,)
+        max_gs_zenith = np.max(self.gs.zenith)
+
+        # Calculate deltaAngleE and deltaAngleL for all sources
+        if eFoV > 0:
+            deltaAngleE = np.minimum(src_zenith, max_gs_zenith) - eFoV/2
+        else:
+            deltaAngleE = np.minimum(src_zenith, max_gs_zenith) - eFoV
+
+        deltaAngleL = np.maximum(src_zenith - lfov/2, 0)
+
+        # Pre-compute deltaPsd for all sources
+        deltaPsd = psd_atmo[id1:id2, id1:id2, np.newaxis] - psdRes[id1:id2, id1:id2, :]
+        deltaPsd = np.maximum(deltaPsd, 0)
+        deltaPsdPf = deltaPsd * pf[:, :, np.newaxis]  # Shape: (resAO, resAO, nSrc)
+
+        # Atmosphere data
+        atm_heights = np.array(self.ao.atm.heights)  # Shape: (nLayers,)
+        atm_weights = np.array(self.ao.atm.weights)  # Shape: (nLayers,)
+
+        # Create masks for valid layers and sources
+        valid_layers = atm_heights > 0
+        valid_sources = deltaAngleE > 0
+
+        if np.any(valid_layers) and np.any(valid_sources):
+            # Extract valid data
+            valid_heights = atm_heights[valid_layers]
+            valid_weights = atm_weights[valid_layers]
+            valid_deltaAngleE = deltaAngleE[valid_sources]
+            valid_deltaAngleL = deltaAngleL[valid_sources]
+            valid_source_indices = np.where(valid_sources)[0]
+
+            # Create broadcasting grids: (nValidLayers, nValidSources)
+            heights_grid, deltaAngleE_grid = np.meshgrid(valid_heights, valid_deltaAngleE, indexing='ij')
+            weights_grid, deltaAngleL_grid = np.meshgrid(valid_weights, valid_deltaAngleL, indexing='ij')
+
+            # Calculate fCut and eqD for all combinations
+            fCut = rad2arc / (deltaAngleE_grid * heights_grid)
+            eqD = np.minimum(self.ao.tel.D - deltaAngleL_grid * heights_grid * (1/rad2arc), self.ao.tel.D)
+
+            # Create mask for valid frequency cuts
+            valid_fcut_mask = (fCut < self.freq.kcMax_) & (eqD > 0)
+
+            if np.any(valid_fcut_mask):
+                # Get valid combinations
+                valid_layer_idx, valid_src_idx = np.where(valid_fcut_mask)
+
+                # Process all valid combinations at once
+                fCut_vals = fCut[valid_layer_idx, valid_src_idx]  # Shape: (nValidCombos,)
+                eqD_vals = eqD[valid_layer_idx, valid_src_idx]    # Shape: (nValidCombos,)
+                weight_vals = weights_grid[valid_layer_idx, valid_src_idx]  # Shape: (nValidCombos,)
+                source_indices = valid_source_indices[valid_src_idx]  # Shape: (nValidCombos,)
+
+                # Vectorized filter calculation
+                sPole = 2 * np.pi * fCut_vals  # Shape: (nValidCombos,)
+                zPole = np.exp(sPole/fs)       # Shape: (nValidCombos,)
+
+                # Broadcast z_ao for all valid combinations: (resAO, resAO, nValidCombos)
+                z_ao_broadcast = z_ao[:, :, np.newaxis]
+                zPole_broadcast = zPole[np.newaxis, np.newaxis, :]
+
+                # Calculate filters for all combinations
+                lpFilter = z_ao_broadcast * (1 - zPole_broadcast) / (z_ao_broadcast - zPole_broadcast)
+                lpFilter2 = (1 - np.abs(lpFilter)**2) * (eqD_vals[np.newaxis, np.newaxis, :]/self.ao.tel.D)**2
+                lpFilter2 = np.maximum(lpFilter2, 0)
+
+                # Apply weights and accumulate results
+                weighted_filters = lpFilter2 * weight_vals[np.newaxis, np.newaxis, :]  # Shape: (resAO, resAO, nValidCombos)
+
+                # Accumulate contributions for each source
+                for i, src_idx in enumerate(source_indices):
+                    psd[id1:id2, id1:id2, src_idx] += weighted_filters[:, :, i] * deltaPsdPf[:, :, src_idx]
+
+        self.t_mcaoWFsensCone = 1000 * (time.time() - tstart)
+        print(f"Time for mcaoWFsensCone: {self.t_mcaoWFsensCone:.2f} ms")
+
+        return np.real(psd)
+
+    def mcaoWFsensConePSD(self, psdRes):
+        """%% power spectrum density related to the reduced volume sensed
+            by the LGS WFS due to cone effect in MCAO systems.
+            This effect is related to the cone effect and it depends on
+            the LGS geometry and the uncorrected part of the input PSD.
+        """
+        tstart = time.time()
+
+        # Instantiate the function output
+        psd = np.zeros((self.freq.nOtf, self.freq.nOtf, self.ao.src.nSrc))
+
+        # atmo PSD
+        psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))
+
+        # AO correction area
+        id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
+        id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
+
+        # geometry
+        lfov = 2 * np.max(self.gs.zenith)
+
+        # effective FoV
+        eFoV = (lfov * (1/rad2arc) - self.ao.tel.D * (1/self.gs.height[0])) * rad2arc
+
+        # filter considering the maximum cut off frequency
+        k = np.sqrt(self.freq.k2_)
+        fs = np.max(k) * 2.
+        x = k / (fs/2.) * np.pi
+        xc = 1j * x
+        z = np.exp(xc)
+
+        # piston filter
+        pf = FourierUtils.pistonFilter(self.ao.tel.D, np.sqrt(self.freq.k2_))
+        pf = pf[id1:id2, id1:id2]
+
+        # Vectorize source-dependent calculations
+        src_zenith = np.array(self.ao.src.zenith)  # Shape: (nSrc,)
+        max_gs_zenith = np.max(self.gs.zenith)
+
+        # Calculate deltaAngleE and deltaAngleL for all sources at once
+        if eFoV > 0:
+            deltaAngleE = np.minimum(src_zenith, max_gs_zenith) - eFoV/2
+        else:
+            deltaAngleE = np.minimum(src_zenith, max_gs_zenith) - eFoV
+
+        deltaAngleL = src_zenith - lfov/2
+        deltaAngleL = np.maximum(deltaAngleL, 0)  # Equivalent to: deltaAngleL[deltaAngleL < 0] = 0
+
+        # Pre-compute deltaPsd for all sources
+        deltaPsd = psd_atmo[id1:id2, id1:id2, np.newaxis] - psdRes[id1:id2, id1:id2, :]  # Shape: (resAO, resAO, nSrc)
+        deltaPsd = np.maximum(deltaPsd, 0)  # Equivalent to: deltaPsd[deltaPsd < 0] = 0
+        deltaPsdPf = deltaPsd * pf[:, :, np.newaxis]  # Broadcasting piston filter
+
+        # Vectorize layer calculations
+        atm_heights = np.array(self.ao.atm.heights)  # Shape: (nCn2,)
+        atm_weights = np.array(self.ao.atm.weights)  # Shape: (nCn2,)
+
+        # Create masks for valid layers and sources
+        valid_layers = atm_heights > 0  # Shape: (nCn2,)
+        valid_sources = deltaAngleE > 0  # Shape: (nSrc,)
+
+        # Only process valid combinations
+        if np.any(valid_layers) and np.any(valid_sources):
+            # Get indices of valid layers and sources
+            valid_layer_idx = np.where(valid_layers)[0]
+            valid_source_idx = np.where(valid_sources)[0]
+
+            # Extract valid data
+            valid_heights = atm_heights[valid_layer_idx]  # Shape: (nValidLayers,)
+            valid_weights = atm_weights[valid_layer_idx]  # Shape: (nValidLayers,)
+            valid_deltaAngleE = deltaAngleE[valid_source_idx]  # Shape: (nValidSources,)
+            valid_deltaAngleL = deltaAngleL[valid_source_idx]  # Shape: (nValidSources,)
+
+            # Broadcast for vectorized computation
+            # Create grids: (nValidLayers, nValidSources)
+            heights_grid, deltaAngleE_grid = np.meshgrid(valid_heights, valid_deltaAngleE, indexing='ij')
+            weights_grid, deltaAngleL_grid = np.meshgrid(valid_weights, valid_deltaAngleL, indexing='ij')
+
+            # Calculate fCut and eqD for all valid combinations
+            fCut = rad2arc / (deltaAngleE_grid * heights_grid)  # Shape: (nValidLayers, nValidSources)
+            eqD = self.ao.tel.D - deltaAngleL_grid * heights_grid * (1/rad2arc)  # Shape: (nValidLayers, nValidSources)
+            eqD = np.minimum(eqD, self.ao.tel.D)
+
+            # Create mask for valid frequency cuts
+            valid_fcut_mask = (fCut < self.freq.kcMax_) & (eqD > 0)  # Shape: (nValidLayers, nValidSources)
+
+            if np.any(valid_fcut_mask):
+                # Extract z values for the AO correction area only
+                z_ao = z[id1:id2, id1:id2]  # Shape: (resAO, resAO)
+
+                # Process only valid combinations
+                for i, layer_idx in enumerate(valid_layer_idx):
+                    for j, source_idx in enumerate(valid_source_idx):
+                        if valid_fcut_mask[i, j]:
+                            fCut_val = fCut[i, j]
+                            eqD_val = eqD[i, j]
+                            weight_val = weights_grid[i, j]
+
+                            sPole = 2 * np.pi * fCut_val
+                            zPole = np.exp(sPole/fs)
+                            lpFilter = z_ao * (1 - zPole) / (z_ao - zPole)
+                            lpFilter2 = (1 - np.abs(lpFilter)**2) * (eqD_val/self.ao.tel.D)**2
+                            lpFilter2 = np.maximum(lpFilter2, 0)  # Equivalent to: lpFilter2[lpFilter2 < 0] = 0
+
+                            psd[id1:id2, id1:id2, source_idx] += weight_val * lpFilter2 * deltaPsdPf[:, :, source_idx]
+
+        self.t_mcaoWFsensCone = 1000 * (time.time() - tstart)
+        print(f"Time for mcaoWFsensCone: {self.t_mcaoWFsensCone:.2f} ms")
 
         return np.real(psd)
 
@@ -1164,7 +1369,7 @@ class fourierModel:
         """
 
         tstart  = time.time()
-    
+
         k   = np.sqrt(self.freq.k2_)
         psd = k**self.ao.tel.extraErrorExp
         pf  = FourierUtils.pistonFilter(self.ao.tel.D,k)
@@ -1173,20 +1378,20 @@ class fourierModel:
             psd[np.where(k<self.ao.tel.extraErrorMin)] = 0
         if self.ao.tel.extraErrorMax>0:
             psd[np.where(k>self.ao.tel.extraErrorMax)] = 0
-        
+
         psd = psd * self.ao.tel.extraErrorNm**2/np.sum(psd)
-        
+
         #fig, ax1 = plt.subplots(1,1)
         #im = ax1.imshow(np.log(np.abs(psd)), cmap='hot')
-        #ax1.set_title('extra error PSD', color='black') 
-        
+        #ax1.set_title('extra error PSD', color='black')
+
         # Derives wavefront error
-        rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi 
-        
+        rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
+
         psd = psd * 1/rad2nm**2
 
         self.t_extra = 1000*(time.time() - tstart)
-    
+
         return np.real(psd)
 
     def extraErrorLoPSD(self):
@@ -1253,7 +1458,7 @@ class fourierModel:
         #ax1.set_title('tilt filter coefficients', color='black')
 
         self.t_tiltFilter = 1000*(time.time() - tstart)
-            
+ 
         return np.real(coeff_tot)
 
     def FocusFilter(self):
@@ -1265,16 +1470,16 @@ class fourierModel:
         # from Sasiela 93
         x = 0.5*self.ao.tel.D*2*np.pi*np.sqrt(self.freq.k2_)
         coeff_tot = 1 - 3*(2*besselj__n(3,x)/(x))**2
-        
+
         #fig, ax1 = plt.subplots(1,1)
         #from matplotlib import colors
         #im = ax1.imshow(cpuArray(coeff_tot), cmap='hot', norm=colors.LogNorm())
         #ax1.set_title('focus filter coefficients', color='black')
 
         self.t_focusFilter = 1000*(time.time() - tstart)
-        
+
         return np.real(coeff_tot)
-        
+
 
 #%% AO ERROR BREAKDOWN
     def errorBreakDown(self,verbose=True):
@@ -1285,7 +1490,7 @@ class fourierModel:
         if self.ao.rtc.holoop['gain'] != 0:
             # Derives wavefront error
             rad2nm      = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
-            
+
             if not self.ao.tel.opdMap_on is None:
                 self.wfeNCPA= np.std(self.ao.tel.opdMap_on[self.ao.tel.pupil!=0])
             else:
@@ -1307,13 +1512,13 @@ class fourierModel:
             else:
                 self.wfeWindShake = 0
             self.wfeExtra  = self.ao.tel.extraErrorNm
-            
+
             # Total wavefront error
             self.wfeTot = np.sqrt(self.wfeNCPA**2 + self.wfeFit**2 + self.wfeAl**2\
                                   + self.wfeST**2 + self.wfeN**2 + self.wfeDiffRef**2\
                                   + self.wfeChrom**2 + self.wfeJitter**2 + self.wfeMcaoCone**2\
                                   + self.wfeWindShake**2 + self.wfeExtra**2)
-            
+
             # Maréchal appoximation to get the Strehl-ratio
             self.SRmar  = 100*np.exp(-(self.wfeTot*2*np.pi*1e-9/self.freq.wvlRef)**2)
 
