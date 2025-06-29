@@ -1141,69 +1141,7 @@ class fourierModel:
 
         return np.real(psd)
 
-    def mcaoWFsensConePSD(self,psdRes):
-        """%% power spectrum density related to the reduced volume sensed
-              by the LGS WFS due to cone effect in MCAO systems.
-              This effect is related to the cone effect and it depends on
-              the LGS geometry and the uncorrected part of the input PSD.
-        """
-        tstart  = time.time()
-
-        #Instantiate the function output
-        psd      = np.zeros((self.freq.nOtf,self.freq.nOtf,self.ao.src.nSrc))
-        # atmo PSD 
-        psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))
-        # AO correction area
-        id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
-        id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
-        # geometry
-        lfov = 2 * np.max(self.gs.zenith)
-        # effective FoV
-        eFoV = ( lfov*(1/rad2arc) -  self.ao.tel.D * (1/self.gs.height[0]) ) * rad2arc
-        # filter considering the maximum cut off frequency
-        k  = np.sqrt(self.freq.k2_)
-        fs = np.max(k)*2.
-        x  = k/(fs/2.)*np.pi
-        xc = 1j * x
-        z  = np.exp(xc)
-        sPoleMax = 2*np.pi*self.freq.kcMax_
-        zPoleMax = np.exp(sPoleMax/fs)
-        lpFilterMax = z * (1 - zPoleMax) / (z - zPoleMax)
-        # number of layers
-        nCn2 = len(self.ao.atm.heights)
-        # piston filter
-        pf = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.freq.k2_))
-        pf = pf[id1:id2,id1:id2]
-
-        for i in range(self.ao.src.nSrc):
-            if eFoV > 0:
-                deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV/2
-            else:
-                deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV
-            deltaAngleL = self.ao.src.zenith[i] - lfov/2
-            if deltaAngleL < 0: deltaAngleL = 0
-            deltaPsd = psd_atmo[id1:id2,id1:id2]-psdRes[id1:id2,id1:id2,i]
-            deltaPsd[np.where(deltaPsd<0)] = 0
-            deltaPsdPf = deltaPsd * pf
-            for j in range(nCn2):
-                if self.ao.atm.heights[j] > 0 and deltaAngleE > 0:
-                    fCut = rad2arc/(deltaAngleE * self.ao.atm.heights[j])
-                    eqD = self.ao.tel.D - deltaAngleL * self.ao.atm.heights[j] * (1/rad2arc)
-                    if eqD > self.ao.tel.D: eqD = self.ao.tel.D
-                    if fCut < self.freq.kcMax_ and eqD > 0:
-                        sPole = 2*np.pi*fCut
-                        zPole = np.exp(sPole/fs)
-                        lpFilter = z *  (1 - zPole) / (z - zPole)
-                        lpFilter2 = (1-np.abs(lpFilter[id1:id2,id1:id2])**2.) * (eqD/self.ao.tel.D)**2
-                        lpFilter2[np.where(lpFilter2<0)] = 0
-                        psd[id1:id2,id1:id2,i] += self.ao.atm.weights[j] * lpFilter2 * deltaPsdPf
-
-        self.t_mcaoWFsensCone = 1000*(time.time() - tstart)
-        print(f"Time for mcaoWFsensCone (old): {self.t_mcaoWFsensCone:.2f} ms")
-
-        return np.real(psd)
-
-    def mcaoWFsensConePSD2(self, psdRes):
+    def mcaoWFsensConePSD(self, psdRes):
         """%% power spectrum density related to the reduced volume sensed
             by the LGS WFS due to cone effect in MCAO systems.
             This effect is related to the cone effect and it depends on
@@ -1310,7 +1248,6 @@ class fourierModel:
                             psd[id1:id2, id1:id2, source_idx] += weight_val * lpFilter2 * deltaPsdPf[:, :, source_idx]
 
         self.t_mcaoWFsensCone = 1000 * (time.time() - tstart)
-        print(f"Time for mcaoWFsensCone (new): {self.t_mcaoWFsensCone:.2f} ms")
 
         return np.real(psd)
 
@@ -1463,6 +1400,18 @@ class fourierModel:
                 self.wfeWindShake = 0
             self.wfeExtra  = self.ao.tel.extraErrorNm
 
+            if self.reduce_memory:
+                self.psdAlias = None
+                self.psdFit = None
+                self.psdNoise = None
+                self.psdSpatioTemporal = None
+                self.psdDiffRef = None
+                self.psdChromatism = None
+                self.psdMcaoWFsensCone = None
+                self.psdVib = None
+                self.psdExtra = None
+                self.psdExtraLo = None
+
             # Total wavefront error
             self.wfeTot = np.sqrt(self.wfeNCPA**2 + self.wfeFit**2 + self.wfeAl**2\
                                   + self.wfeST**2 + self.wfeN**2 + self.wfeDiffRef**2\
@@ -1481,6 +1430,10 @@ class fourierModel:
                 self.wfeAni = np.sqrt(self.psdAni.sum(axis=(0,1))) * rad2nm
             else:
                 self.wfeTomo = np.sqrt(self.wfeST**2 - self.wfeS**2)
+                
+            if self.reduce_memory:
+                self.psdS = None
+                self.psdAni = None
 
             # Print
             if verbose == True:
