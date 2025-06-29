@@ -173,8 +173,8 @@ class fourierModel:
                 self.gs = self.ao.ngs
                 self.nGs = self.ao.ngs.nSrc
                 self.strechFactor = 1.0
-   
-            # DEFINING THE MODELED ATMOSPHERE 
+
+            # DEFINING THE MODELED ATMOSPHERE
             if (self.ao.dms.nRecLayers!=None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
                 weights_mod,heights_mod = FourierUtils.eqLayers(self.ao.atm.weights,self.ao.atm.heights,self.ao.dms.nRecLayers)
                 if self.ao.dms.nRecLayers == 1:
@@ -189,7 +189,7 @@ class fourierModel:
                     self.gs  = self.ao.ngs
                     self.nGs = self.ao.ngs.nSrc
                     self.strechFactor = 1.0
-                    
+   
             else:
                 weights_mod    = self.ao.atm.weights
                 heights_mod    = self.ao.atm.heights
@@ -222,7 +222,7 @@ class fourierModel:
 
             # DEFINE THE CONTROLLER
             self.controller(display=self.display)
-          
+
             #set tilt filter key before computing the PSD
             self.applyTiltFilter = self.TiltFilterP
 
@@ -252,7 +252,7 @@ class fourierModel:
             # COMPUTE THE ERROR BREAKDOWN
             if self.getErrorBreakDown:
                 self.errorBreakDown(verbose=self.verbose)
-   
+
         # DEFINING BOUNDS
         self.bounds = self.define_bounds()
 
@@ -307,6 +307,9 @@ class fourierModel:
             self.Wtomo = self.tomographicReconstructor()
             self.Popt = self.optimalProjector()
             self.W = np.matmul(self.Popt, self.Wtomo)
+            if self.reduce_memory:
+                self.Popt = None
+                self.Wtomo = None
 
             # Computation of the Pbeta^DM matrix
             k = np.sqrt(self.freq.k2AO_)
@@ -347,6 +350,8 @@ class fourierModel:
                                                    *np.exp(i*2*np.pi*Hs[h]*(fx+fy))
 
             self.Walpha = np.matmul(self.W,self.MPalphaL)
+        if self.reduce_memory:
+            self.MPalphaL = None
         self.t_finalReconstructor = 1000*(time.time() - tstart)
 
     def reconstructionFilter(self, MV=0):
@@ -923,16 +928,16 @@ class fourierModel:
         #fig, _ = plt.subplots()
         #plt.loglog(psd_freq,psd_tip_wind)
         #plt.loglog(psd_freq,np.abs(rtfInt**2*psd_tip_wind))
-        
+
         power = np.abs(np.sum(rtfInt**2*(psd_tip_wind+psd_tilt_wind))*(psd_freq[1]-psd_freq[0]))       
         rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
         power *= 1/rad2nm**2
-        
-        psd[:,:] = power*Wtilt1 
-        
+
+        psd[:,:] = power*Wtilt1
+
         self.t_windShakePSD = 1000*(time.time() - tstart)
         return self.freq.mskInAO_ * abs(psd)
-    
+
     def spatioTemporalPSD(self):
         """%% Power spectrum density including reconstruction, field variations and temporal effects
         """
@@ -978,6 +983,8 @@ class fourierModel:
                 proj_t = np.conj(proj.transpose(0, 1, 3, 2))
                 tmp = np.matmul(proj,np.matmul(self.Cphi, proj_t))
                 psd[:, :, s] = self.freq.mskInAO_ * tmp[:, :, 0, 0]*self.freq.pistonFilterAO_
+        if self.reduce_memory:
+            self.Walpha = None
         self.t_spatioTemporalPSD = 1000*(time.time() - tstart)
         return psd
 
@@ -1462,7 +1469,7 @@ class fourierModel:
                 print('-------------------------------------------')
                 print('.Sole servoLag error:\t\t%4.2fnm'%self.wfeS)
                 print('.Sole reconstruction error:\t%4.2fnm'%self.wfeR)
-                print('-------------------------------------------')            
+                print('-------------------------------------------')
                 if self.nGs == 1:
                     print('.Sole anisoplanatism error:\t%4.2fnm'%self.wfeAni[idCenter])
                 else:
