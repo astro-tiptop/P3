@@ -1141,119 +1141,69 @@ class fourierModel:
 
         return np.real(psd)
 
-    def mcaoWFsensConePSD_old(self, psdRes):
+    def mcaoWFsensConePSD(self,psdRes):
         """%% power spectrum density related to the reduced volume sensed
-            by the LGS WFS due to cone effect in MCAO systems.
-            This effect is related to the cone effect and it depends on
-            the LGS geometry and the uncorrected part of the input PSD.
+              by the LGS WFS due to cone effect in MCAO systems.
+              This effect is related to the cone effect and it depends on
+              the LGS geometry and the uncorrected part of the input PSD.
         """
-        tstart = time.time()
+        tstart  = time.time()
 
-        # Instantiate the function output
-        psd = np.zeros((self.freq.nOtf, self.freq.nOtf, self.ao.src.nSrc))
-
-        # atmo PSD
+        #Instantiate the function output
+        psd      = np.zeros((self.freq.nOtf,self.freq.nOtf,self.ao.src.nSrc))
+        # atmo PSD 
         psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))
-
         # AO correction area
         id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
         id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
-
         # geometry
         lfov = 2 * np.max(self.gs.zenith)
-
         # effective FoV
-        eFoV = (lfov * (1/rad2arc) - self.ao.tel.D * (1/self.gs.height[0])) * rad2arc
-
-        # filter setup for z values in AO correction area
-        k_ao = np.sqrt(self.freq.k2_[id1:id2, id1:id2])
-        fs = np.max(k_ao) * 2.
-        x_ao = k_ao / (fs/2.) * np.pi
-        z_ao = np.exp(1j * x_ao)  # Shape: (resAO, resAO)
-
+        eFoV = ( lfov*(1/rad2arc) -  self.ao.tel.D * (1/self.gs.height[0]) ) * rad2arc
+        # filter considering the maximum cut off frequency
+        k  = np.sqrt(self.freq.k2_)
+        fs = np.max(k)*2.
+        x  = k/(fs/2.)*np.pi
+        xc = 1j * x
+        z  = np.exp(xc)
+        sPoleMax = 2*np.pi*self.freq.kcMax_
+        zPoleMax = np.exp(sPoleMax/fs)
+        lpFilterMax = z * (1 - zPoleMax) / (z - zPoleMax)
+        # number of layers
+        nCn2 = len(self.ao.atm.heights)
         # piston filter
-        pf = FourierUtils.pistonFilter(self.ao.tel.D, k_ao)
+        pf = FourierUtils.pistonFilter(self.ao.tel.D,np.sqrt(self.freq.k2_))
+        pf = pf[id1:id2,id1:id2]
 
-        # Vectorize source and layer calculations
-        src_zenith = np.array(self.ao.src.zenith)  # Shape: (nSrc,)
-        max_gs_zenith = np.max(self.gs.zenith)
+        for i in range(self.ao.src.nSrc):
+            if eFoV > 0:
+                deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV/2
+            else:
+                deltaAngleE = np.minimum(self.ao.src.zenith[i],np.max(self.gs.zenith)) - eFoV
+            deltaAngleL = self.ao.src.zenith[i] - lfov/2
+            if deltaAngleL < 0: deltaAngleL = 0
+            deltaPsd = psd_atmo[id1:id2,id1:id2]-psdRes[id1:id2,id1:id2,i]
+            deltaPsd[np.where(deltaPsd<0)] = 0
+            deltaPsdPf = deltaPsd * pf
+            for j in range(nCn2):
+                if self.ao.atm.heights[j] > 0 and deltaAngleE > 0:
+                    fCut = rad2arc/(deltaAngleE * self.ao.atm.heights[j])
+                    eqD = self.ao.tel.D - deltaAngleL * self.ao.atm.heights[j] * (1/rad2arc)
+                    if eqD > self.ao.tel.D: eqD = self.ao.tel.D
+                    if fCut < self.freq.kcMax_ and eqD > 0:
+                        sPole = 2*np.pi*fCut
+                        zPole = np.exp(sPole/fs)
+                        lpFilter = z *  (1 - zPole) / (z - zPole)
+                        lpFilter2 = (1-np.abs(lpFilter[id1:id2,id1:id2])**2.) * (eqD/self.ao.tel.D)**2
+                        lpFilter2[np.where(lpFilter2<0)] = 0
+                        psd[id1:id2,id1:id2,i] += self.ao.atm.weights[j] * lpFilter2 * deltaPsdPf
 
-        # Calculate deltaAngleE and deltaAngleL for all sources
-        if eFoV > 0:
-            deltaAngleE = np.minimum(src_zenith, max_gs_zenith) - eFoV/2
-        else:
-            deltaAngleE = np.minimum(src_zenith, max_gs_zenith) - eFoV
-
-        deltaAngleL = np.maximum(src_zenith - lfov/2, 0)
-
-        # Pre-compute deltaPsd for all sources
-        deltaPsd = psd_atmo[id1:id2, id1:id2, np.newaxis] - psdRes[id1:id2, id1:id2, :]
-        deltaPsd = np.maximum(deltaPsd, 0)
-        deltaPsdPf = deltaPsd * pf[:, :, np.newaxis]  # Shape: (resAO, resAO, nSrc)
-
-        # Atmosphere data
-        atm_heights = np.array(self.ao.atm.heights)  # Shape: (nLayers,)
-        atm_weights = np.array(self.ao.atm.weights)  # Shape: (nLayers,)
-
-        # Create masks for valid layers and sources
-        valid_layers = atm_heights > 0
-        valid_sources = deltaAngleE > 0
-
-        if np.any(valid_layers) and np.any(valid_sources):
-            # Extract valid data
-            valid_heights = atm_heights[valid_layers]
-            valid_weights = atm_weights[valid_layers]
-            valid_deltaAngleE = deltaAngleE[valid_sources]
-            valid_deltaAngleL = deltaAngleL[valid_sources]
-            valid_source_indices = np.where(valid_sources)[0]
-
-            # Create broadcasting grids: (nValidLayers, nValidSources)
-            heights_grid, deltaAngleE_grid = np.meshgrid(valid_heights, valid_deltaAngleE, indexing='ij')
-            weights_grid, deltaAngleL_grid = np.meshgrid(valid_weights, valid_deltaAngleL, indexing='ij')
-
-            # Calculate fCut and eqD for all combinations
-            fCut = rad2arc / (deltaAngleE_grid * heights_grid)
-            eqD = np.minimum(self.ao.tel.D - deltaAngleL_grid * heights_grid * (1/rad2arc), self.ao.tel.D)
-
-            # Create mask for valid frequency cuts
-            valid_fcut_mask = (fCut < self.freq.kcMax_) & (eqD > 0)
-
-            if np.any(valid_fcut_mask):
-                # Get valid combinations
-                valid_layer_idx, valid_src_idx = np.where(valid_fcut_mask)
-
-                # Process all valid combinations at once
-                fCut_vals = fCut[valid_layer_idx, valid_src_idx]  # Shape: (nValidCombos,)
-                eqD_vals = eqD[valid_layer_idx, valid_src_idx]    # Shape: (nValidCombos,)
-                weight_vals = weights_grid[valid_layer_idx, valid_src_idx]  # Shape: (nValidCombos,)
-                source_indices = valid_source_indices[valid_src_idx]  # Shape: (nValidCombos,)
-
-                # Vectorized filter calculation
-                sPole = 2 * np.pi * fCut_vals  # Shape: (nValidCombos,)
-                zPole = np.exp(sPole/fs)       # Shape: (nValidCombos,)
-
-                # Broadcast z_ao for all valid combinations: (resAO, resAO, nValidCombos)
-                z_ao_broadcast = z_ao[:, :, np.newaxis]
-                zPole_broadcast = zPole[np.newaxis, np.newaxis, :]
-
-                # Calculate filters for all combinations
-                lpFilter = z_ao_broadcast * (1 - zPole_broadcast) / (z_ao_broadcast - zPole_broadcast)
-                lpFilter2 = (1 - np.abs(lpFilter)**2) * (eqD_vals[np.newaxis, np.newaxis, :]/self.ao.tel.D)**2
-                lpFilter2 = np.maximum(lpFilter2, 0)
-
-                # Apply weights and accumulate results
-                weighted_filters = lpFilter2 * weight_vals[np.newaxis, np.newaxis, :]  # Shape: (resAO, resAO, nValidCombos)
-
-                # Accumulate contributions for each source
-                for i, src_idx in enumerate(source_indices):
-                    psd[id1:id2, id1:id2, src_idx] += weighted_filters[:, :, i] * deltaPsdPf[:, :, src_idx]
-
-        self.t_mcaoWFsensCone = 1000 * (time.time() - tstart)
-        print(f"Time for mcaoWFsensCone: {self.t_mcaoWFsensCone:.2f} ms")
+        self.t_mcaoWFsensCone = 1000*(time.time() - tstart)
+        print(f"Time for mcaoWFsensCone (old): {self.t_mcaoWFsensCone:.2f} ms")
 
         return np.real(psd)
 
-    def mcaoWFsensConePSD(self, psdRes):
+    def mcaoWFsensConePSD2(self, psdRes):
         """%% power spectrum density related to the reduced volume sensed
             by the LGS WFS due to cone effect in MCAO systems.
             This effect is related to the cone effect and it depends on
@@ -1360,7 +1310,7 @@ class fourierModel:
                             psd[id1:id2, id1:id2, source_idx] += weight_val * lpFilter2 * deltaPsdPf[:, :, source_idx]
 
         self.t_mcaoWFsensCone = 1000 * (time.time() - tstart)
-        print(f"Time for mcaoWFsensCone: {self.t_mcaoWFsensCone:.2f} ms")
+        print(f"Time for mcaoWFsensCone (new): {self.t_mcaoWFsensCone:.2f} ms")
 
         return np.real(psd)
 
