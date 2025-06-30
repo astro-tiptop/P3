@@ -8,7 +8,7 @@ Created on Mon Apr 19 11:34:44 2021
 
 # IMPORTING PYTHON LIBRAIRIES
 import numpy as nnp
-from . import gpuEnabled, cp, np, nnp
+from . import gpuEnabled, cp, np, nnp, trapz
 
 from p3.aoSystem.FourierUtils import *
 from p3.aoSystem.anisoplanatismModel import anisoplanatism_structure_function
@@ -60,8 +60,8 @@ class frequencyDomain():
             self.mskOutAO_ = np.logical_or(abs(self.kxAO_) >= self.kcMax_, abs(self.kyAO_) >= self.kcMax_)
 
         self.psdKolmo_ = 0.0229 * self.mskOut_* ((1.0 /self.ao.atm.L0**2) + self.k2_) ** (-11.0/6.0)
-        self.wfe_fit_norm  = np.sqrt(np.trapz(np.trapz(self.psdKolmo_,
-                                                       self.kx_[:,0]), self.kx_[:,0]))
+        self.wfe_fit_norm  = np.sqrt(trapz(trapz(self.psdKolmo_,
+                                                 self.kx_[:,0]), self.kx_[:,0]))
     @property
     def kcInMas(self):
         """DM cut-of frequency"""

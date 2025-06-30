@@ -41,7 +41,7 @@ class aoSystem():
 
     def check_section_key(self, primary):        
         return primary in self.my_data_map.keys()
-    
+
     def check_config_key(self, primary, secondary):
         if primary in self.my_data_map.keys():
             return secondary in self.my_data_map[primary].keys()
@@ -50,7 +50,7 @@ class aoSystem():
 
     def get_config_value(self, primary, secondary):
         return self.my_data_map[primary][secondary]
-    
+
     def __init__(self,path_config,path_root='',getPSDatNGSpositions=False,
                 psdExpansion=False,coo_stars=None):
 
@@ -63,7 +63,7 @@ class aoSystem():
         # verify if the file exists
         if ospath.isfile(path_config) == False:
             raise ValueError('The parameter file (.ini or .yml) could not be found.' + str(path_config))
-  
+
         if path_config[-4::]=='.ini':
             # open the .ini file
             config = ConfigParser()
@@ -73,11 +73,11 @@ class aoSystem():
             for section in config.sections():
                 self.my_data_map[section] = {}
                 for name,value in config.items(section):
-                    self.my_data_map[section].update({name:eval(value)})            
+                    self.my_data_map[section].update({name:eval(value)})
 
         elif path_config[-4::]=='.yml':
             with open(path_config) as f:
-                my_yaml_dict = yaml.safe_load(f)        
+                my_yaml_dict = yaml.safe_load(f)
             self.my_data_map = my_yaml_dict
 
         self.getPSDatNGSpositions = getPSDatNGSpositions
@@ -128,7 +128,7 @@ class aoSystem():
                 raise ValueError(f"PathPupil file not found: {path_pupil}")
         else:
             path_pupil = ''
-  
+
         if self.check_config_key('telescope','PupilAngle'):
             pupilAngle = self.get_config_value('telescope','PupilAngle')
         else:
@@ -180,7 +180,7 @@ class aoSystem():
             else:
                 path_static_pos = ospath.join(path_root, PathStaticPos)
             if path_static_pos and not ospath.isfile(path_static_pos):
-                raise ValueError(f"PathStaticPos file not found: {path_static_pos}")            
+                raise ValueError(f"PathStaticPos file not found: {path_static_pos}")    
         else:
             path_static_pos = None
 
@@ -236,11 +236,11 @@ class aoSystem():
             extraErrorMax = self.get_config_value('telescope','extraErrorMax')
         else:
             extraErrorMax = 0
-   
-        if self.check_config_key('telescope', 'extraErrorLoNm'):       
+
+        if self.check_config_key('telescope', 'extraErrorLoNm'): 
             extraErrorLoNm = self.get_config_value('telescope','extraErrorLoNm')
         else:
-            extraErrorLoNm = extraErrorNm  
+            extraErrorLoNm = extraErrorNm 
 
         if self.check_config_key('telescope', 'extraErrorLoExp'):
             extraErrorLoExp = self.get_config_value('telescope','extraErrorLoExp')
@@ -276,13 +276,13 @@ class aoSystem():
                              extraErrorLoNm=extraErrorLoNm,
                              extraErrorLoExp=extraErrorLoExp,
                              extraErrorLoMin=extraErrorLoMin,
-                             extraErrorLoMax=extraErrorLoMax)                     
+                             extraErrorLoMax=extraErrorLoMax)
 
         if self.check_config_key('telescope', 'TechnicalFoV'):
             self.TechnicalFoV = self.get_config_value('telescope','TechnicalFoV')
         else:
             self.TechnicalFoV = 0
-            
+
         if self.check_config_key('telescope', 'windPsdFile'):
             self.windPsdFile = self.get_config_value('telescope','windPsdFile')
             if not ospath.isfile(self.windPsdFile):
@@ -293,44 +293,44 @@ class aoSystem():
         #%% ATMOSPHERE
         if not(self.check_section_key('atmosphere')):
             self.raiseMissingRequiredSec('atmosphere')
-            
+
         if self.check_config_key('atmosphere','Wavelength'):
-            wvlAtm = self.get_config_value('atmosphere','Wavelength') 
+            wvlAtm = self.get_config_value('atmosphere','Wavelength')
         else:
             wvlAtm = 500e-9
-        
+
         if self.check_config_key('atmosphere','Seeing'):
-            r0 = 0.976*wvlAtm/self.get_config_value('atmosphere','Seeing')*3600*180/np.pi 
+            r0 = 0.976*wvlAtm/self.get_config_value('atmosphere','Seeing')*3600*180/np.pi
         else:
             if self.check_config_key('atmosphere','r0_value'):
-                r0 = self.get_config_value('atmosphere','r0_value') 
+                r0 = self.get_config_value('atmosphere','r0_value')
             else:
                 self.raiseMissingRequiredOpt('atmosphere','Seeing')
-        
+
         if self.check_config_key('atmosphere','L0'):
-            L0 = self.get_config_value('atmosphere','L0') 
+            L0 = self.get_config_value('atmosphere','L0')
         else:
             L0 = 25
-            
+
         if self.check_config_key('atmosphere','Cn2Weights'):
-            weights = self.get_config_value('atmosphere','Cn2Weights') 
+            weights = self.get_config_value('atmosphere','Cn2Weights')
             if np.abs(np.sum(weights) - 1) > 1e-3:
                 raise ValueError("Sum of 'Cn2Weights' in section 'atmosphere' is not equal to 1")
         else:
             weights = [1.0]
-        
+
         if self.check_config_key('atmosphere','Cn2Heights'):
-            heights = self.get_config_value('atmosphere','Cn2Heights') 
+            heights = self.get_config_value('atmosphere','Cn2Heights')
         else:
             heights = [0.0]
-            
+
         if self.check_config_key('atmosphere','WindSpeed'):
-            wSpeed = self.get_config_value('atmosphere','WindSpeed') 
+            wSpeed = self.get_config_value('atmosphere','WindSpeed')
         else:
             wSpeed = [10.0]
-            
+
         if self.check_config_key('atmosphere','WindDirection'):
-            wDir = self.get_config_value('atmosphere','WindDirection') 
+            wDir = self.get_config_value('atmosphere','WindDirection')
         else:
             wDir = list(np.array(wSpeed)*0.)
 
@@ -346,31 +346,31 @@ class aoSystem():
                               wDir,
                               L0)            
         
-        #%%  GUIDE STARS 
+        #%%  GUIDE STARS
         if not(self.check_section_key('sources_HO')):
             self.raiseMissingRequiredSec('sources_HO')
-            
+
         if self.check_config_key('sources_HO','Wavelength'):
             self.wvlGs     = np.unique(np.array(self.get_config_value('sources_HO','Wavelength')))
         else:
             self.raiseMissingRequiredOpt('sources_HO', 'Wavelength')
             return 0
-        
+
         if self.check_config_key('sources_HO','Zenith'):
-            self.zenithGs = self.get_config_value('sources_HO','Zenith') 
+            self.zenithGs = self.get_config_value('sources_HO','Zenith')
         else:
             self.zenithGs = [0.0]
-            
+
         if self.check_config_key('sources_HO','Azimuth'):
-            self.azimuthGs = self.get_config_value('sources_HO','Azimuth') 
+            self.azimuthGs = self.get_config_value('sources_HO','Azimuth')
         else:
             self.azimuthGs = [0.0]
-            
+
         if self.check_config_key('sources_HO','Height'):
-            heightGs  = self.get_config_value('sources_HO','Height') 
+            heightGs  = self.get_config_value('sources_HO','Height')
         else:
             heightGs = 0.0
-                         
+
         # ----- verification
         if len(self.zenithGs) != len(self.azimuthGs):
             self.raiseNotSameLength('sources_HO', ['Azimuth','Zenith'])
@@ -394,27 +394,27 @@ class aoSystem():
     def configLO_SC(self):
         #%%  SCIENCE SOURCES
         if not(self.check_section_key('sources_science')):
-            self.raiseMissingRequiredSec('sources_science') 
-            
+            self.raiseMissingRequiredSec('sources_science')
+
         if self.check_config_key('sources_science','Wavelength'):
             wvlSrc = np.array(self.get_config_value('sources_science','Wavelength'))
         else:
             self.raiseMissingRequiredOpt('sources_science', 'Wavelength')
-        
+
         if self.check_config_key('sources_science','Zenith'):
-            zenithSrc = self.get_config_value('sources_science','Zenith') 
+            zenithSrc = self.get_config_value('sources_science','Zenith')
         else:
             zenithSrc = [0.0]
-            
+
         if self.check_config_key('sources_science','Azimuth'):
-            azimuthSrc = self.get_config_value('sources_science','Azimuth') 
+            azimuthSrc = self.get_config_value('sources_science','Azimuth')
         else:
             azimuthSrc = [0.0]
-        
+
         if np.any(self.coo_stars):
             zenithSrc = np.hypot(self.coo_stars[0],self.coo_stars[1])
             azimuthSrc = np.arctan2(self.coo_stars[0],self.coo_stars[1])
-        
+
         #----- verification
         if len(zenithSrc) != len(azimuthSrc):
             self.raiseNotSameLength('sources_science', ['Zenith','Azimuth'])
@@ -423,66 +423,66 @@ class aoSystem():
         if self.getPSDatNGSpositions and self.check_config_key('sources_LO','Wavelength'):
             zenithSrc = zenithSrc +  (self.get_config_value('sources_LO','Zenith'))
             azimuthSrc = azimuthSrc + (self.get_config_value('sources_LO','Azimuth'))
-            
+
         #----- class definition
         self.src = source(wvlSrc,
                           zenithSrc, azimuthSrc,
-                          tag="SCIENCE",verbose=True)   
+                          tag="SCIENCE",verbose=True)
 
         #%% HIGH-ORDER WAVEFRONT SENSOR
         if not(self.check_section_key('sensor_HO')):
             self.raiseMissingRequiredSec('sensor_HO')
-            
+
         if self.check_config_key('sensor_HO','PixelScale'):
             psInMas = self.get_config_value('sensor_HO','PixelScale')
         else:
             self.raiseMissingRequiredOpt('sensor_HO', 'PixelScale')
-        
+
         if self.check_config_key('sensor_HO','FieldOfView'):
             fov = self.get_config_value('sensor_HO','FieldOfView')
         else:
-            self.raiseMissingRequiredOpt('sensor_HO', 'FieldOfView') 
-        
+            self.raiseMissingRequiredOpt('sensor_HO', 'FieldOfView')
+
         if self.check_config_key('sensor_HO','Binning'):
             Binning = self.get_config_value('sensor_HO','Binning')
         else:
             Binning = 1
-            
+
         if self.check_config_key('sensor_HO','SpotFWHM'):
             spotFWHM = self.get_config_value('sensor_HO','SpotFWHM')
         else:
             spotFWHM = [[0.0, 0.0]]
-            
+
         if self.check_config_key('sensor_HO','NumberPhotons'):
             nphHO = self.get_config_value('sensor_HO','NumberPhotons')
         else:
             nphHO = [np.inf]
-        
+
         if self.check_config_key('sensor_HO','SigmaRON'):
             ron = self.get_config_value('sensor_HO','SigmaRON')
         else:
             ron = 0.0
-        
+
         if self.check_config_key('sensor_HO','Gain'):
             self.detectorGainHO = self.get_config_value('sensor_HO','Gain')
         else:
             self.detectorGainHO = 1
-            
+
         if self.check_config_key('sensor_HO','SkyBackground'):
             sky = self.get_config_value('sensor_HO','SkyBackground')
         else:
             sky = 0.0
-        
+
         if self.check_config_key('sensor_HO','Dark'):
             dark = self.get_config_value('sensor_HO','Dark')
         else:
             dark = 0.0
-            
+
         if self.check_config_key('sensor_HO','ExcessNoiseFactor'):
             excess = self.get_config_value('sensor_HO','ExcessNoiseFactor')
         else:
             excess = 1.0
-         
+
         if self.check_config_key('sensor_HO','SpectralBandwidth'):
             bw = self.get_config_value('sensor_HO','SpectralBandwidth')
         else:
@@ -495,57 +495,57 @@ class aoSystem():
             disp = self.get_config_value('sensor_HO','Dispersion')
         else:
             disp = [[0.0], [0.0]]
-                
+
         if self.check_config_key('sensor_HO','WfsType'):
             wfstype = self.get_config_value('sensor_HO','WfsType')
         else:
             wfstype = 'Shack-Hartmann'
-            
+
         if self.check_config_key('sensor_HO','NumberLenslets'):
             nL = self.get_config_value('sensor_HO','NumberLenslets')
         else:
             nL = [20]
-            
+
         if self.check_config_key('sensor_HO','SizeLenslets'):
             dsub = self.get_config_value('sensor_HO','SizeLenslets')
         else:
             dsub = list(self.D/np.array(nL))
-            
+
         if self.check_config_key('sensor_HO','Modulation'):
             modu = self.get_config_value('sensor_HO','Modulation')
         else:
             modu = None
-            
+
         if self.check_config_key('sensor_HO','NoiseVariance'):
             NoiseVar = np.array(self.get_config_value('sensor_HO','NoiseVariance'))
         else:
             NoiseVar = [None]
-            
+
         if self.check_config_key('sensor_HO','Algorithm'):
             algorithm = self.get_config_value('sensor_HO','Algorithm')
         else:
             algorithm = 'wcog'
-            
+
         if self.check_config_key('sensor_HO','WindowRadiusWCoG'):
             wr = self.get_config_value('sensor_HO','WindowRadiusWCoG')
         else:
             wr = 5.0
-            
+
         if self.check_config_key('sensor_HO','ThresholdWCoG = 0.0'):
             thr = self.get_config_value('sensor_HO','ThresholdWCoG = 0.0')
         else:
             thr = 0.0
-            
+
         if self.check_config_key('sensor_HO','NewValueThrPix'):
             nv = self.get_config_value('sensor_HO','NewValueThrPix')
         else:
             nv = 0.0
-         
+
         if self.check_config_key('sensor_HO','ExcessNoiseFactor'):
             excess = self.get_config_value('sensor_HO','ExcessNoiseFactor')
         else:
             excess = 1.0
-            
+
         if self.check_config_key('sensor_HO','addMcaoWFsensConeError'):
             self.addMcaoWFsensConeError = self.get_config_value('sensor_HO','addMcaoWFsensConeError')
         else:
@@ -565,22 +565,22 @@ class aoSystem():
             self.tts = None
 
  #%% REAL-TIME-COMPUTER
-     
+
         if self.check_config_key('RTC','LoopGain_HO'):
             self.LoopGain_HO = self.get_config_value('RTC','LoopGain_HO')
         else:
             self.LoopGain_HO = 0.5
-            
+
         if self.check_config_key('RTC','SensorFrameRate_HO'):
             frameRate_HO = self.get_config_value('RTC','SensorFrameRate_HO')
         else:
             frameRate_HO = 500.0
-            
+
         if self.check_config_key('RTC','LoopDelaySteps_HO'):
             delay_HO = self.get_config_value('RTC','LoopDelaySteps_HO')
         else:
             delay_HO = 2
-                     
+
         if self.check_config_key('RTC','LoopGain_LO'):
             temp = self.get_config_value('RTC','LoopGain_LO')
             if temp != 'optimize':
@@ -589,25 +589,25 @@ class aoSystem():
                 self.LoopGain_LO = None
         else:
             self.LoopGain_LO = None
-            
+
         if self.check_config_key('RTC','SensorFrameRate_LO'):
             frameRate_LO = self.get_config_value('RTC','SensorFrameRate_LO')
         else:
             frameRate_LO = None
-            
+
         if self.check_config_key('RTC','LoopDelaySteps_LO'):
             delay_LO = self.get_config_value('RTC','LoopDelaySteps_LO')
         else:
             delay_LO = None
-            
+
         if self.check_config_key('RTC','ResidualError'):
             wfe = self.get_config_value('RTC','ResidualError')
         else:
             wfe = None
-            
+
         self.rtc = rtc(self.LoopGain_HO, frameRate_HO, delay_HO, wfe=wfe,
                        loopGainLO=self.LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
-               
+
 #%% DEFORMABLE MIRRORS
         if not(self.check_section_key('DM')):
             self.raiseMissingRequiredSec('DM')
@@ -633,51 +633,51 @@ class aoSystem():
             asec2rad = np.pi / (3600 * 180)
             DmSize = list(self.TechnicalFoV * asec2rad * np.array(DmHeights) + self.D)
             nActu = list((np.array(DmSize) / np.array(DmPitchs)).round().astype(int))
-        
+
         if self.check_config_key('DM','InfModel'):
-            InfModel = self.get_config_value('DM','InfModel') 
+            InfModel = self.get_config_value('DM','InfModel')
         else:
             InfModel = 'gaussian'
 
         if self.check_config_key('DM','InfCoupling'):
-            InfCoupling = self.get_config_value('DM','InfCoupling') 
+            InfCoupling = self.get_config_value('DM','InfCoupling')
         else:
             InfCoupling = [0.2]
 
         if self.check_config_key('DM','OptimizationWeight'):
-            opt_w = self.get_config_value('DM','OptimizationWeight') 
+            opt_w = self.get_config_value('DM','OptimizationWeight')
         else:
             opt_w = [0.0]
 
         if self.check_config_key('DM','OptimizationAzimuth'):
-            opt_az = self.get_config_value('DM','OptimizationAzimuth') 
+            opt_az = self.get_config_value('DM','OptimizationAzimuth')
         else:
             opt_az = [0.0]
 
         if self.check_config_key('DM','OptimizationZenith'):
-            opt_zen = self.get_config_value('DM','OptimizationZenith') 
+            opt_zen = self.get_config_value('DM','OptimizationZenith')
         else:
             opt_zen = [0.0]
 
         # ----- verification
         if (len(opt_zen) != len(opt_az)) or (len(opt_zen) != len(opt_w)):
             self.raiseNotSameLength('DM', ['OptimizationZenith','OptimizationAzimuth','OptimizationWeight'])
-              
+
         if self.check_config_key('DM','OptimizationConditioning'):
-            cond = self.get_config_value('DM','OptimizationConditioning') 
+            cond = self.get_config_value('DM','OptimizationConditioning')
         else:
             cond = 100.0
-            
+
         if self.check_config_key('DM','NumberReconstructedLayers'):
-            nrec = self.get_config_value('DM','NumberReconstructedLayers') 
+            nrec = self.get_config_value('DM','NumberReconstructedLayers')
         else:
             nrec = 10
-            
+
         if self.check_config_key('DM','AoArea'):
-            AoArea = self.get_config_value('DM','AoArea') 
+            AoArea = self.get_config_value('DM','AoArea')
         else:
             AoArea = 'circle'
-        
+
         # ----- creating the dm class
         self.dms = deformableMirror(nActu, DmPitchs,
                                     heights=DmHeights, mechCoupling=InfCoupling,
@@ -686,38 +686,38 @@ class aoSystem():
                                     opt_weights=opt_w,
                                     opt_cond=cond,n_rec = nrec,
                                     AoArea=AoArea)
-      
+
         #%% SCIENCE DETECTOR
         if not(self.check_section_key('sensor_science')):
             self.raiseMissingRequiredSec('sensor_science')
-        
+
         if self.check_config_key('sensor_science','Name'):
             camName = self.get_config_value('sensor_science','Name')
         else:
             camName = 'SCIENCE CAM'
-            
+
         if self.check_config_key('sensor_science','PixelScale'):
             psInMas = self.get_config_value('sensor_science','PixelScale')
         else:
             self.raiseMissingRequiredOpt('sensor_science', 'PixelScale')
-        
+
         if self.check_config_key('sensor_science','FieldOfView'):
             fov = self.get_config_value('sensor_science','FieldOfView')
             if self.psdExpansion and len(wvlSrc) > 1:
                 fov = int(fov * np.ceil(max(wvlSrc)/min(wvlSrc)))
         else:
             self.raiseMissingRequiredOpt('sensor_science', 'FieldOfView')
-        
+
         if self.check_config_key('sensor_science','Binning'):
             Binning = self.get_config_value('sensor_science','Binning')
         else:
             Binning = 1
-            
+
         if self.check_config_key('sensor_science','SpotFWHM'):
             spotFWHM = self.get_config_value('sensor_science','SpotFWHM')
         else:
             spotFWHM = [[0.0,0.0,0.0]]
-            
+
         if self.check_config_key('sensor_science','SpectralBandwidth'):
             bw = self.get_config_value('sensor_science','SpectralBandwidth')
         else:
@@ -730,73 +730,73 @@ class aoSystem():
             disp = self.get_config_value('sensor_science','Dispersion')
         else:
             disp = [[0.0],[0.0]]
-        
+
         if self.check_config_key('sensor_science','NumberPhotons'):
             nphSC = self.get_config_value('sensor_science','NumberPhotons')
         else:
             nphSC = np.inf
-        
+
         if self.check_config_key('sensor_science','Saturation'):
             saturation = self.get_config_value('sensor_science','Saturation')
         else:
             saturation = np.inf
-            
+
         if self.check_config_key('sensor_science','SigmaRON'):
             ron = self.get_config_value('sensor_science','SigmaRON')
         else:
             ron = 0.0
-        
+
         if self.check_config_key('sensor_science','Gain'):
             self.detectorGainScience = self.get_config_value('sensor_science','Gain')
         else:
             self.detectorGainScience = 1
-            
+
         if self.check_config_key('sensor_science','SkyBackground'):
             sky = self.get_config_value('sensor_science','SkyBackground')
         else:
             sky = 0.0
-        
+
         if self.check_config_key('sensor_science','Dark'):
             dark = self.get_config_value('sensor_science','Dark')
         else:
             dark = 0.0
-        
+
         if self.check_config_key('sensor_science','ExcessNoiseFactor'):
             excess = self.get_config_value('sensor_science','ExcessNoiseFactor')
         else:
             excess = 1.0
-        
+
         self.cam = detector(psInMas, fov,
                             binning=Binning, spotFWHM=spotFWHM, saturation=saturation,
                             nph=nphSC, bandwidth=bw, transmittance=tr, dispersion=disp,
                             gain=self.detectorGainScience, ron=ron, sky=sky, dark=dark, excess=excess,
                             tag=camName)
-        
+
         # %% AO mode
         self.aoMode = 'SCAO'
-        
+
         if self.lgs:
             if self.lgs.nSrc > 1:
                 if self.dms.nDMs > 1:
                     self.aoMode = 'MCAO'
                 else:
                     if self.dms.nRecLayers >1:
-                        self.aoMode = 'LTAO' 
+                        self.aoMode = 'LTAO'
                     else:
-                        self.aoMode = 'GLAO'                  
+                        self.aoMode = 'GLAO'
             else:
                 self.aoMode = 'SLAO'
-    
+
         # %% ERROR BREAKDOWN
         if self.rtc.holoop['gain'] > 0:
             self.errorBreakdown()
 
 
     def configLO(self):
-        
+
         if not self.check_section_key('sources_LO'):
-        
-            print('Warning: No information about the tip-tilt star can be retrieved')            
+
+            print('Warning: No information about the tip-tilt star can be retrieved')
         else:
             if self.check_config_key('sources_LO','Wavelength'):
                 self.wvlGsLO = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
@@ -811,9 +811,9 @@ class aoSystem():
 
             self.ngs = source(self.wvlGsLO,self.zenithGsLO,self.azimuthGsLO,tag="NGS",verbose=True)
 
-    
+
     def configLOsensor(self):
-            
+
         if self.check_config_key('sensor_LO','PixelScale'):
             psInMas = self.get_config_value('sensor_LO','PixelScale')
         else:
@@ -847,7 +847,7 @@ class aoSystem():
             self.detectorGainLO = self.get_config_value('sensor_LO','Gain')
         else:
             self.detectorGainLO = 1
-            
+
         if self.check_config_key('sensor_LO','SigmaRON'):
             ron = self.get_config_value('sensor_LO','SigmaRON')
         else:
@@ -914,7 +914,7 @@ class aoSystem():
             nv = self.get_config_value('sensor_LO','NewValueThrPix')
         else:
             nv = 0.0
-            
+
         self.tts = sensor(psInMas, fov,
                           binning=Binning, spotFWHM=spotFWHM,
                           nph=nphLO, bandwidth=bw, transmittance=tr, dispersion=disp,
@@ -923,9 +923,9 @@ class aoSystem():
                           wfstype='Shack-Hartmann', noiseVar=NoiseVar,
                           algorithm=algorithm, algo_param=[wr,thr,nv], tag="TT WFS")
 
-    
+
     def __repr__(self):
-        
+
         s = '\t\t\t\t________________________'+ self.aoMode + ' SYSTEM ________________________\n\n'
         s += self.src.__repr__() + '\n'
         if self.lgs:
@@ -937,31 +937,31 @@ class aoSystem():
         s+= self.wfs.__repr__() +'\n'
         if self.tts:
             s+= self.tts.__repr__() +'\n'
-        
+
         s+= self.rtc.__repr__() +'\n'
         s+= self.dms.__repr__() +'\n'
         s+= self.cam.__repr__()
 
         return s
-    
+
     def errorBreakdown(self):
         """
             Computing the AO wavefront error breakdown based on theoretical formula
         """
-        
+
         rad2nm = lambda x:  np.sqrt(x) * self.atm.wvl*1e9/2/np.pi
         self.wfe = dict()
-        
+
         Dr053 = (self.tel.D/self.atm.r0)**(5/3)
         dactur053 = (self.dms.pitch[0]/self.atm.r0)**(5/3)
         dsubr053 = (self.wfs.optics[0].dsub/self.atm.r0)**(5/3)
-        
+
         # DM fitting error
         self.wfe['DM fitting'] = rad2nm(0.23*dactur053)
-        
+
         # Aliasing error
-        self.wfe['WFS aliasing'] = rad2nm(0.07*dsubr053)      
-        
+        self.wfe['WFS aliasing'] = rad2nm(0.07*dsubr053)
+
         # Servo-lag errors
         ff = np.pi*0.5**2 # to account for the loss of valid actuator outside the pupil
         nMax = int(np.sqrt(ff)*(self.dms.nControlledRadialOrder[0]+1))
@@ -969,22 +969,22 @@ class aoSystem():
             nMin = 3
         else:
             nMin = 1
-            
+
         nrad  = np.array(range(nMin,nMax))
         self.wfe['HO Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.holoop['bandwidth'])\
                                     * Dr053 * np.sum((nrad+1)**(-2/3)))
-        
-        # Noise errors        
+
+        # Noise errors
         if self.wfs.processing.noiseVar == [None]:
             varNoise = self.wfs.NoiseVariance(self.atm.r0 ,self.atm.wvl)
         else:
             varNoise = self.wfs.processing.noiseVar
-            
+
         self.wfe['HO Noise'] = rad2nm(np.mean(varNoise))
-        
+
         if hasattr(self.rtc,'ttloop') and self.tts !=None:
             self.wfe['TT Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.ttloop['bandwidth'])* Dr053 * 2**(-2/3))
-            
+
             if self.tts.processing.noiseVar == [None]:
                 #varNoise = self.tts.NoiseVariance(self.atm.r0 ,self.atm.wvl) # this line has been commented because it makes no sense
                                                                               # to consider the open loop r0 in this computation:
@@ -992,23 +992,23 @@ class aoSystem():
                 varNoise = self.tts.NoiseVariance(self.tts.optics[0].dsub ,self.atm.wvl)
             else:
                 varNoise = self.tts.processing.noiseVar
-            
+
             self.wfe['TT Noise']     = rad2nm(np.mean(varNoise))
         else:
             self.wfe['TT Servo-lag'] = 0
             self.wfe['TT Noise'] = 0
-        
+
         # Focal anisoplanatism
         if self.lgs and self.lgs.height[0] > 0:
             self.wfe['Focal anisoplanatism'] = anisoplanatismModel.focal_anisoplanatism_variance(self.tel,self.atm,self.lgs)
         else:
             self.wfe['Focal anisoplanatism'] = 0
-            
+
         # TO be added : angular anisoplanatisms
-           
+
         self.wfe['Total'] = np.sqrt(self.wfe['DM fitting']**2 + self.wfe['WFS aliasing']**2\
                                     + self.wfe['HO Servo-lag']**2 + self.wfe['HO Noise']**2\
                                     + self.wfe['TT Servo-lag']**2 + self.wfe['TT Noise']**2\
                                     + self.wfe['Focal anisoplanatism']**2)
         self.wfe['Strehl'] = np.exp(-self.wfe['Total']**2 * (2*np.pi*1e-9/self.src.wvl[0])**2)
-        
+
