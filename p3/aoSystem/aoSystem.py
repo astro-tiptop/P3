@@ -708,6 +708,11 @@ class aoSystem():
         else:
             self.raiseMissingRequiredOpt('sensor_science', 'FieldOfView')
 
+        if self.check_config_key('sensor_science','Super_Sampling'):
+            SupSamp = self.get_config_value('sensor_science','Super_Sampling')
+        else:
+            SupSamp = None
+
         if self.check_config_key('sensor_science','Binning'):
             Binning = self.get_config_value('sensor_science','Binning')
         else:
@@ -766,7 +771,7 @@ class aoSystem():
         else:
             excess = 1.0
 
-        self.cam = detector(psInMas, fov,
+        self.cam = detector(psInMas, fov, SupSamp=SupSamp,
                             binning=Binning, spotFWHM=spotFWHM, saturation=saturation,
                             nph=nphSC, bandwidth=bw, transmittance=tr, dispersion=disp,
                             gain=self.detectorGainScience, ron=ron, sky=sky, dark=dark, excess=excess,

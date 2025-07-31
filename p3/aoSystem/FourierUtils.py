@@ -15,7 +15,7 @@ from astropy.modeling import models, fitting
 import matplotlib as mpl
 import scipy.ndimage as scnd
 from matplotlib.path import Path
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, CubicSpline
 from scipy import ndimage
 
 #%%  FOURIER TOOLS
@@ -1008,7 +1008,8 @@ def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):
 
 
 def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=False, binsize=None, maxradius=None,
-                   normalize='None', pa_range=None, nargout=2, slice=slice, verbose=False):
+                   normalize='None', pa_range=None, nargout=2, supersamp=None, slice=slice, 
+                   polar_grid=None, r_vals=None, verbose=False):
     """ Compute a radial profile of the image.
 
     This computes a discrete radial profile evaluated on the provided binsize. For a version
@@ -1037,6 +1038,8 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
         I.e. calculate that profile only for some wedge, not the full image. Specify the PA in degrees
         counterclockwise from +Y axis=0. Note that you can specify ranges across zero using negative numbers,
         such as pa_range=[-10,10].  The allowed PA range runs from -180 to 180 degrees.
+    supersamp : [float, int], optional
+        Step size and interpolation flag (1: 1D cubic, 2: 2D polar grid).
 
     Returns
     --------
@@ -1047,6 +1050,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
         as precise as possible.
     """
 
+    # === Normalize image ===
     if normalize.lower() == 'peak':
         if verbose:
             print("Calculating profile with PSF normalized to peak = 1")
@@ -1059,13 +1063,37 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
 
     if binsize is None:
         binsize = pixelscale
-
-    y, x = nnp.indices(image.shape, dtype=float)
+    
     if center is None:
         # get exact center of image
         # center = (image.shape[1]/2, image.shape[0]/2)
         center = tuple((a - 1) / 2.0 for a in image.shape[::-1])
 
+    # === Handle supersamp flag ===
+    if supersamp is not None:
+        try:
+            step_interp, interp_flag = supersamp
+        except ValueError:
+            raise ValueError("supersamp must be a tuple of (step, interp_flag)")
+        interp_flag = int(interp_flag)
+        
+        # ===== Supersampling - Polar 2D =====
+        if interp_flag == 2: 
+            if polar_grid is not None and r_vals is not None:
+                r_vals, profile = interpolate_2d(image, polar_grid, r_vals, pixelscale, step_interp)
+            else:
+                raise ValueError("interp_flag=2 requires precomputed polar_grid and r_vals")
+            if verbose:
+                print(f"Radial profile:  2D polar interpolation to {step_interp:.2f} mas/pixel")  
+            if nargout == 1: return profile
+            if ee: 
+                ee_curve = nnp.cumsum(profile * nnp.gradient(r_vals))
+                ee_curve /= ee_curve[-1]
+                return r_vals, profile, ee_curve
+            return r_vals, profile
+        
+    # === Build radial coordinate array ===
+    y, x = nnp.indices(image.shape, dtype=float)
     x -= center[0]
     y -= center[1]
 
@@ -1110,6 +1138,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
         rr = rr[crop]
         radialprofile2 = radialprofile2[crop]
 
+    # ---- Stddev Option ----
     if stddev:
         stddevs = nnp.zeros_like(radialprofile2)
         r_pix = r * binsize
@@ -1122,16 +1151,141 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
             stddevs[i] = nnp.nanstd(image[wg])
         return rr, stddevs
 
+
+    # === Supersampling 1D (after profile) ===
+    if supersamp and interp_flag == 1:
+        r_interp, p_interp = interpolate_1d(rr, radialprofile2, pixelscale, step_interp)
+        if verbose:
+            print(f"Radial profile: 1D interpolation to {step_interp:.2f} mas/pixel")
+        if nargout == 1: return p_interp      
+        if ee:
+            ee_curve = nnp.cumsum(p_interp * nnp.gradient(r_interp))
+            ee_curve /= ee_curve[-1]
+            return r_interp, p_interp, ee_curve
+        return r_interp, p_interp
+
+    # === Return discrete version ===
     if nargout == 1:
         return radialprofile2
-
-    if not ee:
-        return rr, radialprofile2
-    else:
+    if ee:
         ee = csim[rind]
         ee /= nnp.max(ee)
         return rr, radialprofile2, ee
+    return rr, radialprofile2
 
+
+def interpolate_1d(r,profile, pixelscale, step):
+    """
+    Interpolate a 1D radial profile using cubic splines.
+
+    Parameters
+    ----------
+    r : ndarray
+        Original radius values.
+    profile : ndarray
+        Corresponding profile values.
+    step : float
+        Desired output sampling step.
+
+    Returns:
+    r_interp : ndarray
+        Interpolated radius values.
+    p_interp : ndarray
+        Interpolated profile.
+    """
+    r_interp = nnp.arange(r[0], r[-1], step)
+    spline = CubicSpline(r, profile)
+    p_interp = spline(r_interp)
+    p_interp = nnp.clip(p_interp, 0, None) 
+    # === Scale to compensate for higher sampling resolution ===
+    scaling = (step/pixelscale)**2
+    p_interp *= scaling
+
+    return r_interp, p_interp
+
+def interpolate_2d(img, grid, r_vals, pixelscale, step):
+    """
+    Interpolate a 2D image on a precomputed polar grid to compute its radial profile.
+
+    Parameters
+    ----------
+    img : ndarray
+        2D image to interpolate.
+    grid : list of (xp, yp)
+        List of polar sampling coordinates (in pixels), one for each radius.
+    r_vals : ndarray
+        Corresponding radial positions
+
+    Returns
+    -------
+    r_vals : ndarray
+        Radii of the profile.
+    profile : ndarray
+        Interpolated radial profile (mean over theta at each radius).
+    """
+    ny, nx = img.shape
+    y = nnp.arange(ny)
+    x = nnp.arange(nx)
+    # Interpolator in pixel space
+    interp = RectBivariateSpline(y, x, cpuArray(img))
+
+    profile = []
+    for (xp, yp) in grid:
+        values = interp.ev(yp, xp)
+        profile.append(nnp.mean(values))
+
+    profile = nnp.array(profile)
+    profile = nnp.clip(profile, 0, None)
+    # === Scale to compensate for higher sampling resolution ===
+    scaling = (step/pixelscale)**2
+    profile *= scaling
+
+    return r_vals, profile
+
+def precompute_polar_grid(step, pixelscale, maxradius, center, n_theta=180):
+    """
+    Precompute a polar coordinate grid for interpolation.
+
+    This grid can be reused for multiple PSFs, saving computation time.
+
+    Parameters
+    ----------
+    step : float
+        Radial step in physical units (e.g., mas).
+    pixelscale : float
+        Physical size of one pixel (e.g., mas/pixel).
+    maxradius : float
+        Maximum radius to compute the grid (in physical units).
+    center : tuple of float
+        (x, y) pixel coordinates of the center.
+    n_theta : int, optional
+        Number of angular points per radius (default is 180).
+
+    Returns
+    -------
+    r_vals : ndarray
+        Array of radii in physical units.
+    grid : list of tuples
+        List of (xp, yp) arrays (pixel coordinates) for each radius.
+    """
+     
+    r_vals = nnp.arange(0, maxradius, step)
+
+    theta = np.linspace(0, 2 * np.pi, n_theta, endpoint=False)
+    cos_theta = np.cos(theta)
+    sin_theta = np.sin(theta)
+    theta = nnp.linspace(0, 2 * nnp.pi, n_theta, endpoint=False)
+    cos_theta = nnp.cos(theta)
+    sin_theta = nnp.sin(theta)
+
+    grid = []
+    for r in r_vals:
+        rpix = r / pixelscale
+        xp = center[0] + rpix * cos_theta
+        yp = center[1] + rpix * sin_theta
+        grid.append((xp, yp))
+
+    return r_vals, grid
 
 def getFlux(psf,nargout=1):
     #Define the inner circle
