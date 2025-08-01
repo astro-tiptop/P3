@@ -1215,6 +1215,10 @@ def interpolate_2d(img, grid, r_vals, pixelscale, step):
         List of polar sampling coordinates (in pixels), one for each radius.
     r_vals : ndarray
         Corresponding radial positions
+    pixelscale : float
+        Physical size of one pixel (e.g., mas/pixel).
+    step : float
+        Desired output sampling step (same units as r_vals).
 
     Returns
     -------
@@ -1270,19 +1274,28 @@ def precompute_polar_grid(step, pixelscale, maxradius, center, n_theta=180):
     """
      
     r_vals = nnp.arange(0, maxradius, step)
-
-    theta = np.linspace(0, 2 * np.pi, n_theta, endpoint=False)
-    cos_theta = np.cos(theta)
-    sin_theta = np.sin(theta)
-    theta = nnp.linspace(0, 2 * nnp.pi, n_theta, endpoint=False)
-    cos_theta = nnp.cos(theta)
-    sin_theta = nnp.sin(theta)
-
+    
     grid = []
     for r in r_vals:
-        rpix = r / pixelscale
-        xp = center[0] + rpix * cos_theta
-        yp = center[1] + rpix * sin_theta
+        if r == 0:
+            # For the center, just one point
+            xp = nnp.array([center[0]])
+            yp = nnp.array([center[1]])
+        else:
+            # Adaptive sampling: distance in azimuth = radial step
+            # Circumference = 2 * pi * r, number of points = circumference / step
+            n_theta_adaptive = max(3, int(nnp.ceil(2 * nnp.pi * r / step)))
+            # Cap the number of points to avoid excessive sampling
+            n_theta_adaptive = min(n_theta_adaptive, n_theta) # max n_theta points
+
+            theta = nnp.linspace(0, 2 * nnp.pi, n_theta, endpoint=False)
+            cos_theta = nnp.cos(theta)
+            sin_theta = nnp.sin(theta)
+
+            rpix = r / pixelscale
+            xp = center[0] + rpix * cos_theta
+            yp = center[1] + rpix * sin_theta
+
         grid.append((xp, yp))
 
     return r_vals, grid
