@@ -1286,8 +1286,11 @@ def precompute_polar_grid(step, pixelscale, maxradius, center, n_theta=180):
             # Circumference = 2 * pi * r, number of points = circumference / step
             n_theta_adaptive = max(3, int(nnp.ceil(2 * nnp.pi * r / step)))
             # Cap the number of points to avoid excessive sampling
-            n_theta_adaptive = min(n_theta_adaptive, n_theta) # max n_theta points
-
+            if n_theta is not None:
+                n_theta = min(n_theta_adaptive, n_theta) # max n_theta points
+            else:
+                n_theta = n_theta_adaptive
+    
             theta = nnp.linspace(0, 2 * nnp.pi, n_theta, endpoint=False)
             cos_theta = nnp.cos(theta)
             sin_theta = nnp.sin(theta)
