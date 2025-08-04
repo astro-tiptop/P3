@@ -1060,10 +1060,9 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
             print("Calculating profile with PSF normalized to total = 1")
         image /= image.sum()
 
-
     if binsize is None:
         binsize = pixelscale
-    
+
     if center is None:
         # get exact center of image
         # center = (image.shape[1]/2, image.shape[0]/2)
@@ -1076,7 +1075,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
         except ValueError:
             raise ValueError("supersamp must be a tuple of (step, interp_flag)")
         interp_flag = int(interp_flag)
-        
+
         # ===== Supersampling - Polar 2D =====
         if interp_flag == 2: 
             if polar_grid is not None and r_vals is not None:
@@ -1091,7 +1090,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
                 ee_curve /= ee_curve[-1]
                 return r_vals, profile, ee_curve
             return r_vals, profile
-        
+
     # === Build radial coordinate array ===
     y, x = nnp.indices(image.shape, dtype=float)
     x -= center[0]
@@ -1105,7 +1104,6 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
         ind = nnp.argsort(r.flat)
         sr = r.flat[ind]  # sorted r
         sim = image.flat[ind]  # sorted image
-
     else:
         # Apply the PA range restriction
         pa = nnp.rad2deg(nnp.arctan2(-x, y))  # Note the (-x,y) convention is needed for astronomical PA convention
@@ -1114,7 +1112,8 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
         sr = r[mask].flat[ind]
         sim = image[mask].flat[ind]
 
-    ri = sr.astype(int)  # sorted r as int
+    # DISCRETE BINNING: int conversion of radii
+    ri = nnp.round(sr).astype(int)  # sorted r as int
     deltar = ri[1:] - ri[:-1]  # assume all radii represented (more work if not)
     rind = nnp.where(deltar)[0]
     nr = rind[1:] - rind[:-1]  # number in radius bin
@@ -1196,7 +1195,7 @@ def interpolate_1d(r,profile, pixelscale, step):
     r_interp = nnp.arange(r[0], r[-1], step)
     spline = CubicSpline(r, profile)
     p_interp = spline(r_interp)
-    p_interp = nnp.clip(p_interp, 0, None) 
+    p_interp = nnp.clip(p_interp, 0, None)
     # === Scale to compensate for higher sampling resolution ===
     scaling = (step/pixelscale)**2
     p_interp *= scaling
@@ -1290,7 +1289,7 @@ def precompute_polar_grid(step, pixelscale, maxradius, center, n_theta=180):
                 n_theta = min(n_theta_adaptive, n_theta) # max n_theta points
             else:
                 n_theta = n_theta_adaptive
-    
+
             theta = nnp.linspace(0, 2 * nnp.pi, n_theta, endpoint=False)
             cos_theta = nnp.cos(theta)
             sin_theta = nnp.sin(theta)
