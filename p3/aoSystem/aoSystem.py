@@ -766,8 +766,7 @@ class aoSystem():
         else:
             excess = 1.0
 
-        self.cam = detector(psInMas, fov,
-                            binning=Binning, spotFWHM=spotFWHM, saturation=saturation,
+        self.cam = detector(psInMas, fov, binning=Binning, spotFWHM=spotFWHM, saturation=saturation,
                             nph=nphSC, bandwidth=bw, transmittance=tr, dispersion=disp,
                             gain=self.detectorGainScience, ron=ron, sky=sky, dark=dark, excess=excess,
                             tag=camName)
