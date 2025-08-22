@@ -205,9 +205,17 @@ class fourierModel:
 
             self.t_atmo = 1000*(time.time() - self.t_initFreq/1000 - tstart)
 
-            vv = self.freq.psInMas
-            rr = 2*self.freq.kcInMas/vv
-            if rr[0] > self.freq.nOtf:
+            vv = np.asarray(self.freq.psInMas)
+            kc = np.asarray(self.freq.kcInMas)       
+            if vv.size == 1:
+                # Single-wavelength path: vv may be 0-D or length-1 array
+                rr = 2.0 * kc / vv
+            else:
+                # Multi-wavelength case: take the worst requirement
+                # for each DM across all wavelengths
+                rr = np.max(2.0 * kc[:, None] / vv[None, :], axis=1)
+            # FoV check: ensure the worst case across all DMs
+            if np.max(rr) > self.freq.nOtf:
                 raise ValueError('Error : the PSF field of view is too small to simulate the AO correction area\n')
 
             # DEFINING THE NOISE AND ATMOSPHERE PSD
