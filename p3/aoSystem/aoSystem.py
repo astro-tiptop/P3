@@ -397,7 +397,7 @@ class aoSystem():
             self.raiseMissingRequiredSec('sources_science')
 
         if self.check_config_key('sources_science','Wavelength'):
-            wvlSrc = np.array(self.get_config_value('sources_science','Wavelength'))
+            wvlSrc = np.unique(np.array(self.get_config_value('sources_science','Wavelength')))
         else:
             self.raiseMissingRequiredOpt('sources_science', 'Wavelength')
 
