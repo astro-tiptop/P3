@@ -351,7 +351,7 @@ class aoSystem():
             self.raiseMissingRequiredSec('sources_HO')
 
         if self.check_config_key('sources_HO','Wavelength'):
-            self.wvlGs     = np.unique(np.array(self.get_config_value('sources_HO','Wavelength')))
+            self.wvlGs     = np.atleast_1d(self.get_config_value('sources_HO','Wavelength'))
         else:
             self.raiseMissingRequiredOpt('sources_HO', 'Wavelength')
             return 0
@@ -397,7 +397,7 @@ class aoSystem():
             self.raiseMissingRequiredSec('sources_science')
 
         if self.check_config_key('sources_science','Wavelength'):
-            wvlSrc = np.unique(np.array(self.get_config_value('sources_science','Wavelength')))
+            wvlSrc = np.atleast_1d(self.get_config_value('sources_science','Wavelength'))
         else:
             self.raiseMissingRequiredOpt('sources_science', 'Wavelength')
 
@@ -798,7 +798,7 @@ class aoSystem():
             print('Warning: No information about the tip-tilt star can be retrieved')
         else:
             if self.check_config_key('sources_LO','Wavelength'):
-                self.wvlGsLO = np.unique(np.array(self.get_config_value('sources_LO','Wavelength')))
+                self.wvlGsLO = np.atleast_1d(self.get_config_value('sources_LO','Wavelength'))
             else:
                 self.raiseMissingRequiredOpt('sources_LO','Wavelength')
 
