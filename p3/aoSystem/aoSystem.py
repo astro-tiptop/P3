@@ -56,7 +56,7 @@ class aoSystem():
         from p3.aoSystem import resolve_config_path, PATH_TIPTOP, detect_tiptop_path
         
         path_p3 = str(pathlib.Path(__file__).parent.parent.absolute())
-         # lazily re-try TIPTOP detection if it was None at import time
+        # lazily re-try TIPTOP detection if it was None at import time
         path_tiptop = PATH_TIPTOP or detect_tiptop_path()
 
         return resolve_config_path(path_value, self.path_root, path_p3, path_tiptop)
