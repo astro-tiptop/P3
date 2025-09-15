@@ -23,7 +23,6 @@ from p3.aoSystem.detector import detector
 from p3.aoSystem.sensor import sensor
 from p3.aoSystem.rtc import rtc
 import p3.aoSystem.anisoplanatismModel as anisoplanatismModel
-from p3 import resolve_path
 
 #%%
 class aoSystem():
@@ -51,12 +50,23 @@ class aoSystem():
 
     def get_config_value(self, primary, secondary):
         return self.my_data_map[primary][secondary]
+    
+    def resolve_path(self, path_value):
+        """Use enhanced path resolution with TIPTOP support"""
+        from p3.aoSystem import resolve_config_path, PATH_TIPTOP, detect_tiptop_path
+        
+        path_p3 = str(pathlib.Path(__file__).parent.parent.absolute())
+         # lazily re-try TIPTOP detection if it was None at import time
+        path_tiptop = PATH_TIPTOP or detect_tiptop_path()
+
+        return resolve_config_path(path_value, self.path_root, path_p3, path_tiptop)
 
     def __init__(self,path_config,path_root='',getPSDatNGSpositions=False,
                 psdExpansion=False,coo_stars=None):
 
         if path_root is None:
             path_root = ''
+        self.path_root = path_root
 
         self.coo_stars = coo_stars
         self.psdExpansion = psdExpansion
@@ -115,7 +125,7 @@ class aoSystem():
         #----- PUPIL
         if self.check_config_key('telescope','PathPupil'):
             PathPupil = self.get_config_value('telescope','PathPupil')
-            path_pupil = resolve_path(PathPupil, path_root)          
+            path_pupil = self.resolve_path(PathPupil)          
             if path_pupil and not ospath.isfile(path_pupil):
                 raise ValueError(f"PathPupil file not found: {path_pupil}")
         else:
@@ -128,7 +138,7 @@ class aoSystem():
 
         if self.check_config_key('telescope','PathStaticOn'):
             PathStaticOn = self.get_config_value('telescope','PathStaticOn')
-            path_static_on = resolve_path(PathStaticOn, path_root)
+            path_static_on = self.resolve_path(PathStaticOn)
             if path_static_on and not ospath.isfile(path_static_on):
                 raise ValueError(f"PathStaticOn file not found: {path_static_on}")
         else:
@@ -141,7 +151,7 @@ class aoSystem():
 
         if self.check_config_key('telescope','PathStaticOff'):
             PathStaticOff = self.get_config_value('telescope','PathStaticOff')
-            path_static_off = resolve_path(PathStaticOff, path_root)
+            path_static_off = self.resolve_path(PathStaticOff)
             if path_static_off and not ospath.isfile(path_static_off):
                 raise ValueError(f"PathStaticOff file not found: {path_static_off}")
         else:
@@ -149,7 +159,7 @@ class aoSystem():
 
         if self.check_config_key('telescope','PathStaticPos'):
             PathStaticPos = self.get_config_value('telescope','PathStaticPos')
-            path_static_pos = resolve_path(PathStaticPos, path_root)
+            path_static_pos = self.resolve_path(PathStaticPos)
             if path_static_pos and not ospath.isfile(path_static_pos):
                 raise ValueError(f"PathStaticPos file not found: {path_static_pos}")    
         else:
@@ -158,7 +168,7 @@ class aoSystem():
         #----- APODIZER
         if self.check_config_key('telescope','PathApodizer'):
             PathApodizer = self.get_config_value('telescope','PathApodizer')
-            path_apodizer = resolve_path(PathApodizer, path_root)
+            path_apodizer = self.resolve_path(PathApodizer)
             if path_apodizer and not ospath.isfile(path_apodizer):
                 raise ValueError(f"PathApodizer file not found: {path_apodizer}")
         else:
@@ -167,7 +177,7 @@ class aoSystem():
         #----- TELESCOPE ABERRATIONS
         if self.check_config_key('telescope', 'PathStatModes'):
             PathStatModes = self.get_config_value('telescope','PathStatModes')
-            path_statModes = resolve_path(PathStatModes, path_root)
+            path_statModes = self.resolve_path(PathStatModes)
             if path_statModes and not ospath.isfile(path_statModes):
                 raise ValueError(f"PathStatModes file not found: {path_statModes}")
         else:
@@ -241,8 +251,9 @@ class aoSystem():
             self.TechnicalFoV = 0
 
         if self.check_config_key('telescope', 'windPsdFile'):
-            self.windPsdFile = self.get_config_value('telescope','windPsdFile')
-            if not ospath.isfile(self.windPsdFile):
+            windPsdFile_val = self.get_config_value('telescope','windPsdFile')
+            self.windPsdFile = self.resolve_path(windPsdFile_val)
+            if self.windPsdFile and not ospath.isfile(self.windPsdFile):
                 raise ValueError(f"windPsdFile not found: {self.windPsdFile}")
         else:
             self.windPsdFile = 0
