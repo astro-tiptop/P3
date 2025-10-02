@@ -504,7 +504,7 @@ class fourierModel:
             # Tikhonov regularization
             #transpose of 3rd and 4th dimensions
             to_inv_t = to_inv.transpose(0,1,3,2)
-            lambda_tikhonov = 0.05
+            lambda_tikhonov = 1/self.ao.dms.opt_cond
             identity_4d = np.eye(nDm)[np.newaxis, np.newaxis, :, :] # shape: (1, 1, nDm, nDm)
             identity_4d = np.broadcast_to(identity_4d, (nK, nK, nDm, nDm)) # shape: (nK, nK, nDm, nDm)
             A = to_inv_t.astype(np.complex64) @ to_inv.astype(np.complex64) \
