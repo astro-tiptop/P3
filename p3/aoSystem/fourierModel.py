@@ -498,7 +498,20 @@ class fourierModel:
             to_inv += np.matmul(Pdm_t, Pdm)*self.ao.dms.opt_weights[d_o]
 
         # Popt
-        mat2 = np.linalg.pinv(to_inv.astype(np.complex64),rcond=1/self.ao.dms.opt_cond)
+        if nDir == 1:
+            mat2 = np.linalg.pinv(to_inv.astype(np.complex64),rcond=1/self.ao.dms.opt_cond)
+        else:
+            # Tikhonov regularization
+            #transpose of 3rd and 4th dimensions
+            to_inv_t = to_inv.transpose(0,1,3,2)
+            lambda_tikhonov = 0.05
+            identity_4d = np.eye(nDm)[np.newaxis, np.newaxis, :, :] # shape: (1, 1, nDm, nDm)
+            identity_4d = np.broadcast_to(identity_4d, (nK, nK, nDm, nDm)) # shape: (nK, nK, nDm, nDm)
+            A = to_inv_t.astype(np.complex64) @ to_inv.astype(np.complex64) \
+                + lambda_tikhonov * identity_4d.astype(np.complex64)
+            b = to_inv_t.astype(np.complex64)
+            mat2 = np.linalg.solve(A, b) # aka W, 5x(2*nstars)
+
         Popt = np.matmul(mat2, mat1)
 
         self.t_opt = 1000*(time.time() - tstart)
