@@ -545,11 +545,28 @@ class fourierModel:
             hn = np.zeros((nPts,nPts))
 
             # Get the noise propagation factor
+            # Start from a small positive frequency to avoid f=0
             f = np.logspace(-3, np.log10(0.5/Ts), nF)
+
+            # Remove any zero frequency if present
+            f = f[f > 0]
+
             z = np.exp(-2*i*np.pi*f*Ts)
-            self.hInt = loopGain/(1.0 - z**(-1.0))
-            self.rtfInt = 1.0/(1 + self.hInt*z**(-delay))
-            self.atfInt = self.hInt * z**(-delay)*self.rtfInt
+
+            # Compute transfer functions with safe division
+            # Add small epsilon to denominator to avoid division by zero
+            eps = np.finfo(float).eps
+            denom = 1.0 - z**(-1.0)
+            # Set small values to eps to avoid division by zero
+            denom = np.where(np.abs(denom) < eps, eps, denom)
+
+            self.hInt = loopGain / denom
+
+            denom2 = 1.0 + self.hInt * z**(-delay)
+            denom2 = np.where(np.abs(denom2) < eps, eps, denom2)
+            self.rtfInt = 1.0 / denom2
+
+            self.atfInt = self.hInt * z**(-delay) * self.rtfInt
 
             if loopGain == 0:
                 self.ntfInt = 1
@@ -566,8 +583,16 @@ class fourierModel:
                 for iTheta in range(nTh):
                     fi = -vx[l]*self.freq.kxAO_*costh[iTheta] - vy[l]*self.freq.kyAO_*costh[iTheta]
                     z  = np.exp(-2*i*np.pi*fi*Ts)
-                    hInt = loopGain/(1.0 - z**(-1.0))
-                    rtfInt = 1.0/(1.0 + hInt * z**(-delay))
+
+                    # Safe division for spatially varying transfer functions
+                    denom = 1.0 - z**(-1.0)
+                    denom = np.where(np.abs(denom) < eps, eps, denom)
+                    hInt = loopGain / denom
+
+                    denom2 = 1.0 + hInt * z**(-delay)
+                    denom2 = np.where(np.abs(denom2) < eps, eps, denom2)
+                    rtfInt = 1.0 / denom2
+
                     atfInt = hInt * z**(-delay) * rtfInt
 
                     # AO transfer function
