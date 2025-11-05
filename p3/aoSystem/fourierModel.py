@@ -539,6 +539,9 @@ class fourierModel:
             delay = self.ao.rtc.holoop['delay']#latency
             loopGain = self.ao.rtc.holoop['gain']
 
+            if Ts <= 0:
+                raise ValueError('Error : the AO loop rate must be positive\n')
+
             # Instantiation
             h1 = np.zeros((nPts,nPts),dtype=complex)
             h2 = np.zeros((nPts,nPts))
@@ -547,10 +550,6 @@ class fourierModel:
             # Get the noise propagation factor
             # Start from a small positive frequency to avoid f=0
             f = np.logspace(-3, np.log10(0.5/Ts), nF)
-
-            # Remove any zero frequency if present
-            f = f[f > 0]
-
             z = np.exp(-2*i*np.pi*f*Ts)
 
             # Compute transfer functions with safe division
