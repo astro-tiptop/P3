@@ -153,12 +153,16 @@ class fourierModel:
 
         tstart = time.time()
 
-        if self.ao.error==False:
+        if self.ao.error is False:
 
             # DEFINING THE FREQUENCY DOMAIN
             self.wvl, self.nwvl = FourierUtils.create_wavelength_vector(self.ao)
             if not hasattr(self, 'freq'):
-                self.freq = frequencyDomain(self.ao,nyquistSampling=self.nyquistSampling,computeFocalAnisoCov=self.computeFocalAnisoCov)
+                self.freq = frequencyDomain(
+                    self.ao,
+                    nyquistSampling=self.nyquistSampling,
+                    computeFocalAnisoCov=self.computeFocalAnisoCov
+                )
             self.t_initFreq = 1000*(time.time() - tstart)
 
             # DEFINING THE GUIDE STAR AND THE STRECHING FACTOR
@@ -176,20 +180,28 @@ class fourierModel:
 
             # DEFINING THE MODELED ATMOSPHERE
             if (self.ao.dms.nRecLayers!=None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
-                weights_mod,heights_mod = FourierUtils.eqLayers(self.ao.atm.weights,self.ao.atm.heights,self.ao.dms.nRecLayers)
+                weights_mod,heights_mod = FourierUtils.eqLayers(
+                    self.ao.atm.weights,
+                    self.ao.atm.heights,
+                    self.ao.dms.nRecLayers
+                )
                 if self.ao.dms.nRecLayers == 1:
                     heights_mod = [0.0]
-                wSpeed_mod = cpuArray(np.linspace(min(self.ao.atm.wSpeed),max(self.ao.atm.wSpeed),num=self.ao.dms.nRecLayers))
-                wDir_mod   = cpuArray(np.linspace(min(self.ao.atm.wDir),max(self.ao.atm.wDir),num=self.ao.dms.nRecLayers))
+                wSpeed_mod = cpuArray(
+                    np.linspace(min(self.ao.atm.wSpeed),
+                                max(self.ao.atm.wSpeed),
+                                num=self.ao.dms.nRecLayers)
+                )
+                wDir_mod   = cpuArray(
+                    np.linspace(min(self.ao.atm.wDir),
+                                max(self.ao.atm.wDir),
+                                num=self.ao.dms.nRecLayers)
+                )
                 if self.ao.lgs:
-                    self.gs  = self.ao.lgs
-                    self.nGs = self.ao.lgs.nSrc
+                    # Recalculate stretch factor for modeled atmosphere
                     self.strechFactor_mod = 1.0/(1.0 - heights_mod/self.gs.height[0])
                 else:
-                    self.gs  = self.ao.ngs
-                    self.nGs = self.ao.ngs.nSrc
-                    self.strechFactor = 1.0
-   
+                    self.strechFactor_mod = 1.0
             else:
                 weights_mod    = self.ao.atm.weights
                 heights_mod    = self.ao.atm.heights
@@ -197,7 +209,15 @@ class fourierModel:
                 wDir_mod       = self.ao.atm.wDir
                 self.strechFactor_mod = self.strechFactor
 
-            self.atm_mod = atmosphere(self.ao.atm.wvl,self.ao.atm.r0,cpuArray(weights_mod),cpuArray(heights_mod),cpuArray(wSpeed_mod),cpuArray(wDir_mod),self.ao.atm.L0)
+            self.atm_mod = atmosphere(
+                self.ao.atm.wvl,
+                self.ao.atm.r0,
+                cpuArray(weights_mod),
+                cpuArray(heights_mod),
+                cpuArray(wSpeed_mod),
+                cpuArray(wDir_mod),
+                self.ao.atm.L0
+            )
 
             #updating the atmosphere wavelength !
             self.ao.atm.wvl  = self.freq.wvlRef
@@ -206,7 +226,7 @@ class fourierModel:
             self.t_atmo = 1000*(time.time() - self.t_initFreq/1000 - tstart)
 
             vv = np.asarray(self.freq.psInMas)
-            kc = np.asarray(self.freq.kcInMas)       
+            kc = np.asarray(self.freq.kcInMas)
             if vv.size == 1:
                 # Single-wavelength path: vv may be 0-D or length-1 array
                 rr = 2.0 * kc / vv
@@ -246,7 +266,9 @@ class fourierModel:
 
             # COMPUTE THE PSF
             if self.calcPSF:
-                self.PSF, self.SR = self.point_spread_function(verbose=self.verbose,fftphasor=self.fftphasor,addOtfPixel=self.addOtfPixel)
+                self.PSF, self.SR = self.point_spread_function(
+                    verbose=self.verbose,fftphasor=self.fftphasor,addOtfPixel=self.addOtfPixel
+                )
 
                 # GETTING METRICS
                 if self.getFWHM == True or self.getEnsquaredEnergy==True or self.getEncircledEnergy==True:
