@@ -57,7 +57,19 @@ scnd = scndI
 rotate = rotateI
 
 def cpuArray(v):
-    if isinstance(v,nnp.ndarray) or isinstance(v, list):
+    """
+    Convert GPU arrays to CPU arrays, or return as-is for CPU arrays and scalars.
+    
+    Parameters:
+    -----------
+    v : array-like, scalar, or list
+        Input value to convert
+        
+    Returns:
+    --------
+    CPU-compatible array or scalar
+    """
+    if nnp.isscalar(v) or isinstance(v,nnp.ndarray) or isinstance(v, list):
         return v
     else:
         return v.get()
