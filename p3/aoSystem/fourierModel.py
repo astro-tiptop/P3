@@ -241,8 +241,10 @@ class fourierModel:
             # DEFINING THE NOISE AND ATMOSPHERE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
                 wvlGs = self.gs.wvl[0]
-                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0, wvlGs)
-                self.ao.wfs.processing.noiseVar *= (self.ao.atm.wvl/wvlGs)**2
+                wvl_scale_factor = (self.freq.wvlRef/wvlGs)**2
+                r0atWvlGs = self.ao.atm.r0 * (wvlGs / 500e-9)**(6/5)
+                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(r0atWvlGs, wvlGs)
+                self.ao.wfs.processing.noiseVar *= wvl_scale_factor
 
             self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMax_)**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
@@ -1011,7 +1013,7 @@ class fourierModel:
         #plt.loglog(psd_freq,psd_tip_wind)
         #plt.loglog(psd_freq,np.abs(rtfInt**2*psd_tip_wind))
 
-        power = np.abs(np.sum(rtfInt**2*(psd_tip_wind+psd_tilt_wind))*(psd_freq[1]-psd_freq[0])) 
+        power = np.abs(np.sum(rtfInt**2*(psd_tip_wind+psd_tilt_wind))*(psd_freq[1]-psd_freq[0]))
         rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
         power *= 1/rad2nm**2
 
