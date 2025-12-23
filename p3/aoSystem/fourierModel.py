@@ -240,7 +240,9 @@ class fourierModel:
 
             # DEFINING THE NOISE AND ATMOSPHERE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
-                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0 ,self.ao.atm.wvl)
+                wvlGs = self.gs.wvl[0]
+                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0, wvlGs)
+                self.ao.wfs.processing.noiseVar *= (self.ao.atm.wvl/wvlGs)**2
 
             self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMax_)**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
@@ -397,17 +399,17 @@ class fourierModel:
         if self.ao.wfs.optics[0].wfstype.upper()=='SHACK-HARTMANN':
             Sx = 2*i*np.pi*self.freq.kxAO_*d
             Sy = 2*i*np.pi*self.freq.kyAO_*d
-            Av = np.sinc(d*self.freq.kxAO_)*np.sinc(d*self.freq.kyAO_)\
-                 *np.exp(i*np.pi*d*(self.freq.kxAO_ + self.freq.kyAO_))
+            Av = np.sinc(d*self.freq.kxAO_) * np.sinc(d*self.freq.kyAO_)\
+                 * np.exp(i*np.pi*d*(self.freq.kxAO_ + self.freq.kyAO_))
 
         elif self.ao.wfs.optics[0].wfstype.upper()=='PYRAMID':
             # forward pyramid filter (continuous) from Conan
             umod = 1/(2*d)/(self.ao.wfs.optics[0].nL/2)*self.ao.wfs.optics[0].modulation
             Sx = np.zeros((self.freq.resAO,self.freq.resAO), dtype=complex)
             idx = abs(self.freq.kxAO_) > umod
-            Sx[idx] = i*np.sign(self.freq.kxAO_[idx])
+            Sx[idx] = i * np.sign(self.freq.kxAO_[idx])
             idx = abs(self.freq.kxAO_) <= umod
-            Sx[idx] = 2*i/np.pi*np.arcsin(self.freq.kxAO_[idx]/umod)
+            Sx[idx] = 2*i/np.pi * np.arcsin(self.freq.kxAO_[idx]/umod)
             Av = np.sinc(self.ao.wfs.detector[0].binning*d*self.freq.kxAO_)\
                 * np.sinc(self.ao.wfs.detector[0].binning*d*self.freq.kxAO_).T
             Sy = Sx.T
@@ -418,7 +420,7 @@ class fourierModel:
 
         # Reconstructor
         wvlGs = self.gs.wvl[0]
-        Watm = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))*(self.ao.atm.wvl/wvlGs)**2
+        Watm = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_)) * (self.ao.atm.wvl/wvlGs)**2
         gPSD = abs(self.SxAv)**2 + abs(self.SyAv)**2 + MV*self.Wn/Watm
         self.Rx = np.conj(self.SxAv)/gPSD
         self.Ry = np.conj(self.SyAv)/gPSD
@@ -447,8 +449,8 @@ class fourierModel:
         M = np.zeros([nK, nK, nGs, nGs], dtype=complex)
         P = np.zeros([nK, nK, nGs, nL_mod], dtype=complex)
         for j in range(nGs):
-            M[:, :, j, j] = 2*i*np.pi*k*np.sinc(d[j]*self.freq.kxAO_)\
-                            *np.sinc(d[j]*self.freq.kyAO_)
+            M[:, :, j, j] = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_)\
+                            * np.sinc(d[j]*self.freq.kyAO_)
             for n in range(nL_mod):
                 P[:, :, j, n] = np.exp(i*2*np.pi*h_mod[n]\
                                         *(self.freq.kxAO_*self.gs.direction[0, j]
@@ -457,7 +459,7 @@ class fourierModel:
         MP = np.matmul(self.M,P)
         if self.reduce_memory:
             self.M = None
-        
+
         MP_t = np.conj(MP.transpose(0, 1, 3, 2))
 
         # Noise covariance matrix
@@ -465,17 +467,20 @@ class fourierModel:
 
         # Atmospheric PSD with the true atmosphere
         self.Cphi = np.zeros([nK,nK,nL,nL],dtype=complex)
-        cte = (24*spc.gamma(6/5)/5)**(5/6)*(spc.gamma(11/6)**2./(2.*np.pi**(11/3)))
-        kernel = self.ao.atm.r0**(-5/3)*cte*(self.freq.k2AO_ + 1/self.ao.atm.L0**2)**(-11/6)*self.freq.pistonFilterAO_
+        cte = (24 * spc.gamma(6/5)/5)**(5/6) * (spc.gamma(11/6)**2. / (2.*np.pi**(11/3)))
+        kernel = self.ao.atm.r0**(-5/3) * cte \
+            * (self.freq.k2AO_ + 1/self.ao.atm.L0**2)**(-11/6) \
+            * self.freq.pistonFilterAO_
         self.Cphi = kernel.repeat(nL**2, axis=1)
-        self.Cphi = self.Cphi.reshape((nK, nK, nL, nL))*np.diag(self.ao.atm.weights)
+        self.Cphi = self.Cphi.reshape((nK, nK, nL, nL)) * np.diag(self.ao.atm.weights)
 
         # Atmospheric PSD with the modelled atmosphere
         if nL_mod == nL:
             self.Cphi_mod = self.Cphi
         else:
             self.Cphi_mod = kernel.repeat(nL_mod**2, axis=1)
-            self.Cphi_mod = self.Cphi_mod.reshape((nK, nK, nL_mod, nL_mod))*np.diag(self.atm_mod.weights)
+            self.Cphi_mod = self.Cphi_mod.reshape((nK, nK, nL_mod, nL_mod)) \
+                * np.diag(self.atm_mod.weights)
         to_inv  = np.matmul(np.matmul(MP, self.Cphi_mod), MP_t) + self.Cb
 
         # Wtomo
@@ -636,9 +641,12 @@ class fourierModel:
 
             if display:
                 plt.figure()
-                plt.semilogx(f, 10*np.log10(abs(self.rtfInt)**2), label='Rejection transfer function')
-                plt.semilogx(f, 10*np.log10(abs(self.ntfInt)**2), label='Noise transfer function')
-                plt.semilogx(f, 10*np.log10(abs(self.atfInt)**2), label='Aliasing transfer function')
+                plt.semilogx(f, 10*np.log10(abs(self.rtfInt)**2),
+                             label='Rejection transfer function')
+                plt.semilogx(f, 10*np.log10(abs(self.ntfInt)**2),
+                             label='Noise transfer function')
+                plt.semilogx(f, 10*np.log10(abs(self.atfInt)**2),
+                             label='Aliasing transfer function')
                 plt.xlabel('Temporal frequency (Hz)')
                 plt.ylabel('Magnitude (dB)')
                 plt.grid('on')
@@ -671,7 +679,8 @@ class fourierModel:
             # Noise
             self.psdNoise = np.real(self.noisePSD())
             if self.nGs == 1:
-                psd[id1:id2,id1:id2,:] = np.repeat(self.psdNoise[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
+                psd[id1:id2,id1:id2,:] = np.repeat(self.psdNoise[:, :, np.newaxis],
+                                                   self.ao.src.nSrc, axis=2)
             else:
                 psd[id1:id2,id1:id2,:] = self.psdNoise
 
@@ -687,7 +696,7 @@ class fourierModel:
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdAlias = None
-                
+
             # Differential refractive anisoplanatism
             self.psdDiffRef = self.differentialRefractionPSD()
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdDiffRef
@@ -751,7 +760,8 @@ class fourierModel:
             # wind shake / vibrations
             if self.applyTiltFilter is False and self.ao.windPsdFile != 0:
                 self.psdVib = self.windShakePSD()
-                psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + np.repeat(self.psdVib[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
+                psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + \
+                    np.repeat(self.psdVib[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
                 # --- free memory
                 if self.reduce_memory and not self.getErrorBreakDown:
@@ -790,7 +800,7 @@ class fourierModel:
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdExtra = None
                 self.psdExtraLo = None
-                    
+
         self.t_powerSpectrumDensity = 1000*(time.time() - tstart)
 
         # Return the 3D PSD array in nm^2
@@ -833,7 +843,7 @@ class fourierModel:
         else:
             tf = self.h1
 
-        '''        
+        '''
         # old, non vectorized computation, as a refernece
         # loops on frequency shifts
         psd = np.zeros((self.freq.resAO,self.freq.resAO))
@@ -873,7 +883,10 @@ class fourierModel:
         kn = kyAO[None, None, :] - ni / d  # Shape (N, N, K)
         NN = Rx.shape
         # Compute PR using vectorized function
-        PR = FourierUtils.pistonFilter(self.ao.tel.D, np.hypot(km, kn), fm=mi[:, :, None] / d, fn=ni[:, :, None] / d)
+        PR = FourierUtils.pistonFilter(self.ao.tel.D,
+                                       np.hypot(km, kn),
+                                       fm=mi[:, :, None] / d,
+                                       fn=ni[:, :, None] / d)
         # Compute W_mn
         W_mn = (km**2 + kn**2 + 1 / self.ao.atm.L0**2) ** (-11 / 6)
         # Ensure Rx and Ry are 1D (flatten if needed)
@@ -897,7 +910,8 @@ class fourierModel:
         f4 = 2j * np.pi * kn * vy_exp * td
         # Ensure tf is correctly shaped for broadcasting
         tf = np.asarray(tf.ravel()[None, None, None, :]) # Shape (1, 1, K)
-        avr = np.sum( np.asarray(weights[:, None, None, None]) * (np.sinc(f1) * np.sinc(f2) * np.exp(f3) * np.exp(f4) * tf), axis=0 )
+        avr = np.sum( np.asarray(weights[:, None, None, None]) * \
+            (np.sinc(f1) * np.sinc(f2) * np.exp(f3) * np.exp(f4) * tf), axis=0 )
         # Compute final PSD
         psd = np.sum(PR * W_mn * np.abs(Q * avr) ** 2 * mask[:, :, None], axis=(0, 1))
         psd = np.reshape(psd, NN)
@@ -954,7 +968,7 @@ class fourierModel:
 
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
         Watm = self.Wphi * self.freq.pistonFilterAO_
-        if (self.ao.rtc.holoop['gain'] == 0):
+        if self.ao.rtc.holoop['gain'] == 0:
             psd = abs(1-F)**2 * Watm
         else:
             psd = (1.0 + abs(F)**2*self.h2 - 2*np.real(F*self.h1))*Watm
@@ -980,7 +994,8 @@ class fourierModel:
         hdul = fits.open(self.ao.windPsdFile)
         psd_data = np.asarray(hdul[0].data, np.float32)
         hdul.close()
-        psd_freq = np.asarray(np.linspace(0.1, 0.5*self.ao.rtc.holoop['rate'], int(5*self.ao.rtc.holoop['rate'])))
+        psd_freq = np.asarray(np.linspace(0.1, 0.5*self.ao.rtc.holoop['rate'],
+                                          int(5*self.ao.rtc.holoop['rate'])))
         psd_tip_wind = np.interp(psd_freq, psd_data[0,:], psd_data[1,:],left=0,right=0)
         psd_tilt_wind = np.interp(psd_freq, psd_data[0,:], psd_data[2,:],left=0,right=0)
 
@@ -996,7 +1011,7 @@ class fourierModel:
         #plt.loglog(psd_freq,psd_tip_wind)
         #plt.loglog(psd_freq,np.abs(rtfInt**2*psd_tip_wind))
 
-        power = np.abs(np.sum(rtfInt**2*(psd_tip_wind+psd_tilt_wind))*(psd_freq[1]-psd_freq[0]))       
+        power = np.abs(np.sum(rtfInt**2*(psd_tip_wind+psd_tilt_wind))*(psd_freq[1]-psd_freq[0])) 
         rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
         power *= 1/rad2nm**2
 
@@ -1027,14 +1042,16 @@ class fourierModel:
                 if np.any(np.asarray(th)):
                     A = np.zeros((nK, nK))
                     for l in range(self.ao.atm.nL):
-                        A = A + Ws[l]*np.exp(2*i*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]))
+                        A = A + Ws[l] \
+                            * np.exp(2*i*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]))
                 else:
                     A = np.ones((self.freq.resAO, self.freq.resAO))
 
                 if (self.ao.rtc.holoop['gain'] == 0):
                     psd[:, :, s] = abs(1-F)**2 * Watm
                 else:
-                    psd[:, :, s] = self.freq.mskInAO_ * (1 + abs(F)**2*self.h2 - 2*np.real(F*self.h1*A))*Watm
+                    psd[:, :, s] = self.freq.mskInAO_ * \
+                        (1 + abs(F)**2*self.h2 - 2*np.real(F*self.h1*A)) * Watm
             else:
                 # tomographic case
                 Beta = [self.ao.src.direction[0,s],self.ao.src.direction[1,s]]
@@ -1069,11 +1086,12 @@ class fourierModel:
             if any(th):
                 A = np.zeros((self.freq.resAO,self.freq.resAO))
                 for l in range(self.ao.atm.nL):
-                    A   = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0])))
+                    A = A + 2 * Ws[l] * \
+                        (1 - np.cos(2*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0])))
                 psd[:,:,s] = self.freq.mskInAO_ * A*Watm
         self.t_anisoplanatismPSD = 1000*(time.time() - tstart)
         return np.real(psd)
-    
+
     def differentialRefractionPSD(self):
         def refractionIndex(wvl,nargout=1):
             ''' Refraction index -1 as a fonction of the wavelength.
@@ -1115,11 +1133,15 @@ class fourierModel:
             arg_k= np.arctan2(self.freq.kyAO_,self.freq.kxAO_)
             azimuth = self.ao.src.azimuth
 
-            theta = differentialRefractiveAnisoplanatism(self.ao.tel.zenith_angle*np.pi/180,self.gs.wvl[0], self.freq.wvlRef)
+            theta = differentialRefractiveAnisoplanatism(
+                self.ao.tel.zenith_angle*np.pi/180,
+                self.gs.wvl[0],
+                self.freq.wvlRef
+            )
             for s in range(self.ao.src.nSrc):
-                A    = 0
+                A = 0
                 for l in range(self.ao.atm.nL):
-                    A   = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*k*np.tan(theta)*np.cos(arg_k-azimuth[s])))
+                    A = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*k*np.tan(theta)*np.cos(arg_k-azimuth[s])))
                 psd[:,:,s] = self.freq.mskInAO_ *A*Watm
 
         self.t_differentialRefractionPSD = 1000*(time.time() - tstart)
@@ -1130,9 +1152,11 @@ class fourierModel:
         tstart  = time.time()
         Watm = self.Wphi * self.freq.pistonFilterAO_
         psd= np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc))
-        n2 =  23.7+6839.4/(130-(self.gs.wvl[0]*1.e6)**(-2))+45.47/(38.9-(self.gs.wvl[0]*1.e6)**(-2))
+        n2 =  23.7 + 6839.4 / (130-(self.gs.wvl[0]*1.e6)**(-2)) \
+            + 45.47 / (38.9-(self.gs.wvl[0]*1.e6)**(-2))
         for s in range(self.ao.src.nSrc):
-            n1 =  23.7+6839.4/(130-(self.freq.wvlRef*1.e6)**(-2))+45.47/(38.9-(self.freq.wvlRef*1.e6)**(-2))
+            n1 =  23.7 + 6839.4 / (130-(self.freq.wvlRef*1.e6)**(-2)) \
+                + 45.47 / (38.9-(self.freq.wvlRef*1.e6)**(-2))
             psd[:,:,s] = ((n2-n1)/n2)**2 * Watm
 
         self.t_chromatismPSD = 1000*(time.time() - tstart)
@@ -1374,7 +1398,7 @@ class fourierModel:
         # Check if extraErrorLoExp is a list
         if isinstance(self.ao.tel.extraErrorLoNm, list):
             psd_list = []
-            for ii in range(len(self.ao.zenithGsLO)):
+            for ii, _ in enumerate(self.ao.zenithGsLO):
                 x = nnp.array([0,self.ao.TechnicalFoV/2])
                 sqrtpower = nnp.interp(self.ao.zenithGsLO[ii], x, nnp.array(self.ao.tel.extraErrorLoNm))
 
@@ -1419,7 +1443,7 @@ class fourierModel:
         #ax1.set_title('tilt filter coefficients', color='black')
 
         self.t_tiltFilter = 1000*(time.time() - tstart)
- 
+
         return np.real(coeff_tot)
 
     def FocusFilter(self):
@@ -1504,7 +1528,7 @@ class fourierModel:
                 self.wfeAni = np.sqrt(self.psdAni.sum(axis=(0,1))) * rad2nm
             else:
                 self.wfeTomo = np.sqrt(self.wfeST**2 - self.wfeS**2)
-                
+
             if self.reduce_memory:
                 self.psdS = None
                 self.psdAni = None
@@ -1600,7 +1624,11 @@ class fourierModel:
         for n in range(self.ao.src.nSrc):
             for j in range(self.freq.nWvl):
                 if getFWHM == True:
-                    self.FWHM[:,n,j]  = FourierUtils.getFWHM(self.PSF[:,:,n,j],self.freq.psInMas[j],rebin=1,method='contour',nargout=2)
+                    self.FWHM[:,n,j]  = FourierUtils.getFWHM(self.PSF[:,:,n,j],
+                                                             self.freq.psInMas[j],
+                                                             rebin=1,
+                                                             method='contour',
+                                                             nargout=2)
                 if getEnsquaredEnergy == True:
                     self.EnsqE[:,n,j] = 1e2*FourierUtils.getEnsquaredEnergy(self.PSF[:,:,n,j])
                 if getEncircledEnergy == True:
@@ -1616,9 +1644,12 @@ class fourierModel:
         tstart  = time.time()
         # GEOMETRY
         plt.figure()
-        plt.polar(self.ao.src.azimuth*deg2rad,self.ao.src.zenith,'ro',markersize=7,label='PSF evaluation (arcsec)')
-        plt.polar(self.gs.azimuth*deg2rad,self.gs.zenith,'bs',markersize=7,label='GS position')
-        plt.polar(self.ao.dms.opt_dir[1]*deg2rad,self.ao.dms.opt_dir[0],'kx',markersize=10,label='Optimization directions')
+        plt.polar(self.ao.src.azimuth*deg2rad,self.ao.src.zenith,'ro',
+                  markersize=7,label='PSF evaluation (arcsec)')
+        plt.polar(self.gs.azimuth*deg2rad,self.gs.zenith,'bs',
+                  markersize=7,label='GS position')
+        plt.polar(self.ao.dms.opt_dir[1]*deg2rad,self.ao.dms.opt_dir[0],'kx',
+                  markersize=10,label='Optimization directions')
         plt.legend(bbox_to_anchor=(1.05, 1))
 
         if hasattr(self,'PSF'):
@@ -1821,7 +1852,7 @@ class fourierModel:
                 # Display
                 if self.display and self.calcPSF:
                     print("Required time for displaying figures (ms)\t : {:f}".format(self.t_displayResults))
-                    
+
             if self.calcPSF:
                 print("Required time for all PSFs calculation (ms)\t : {:f}".format(self.t_getPSF))
 
