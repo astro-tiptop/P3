@@ -241,10 +241,10 @@ class fourierModel:
             # DEFINING THE NOISE AND ATMOSPHERE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
                 wvlGs = self.gs.wvl[0]
-                wvl_scale_factor = (self.freq.wvlRef/wvlGs)**2
+                wvl_scale_factor = self.freq.wvlRef/wvlGs
                 r0atWvlGs = self.ao.atm.r0 * (wvlGs / 500e-9)**(6/5)
                 self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(r0atWvlGs, wvlGs)
-                self.ao.wfs.processing.noiseVar *= wvl_scale_factor
+                self.ao.wfs.processing.noiseVar *= wvl_scale_factor**2
 
             self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMax_)**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
