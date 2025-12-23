@@ -240,9 +240,11 @@ class fourierModel:
 
             # DEFINING THE NOISE AND ATMOSPHERE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
-                wvlGs = self.gs.wvl[0]
-                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(self.ao.atm.r0, wvlGs)
-                self.ao.wfs.processing.noiseVar *= (self.ao.atm.wvl/wvlGs)**2
+                wvl_gs = self.gs.wvl[0]
+                wvl_scale_factor = self.freq.wvlRef/wvl_gs
+                r0_at_wvl_gs = self.ao.atm.r0 * (wvl_gs / 500e-9)**(6/5)
+                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(r0_at_wvl_gs, wvl_gs)
+                self.ao.wfs.processing.noiseVar *= wvl_scale_factor**2
 
             self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMax_)**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
@@ -419,8 +421,8 @@ class fourierModel:
         self.SyAv = Sy*Av
 
         # Reconstructor
-        wvlGs = self.gs.wvl[0]
-        Watm = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_)) * (self.ao.atm.wvl/wvlGs)**2
+        wvl_gs = self.gs.wvl[0]
+        Watm = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_)) * (self.ao.atm.wvl/wvl_gs)**2
         gPSD = abs(self.SxAv)**2 + abs(self.SyAv)**2 + MV*self.Wn/Watm
         self.Rx = np.conj(self.SxAv)/gPSD
         self.Ry = np.conj(self.SyAv)/gPSD
@@ -1011,7 +1013,7 @@ class fourierModel:
         #plt.loglog(psd_freq,psd_tip_wind)
         #plt.loglog(psd_freq,np.abs(rtfInt**2*psd_tip_wind))
 
-        power = np.abs(np.sum(rtfInt**2*(psd_tip_wind+psd_tilt_wind))*(psd_freq[1]-psd_freq[0])) 
+        power = np.abs(np.sum(rtfInt**2*(psd_tip_wind+psd_tilt_wind))*(psd_freq[1]-psd_freq[0]))
         rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
         power *= 1/rad2nm**2
 
@@ -1119,8 +1121,8 @@ class fourierModel:
             '''
             return refractionIndex(wvl) * np.tan(zenithAngle)
 
-        def differentialRefractiveAnisoplanatism(zenithAngle,wvlGs,wvlSrc):
-            return (refractionIndex(wvlSrc) - refractionIndex(wvlGs)) * np.tan(zenithAngle)
+        def differentialRefractiveAnisoplanatism(zenithAngle,wvl_gs,wvlSrc):
+            return (refractionIndex(wvlSrc) - refractionIndex(wvl_gs)) * np.tan(zenithAngle)
 
         tstart  = time.time()
 
