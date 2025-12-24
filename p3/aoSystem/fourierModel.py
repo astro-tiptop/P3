@@ -179,7 +179,8 @@ class fourierModel:
                 self.strechFactor = 1.0
 
             # DEFINING THE MODELED ATMOSPHERE
-            if (self.ao.dms.nRecLayers!=None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
+            if (self.ao.dms.nRecLayers!=None) and \
+                (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
                 weights_mod,heights_mod = FourierUtils.eqLayers(
                     self.ao.atm.weights,
                     self.ao.atm.heights,
@@ -219,10 +220,6 @@ class fourierModel:
                 self.ao.atm.L0
             )
 
-            #updating the atmosphere wavelength !
-            self.ao.atm.wvl  = self.freq.wvlRef
-            self.atm_mod.wvl = self.freq.wvlRef
-
             self.t_atmo = 1000*(time.time() - self.t_initFreq/1000 - tstart)
 
             vv = np.asarray(self.freq.psInMas)
@@ -236,17 +233,25 @@ class fourierModel:
                 rr = np.max(2.0 * kc[:, None] / vv[None, :], axis=1)
             # FoV check: ensure the worst case across all DMs
             if np.max(rr) > self.freq.nOtf:
-                raise ValueError('Error : the PSF field of view is too small to simulate the AO correction area\n')
+                raise ValueError('Error : the PSF field of view is too small'
+                                 ' to simulate the AO correction area\n')
 
-            # DEFINING THE NOISE AND ATMOSPHERE PSD
+            # DEFINING THE NOISE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
                 wvl_gs = self.gs.wvl[0]
-                wvl_scale_factor = self.freq.wvlRef/wvl_gs
-                r0_at_wvl_gs = self.ao.atm.r0 * (wvl_gs / 500e-9)**(6/5)
-                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(r0_at_wvl_gs, wvl_gs)
-                self.ao.wfs.processing.noiseVar *= wvl_scale_factor**2
+                self.ao.wfs.processing.noiseVar = self.ao.wfs.computeNoiseVarianceAtWavelength(
+                    wvl_science=self.freq.wvlRef,
+                    wvl_wfs=wvl_gs,
+                    r0_at_500nm=self.ao.atm.r0,
+                )
 
-            self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMax_)**2
+            # Updating the atmosphere wavelength !
+            # after noise PSD computation where r0 at 500 nm is needed
+            self.ao.atm.wvl  = self.freq.wvlRef
+            self.atm_mod.wvl = self.freq.wvlRef
+
+            # DEFINING THE ATMOSPHERE PSD
+            self.Wn = np.mean(self.ao.wfs.processing.noiseVar) / (2*self.freq.kcMax_)**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
 
             # DEFINE THE RECONSTRUCTOR
@@ -275,8 +280,9 @@ class fourierModel:
                 )
 
                 # GETTING METRICS
-                if self.getFWHM == True or self.getEnsquaredEnergy==True or self.getEncircledEnergy==True:
-                    self.getPsfMetrics(getEnsquaredEnergy=self.getEnsquaredEnergy,\
+                if self.getFWHM == True or self.getEnsquaredEnergy==True \
+                  or self.getEncircledEnergy==True:
+                    self.getPsfMetrics(getEnsquaredEnergy=self.getEnsquaredEnergy, \
                         getEncircledEnergy=self.getEncircledEnergy,getFWHM=self.getFWHM)
 
                 # DISPLAYING THE PSFS
@@ -929,21 +935,26 @@ class fourierModel:
         psd = np.zeros((self.freq.resAO,self.freq.resAO))
         if self.ao.wfs.processing.noiseVar[0] > 0:
             if self.nGs < 2:
+                # SCAO case
                 psd = abs(self.Rx**2 + self.Ry**2)
                 psd = psd/(2*self.freq.kcMax_)**2
-                psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_
+                psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_ \
+                      * self.noiseGain * np.mean(self.ao.wfs.processing.noiseVar)
             else:
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),dtype=complex)
-                #where is the noise level ?
+                # noise level is considered in the covariance matrix Cb
+                # and the noise gain is considered as follows (0.6 - 1.0)
+                noise_gain = min(1.0, 0.6 + 0.1333 * self.ao.rtc.holoop['delay'])
                 for j in range(self.ao.src.nSrc):
                     PW = np.matmul(self.PbetaDM[j],self.W)
                     PW_t = np.conj(PW.transpose(0,1,3,2))
                     tmp = np.matmul(PW,np.matmul(self.Cb,PW_t))
-                    psd[:,:,j] = self.freq.mskInAO_ * tmp[:, :, 0, 0]*self.freq.pistonFilterAO_
+                    psd[:,:,j] = self.freq.mskInAO_ * tmp[:, :, 0, 0]  \
+                        * self.freq.pistonFilterAO_ * noise_gain
 
         self.t_noisePSD = 1000*(time.time() - tstart)
         # NOTE: the noise variance is the same for all WFS
-        return  psd*self.noiseGain * np.mean(self.ao.wfs.processing.noiseVar)
+        return psd
 
     def reconstructionPSD(self):
         """ Power spectrum density of the wavefront reconstruction error
