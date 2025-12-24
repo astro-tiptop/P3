@@ -417,3 +417,65 @@ class TestNoiseVariance(unittest.TestCase):
         self.assertGreater(var_pyr[0], 0)
         # Pyramid typically more efficient
         self.assertLess(var_pyr[0], var_sh[0] * 10)
+
+    def test_noise_independence_from_science_wavelength(self):
+        """Test that noise variance is independent of science wavelength"""
+        # Test with different science wavelengths
+        wavelengths = [1.25e-6, 1.65e-6, 2.2e-6]  # J, H, K band
+        noise_values = []
+
+        wvl_wfs = 750e-9
+        r0_wfs = 0.20
+
+        wfs = sensor(
+            pixel_scale=self.pixel_scale,
+            fov=self.fov,
+            nph=[1000],
+            ron=3.0,
+            wfstype='Shack-Hartmann',
+            nL=[40],
+            dsub=[0.2],
+            algorithm='cog'
+        )
+
+        for wvl_sci in wavelengths:
+            noise_var = wfs.computeNoiseVarianceAtWavelength(
+                wvl_science=wvl_sci,
+                wvl_wfs=wvl_wfs,
+                r0_wfs=r0_wfs
+            )
+            rad2nm = wvl_sci * 1e9 / (2 * np.pi)
+            noise_values.append(np.sqrt(noise_var[0]) * rad2nm)
+
+        # The noise in nm should be constant across science wavelengths
+        for i in range(1, len(noise_values)):
+            self.assertAlmostEqual(noise_values[0], noise_values[i], places=6,
+                                   msg="Noise should be independent of science wavelength")
+
+    def test_noise_depends_on_wfs_wavelength(self):
+        """Test that noise DOES depend on WFS wavelength"""
+        # Noise MUST depend on WFS wavelength
+        wfs_wavelengths = [500e-9, 750e-9, 950e-9]
+        noise_values = []
+
+        for wvl_wfs in wfs_wavelengths:
+            wfs = sensor(
+                pixel_scale=self.pixel_scale,
+                fov=self.fov,
+                nph=[1000],
+                ron=3.0,
+                wfstype='Shack-Hartmann',
+                nL=[40],
+                dsub=[0.2],
+                algorithm='cog'
+            )
+
+            # Noise is calculated with r0 at wvl_wfs
+            r0_wfs = 0.20 * (wvl_wfs / 500e-9)**(6/5)
+            var_noise = wfs.NoiseVariance(r0_wfs, wvl_wfs)
+            noise_values.append(var_noise[0])
+
+        # Values should be different
+        # (though they might be similar due to r0 scaling)
+        self.assertEqual(len(set([round(v, 6) for v in noise_values])), len(noise_values),
+                        "Noise should vary with WFS wavelength")

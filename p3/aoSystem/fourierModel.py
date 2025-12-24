@@ -179,7 +179,8 @@ class fourierModel:
                 self.strechFactor = 1.0
 
             # DEFINING THE MODELED ATMOSPHERE
-            if (self.ao.dms.nRecLayers!=None) and (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
+            if (self.ao.dms.nRecLayers!=None) and \
+              (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
                 weights_mod,heights_mod = FourierUtils.eqLayers(
                     self.ao.atm.weights,
                     self.ao.atm.heights,
@@ -236,17 +237,20 @@ class fourierModel:
                 rr = np.max(2.0 * kc[:, None] / vv[None, :], axis=1)
             # FoV check: ensure the worst case across all DMs
             if np.max(rr) > self.freq.nOtf:
-                raise ValueError('Error : the PSF field of view is too small to simulate the AO correction area\n')
+                raise ValueError('Error : the PSF field of view is too small'
+                                 'to simulate the AO correction area\n')
 
             # DEFINING THE NOISE AND ATMOSPHERE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
                 wvl_gs = self.gs.wvl[0]
-                wvl_scale_factor = self.freq.wvlRef/wvl_gs
                 r0_at_wvl_gs = self.ao.atm.r0 * (wvl_gs / 500e-9)**(6/5)
-                self.ao.wfs.processing.noiseVar = self.ao.wfs.NoiseVariance(r0_at_wvl_gs, wvl_gs)
-                self.ao.wfs.processing.noiseVar *= wvl_scale_factor**2
+                self.ao.wfs.processing.noiseVar = self.ao.wfs.computeNoiseVarianceAtWavelength(
+                    wvl_science=self.freq.wvlRef,
+                    wvl_wfs=wvl_gs,
+                    r0_wfs=r0_at_wvl_gs
+                )
 
-            self.Wn   = np.mean(self.ao.wfs.processing.noiseVar)/(2*self.freq.kcMax_)**2
+            self.Wn = np.mean(self.ao.wfs.processing.noiseVar) / (2*self.freq.kcMax_)**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
 
             # DEFINE THE RECONSTRUCTOR
@@ -275,8 +279,9 @@ class fourierModel:
                 )
 
                 # GETTING METRICS
-                if self.getFWHM == True or self.getEnsquaredEnergy==True or self.getEncircledEnergy==True:
-                    self.getPsfMetrics(getEnsquaredEnergy=self.getEnsquaredEnergy,\
+                if self.getFWHM == True or self.getEnsquaredEnergy==True \
+                  or self.getEncircledEnergy==True:
+                    self.getPsfMetrics(getEnsquaredEnergy=self.getEnsquaredEnergy, \
                         getEncircledEnergy=self.getEncircledEnergy,getFWHM=self.getFWHM)
 
                 # DISPLAYING THE PSFS

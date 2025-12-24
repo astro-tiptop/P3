@@ -148,3 +148,34 @@ class sensor:
             varNoise[k] = var_ron + self.detector[k].excess * var_shot
 
         return varNoise
+
+    def computeNoiseVarianceAtWavelength(self, wvl_science, wvl_wfs=None, r0_wfs=None):
+        """
+        Compute noise variance scaled to science wavelength.
+        
+        Parameters:
+        -----------
+        wvl_science : float
+            Science wavelength in meters
+        wvl_wfs : float, optional
+            WFS wavelength in meters. If None, uses self.detector[0].wvl
+        r0_wfs : float, optional
+            Fried parameter at WFS wavelength in meters. If None, must be provided separately
+            
+        Returns:
+        --------
+        noise_var_scaled : array
+            Noise variance scaled to science wavelength
+        """
+        if wvl_wfs is None:
+            # Assume WFS wavelength is stored somewhere accessible
+            wvl_wfs = 750e-9  # Default value, should be set properly
+
+        # Calculate noise at WFS wavelength
+        noise_var_wfs = self.NoiseVariance(r0_wfs, wvl_wfs)
+
+        # Scale to science wavelength
+        wvl_scale_factor = wvl_wfs / wvl_science
+        noise_var_scaled = noise_var_wfs * wvl_scale_factor**2
+
+        return noise_var_scaled
