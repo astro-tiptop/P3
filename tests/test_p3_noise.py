@@ -7,7 +7,8 @@ Unit tests for sensor.NoiseVariance method
 import unittest
 from p3.aoSystem import np, nnp, cpuArray
 from p3.aoSystem.sensor import sensor
-
+from p3.aoSystem.fourierModel import fourierModel
+import pathlib
 
 class TestNoiseVariance(unittest.TestCase):
     """Test cases for the NoiseVariance method of the sensor class"""
@@ -479,3 +480,115 @@ class TestNoiseVariance(unittest.TestCase):
         # (though they might be similar due to r0 scaling)
         self.assertEqual(len(set([round(v, 6) for v in noise_values])), len(noise_values),
                         "Noise should vary with WFS wavelength")
+
+    def test_noise_wfeN_independence_from_science_wavelength(self):
+        """Test that wfeN is independent of science wavelength using fourierModel"""
+
+        # Get test directory path
+        test_dir = pathlib.Path(__file__).parent.absolute()
+
+        # Test with two different science wavelengths
+        ini_files = [
+            str(test_dir / 'scao_test_wvl1100nm.ini'),
+            str(test_dir / 'scao_test_wvl2200nm.ini')
+        ]
+
+        wfeN_values = []
+
+        for ini_file in ini_files:
+            # Create Fourier model
+            fao = fourierModel(
+                path_ini=ini_file,
+                path_root='',
+                calcPSF=False,
+                verbose=False,
+                display=False,
+                getErrorBreakDown=True
+            )
+
+            # Extract wfeN value
+            if isinstance(fao.wfeN, np.ndarray):
+                wfeN = fao.wfeN[0]  # on-axis value
+            else:
+                wfeN = fao.wfeN
+
+            wfeN_values.append(wfeN)
+
+            # Print for debugging
+            print(f"\nWavelength: {fao.freq.wvlRef*1e9:.0f} nm")
+            print(f"wfeN: {wfeN:.2f} nm")
+
+        # Verify that wfeN is the same for both wavelengths
+        # Allow small numerical tolerance
+        rel_diff = abs(wfeN_values[1] - wfeN_values[0]) / wfeN_values[0]
+
+        self.assertLess(
+            rel_diff,
+            0.01,  # 1% tolerance
+            msg=f"wfeN should be independent of science wavelength. "
+                f"Got {wfeN_values[0]:.2f} nm at 1100nm and "
+                f"{wfeN_values[1]:.2f} nm at 2200nm "
+                f"(relative difference: {rel_diff*100:.2f}%)"
+        )
+
+        # More strict test: should be essentially equal
+        self.assertAlmostEqual(
+            wfeN_values[0],
+            wfeN_values[1],
+            places=1,
+            msg=f"wfeN should be identical for different science wavelengths. "
+                f"Got {wfeN_values[0]:.2f} nm at 1100nm and "
+                f"{wfeN_values[1]:.2f} nm at 2200nm"
+        )
+
+    def test_noise_psd_scaling_with_wavelength(self):
+        """Test that noise PSD in nm^2 gives constant wfeN"""
+
+        test_dir = pathlib.Path(__file__).parent.absolute()
+
+        ini_files = [
+            str(test_dir / 'scao_test_wvl1100nm.ini'),
+            str(test_dir / 'scao_test_wvl2200nm.ini')
+        ]
+
+        wfeN_from_psd = []
+        wavelengths = []
+
+        for ini_file in ini_files:
+            fao = fourierModel(
+                path_ini=ini_file,
+                path_root='',
+                calcPSF=False,
+                verbose=False,
+                display=False,
+                getErrorBreakDown=False
+            )
+
+            # Get PSD after conversion to nm^2 (from powerSpectrumDensity)
+            # This is what's actually stored and used for wfeN calculation
+            dk = 2*fao.freq.kcMax_/fao.freq.resAO
+            rad2nm = fao.freq.wvlRef*1e9/2/np.pi
+
+            # Convert raw PSD to nm^2
+            psd_nm2 = fao.psdNoise * (dk * rad2nm)**2
+
+            # Calculate wfeN from PSD
+            wfeN_calc = np.sqrt(np.sum(psd_nm2))
+            wfeN_from_psd.append(wfeN_calc)
+            wavelengths.append(fao.freq.wvlRef)
+
+            print(f"\nWavelength: {fao.freq.wvlRef*1e9:.0f} nm")
+            print(f"wfeN from PSD: {wfeN_calc:.2f} nm")
+            print(f"wfeN from errorBreakDown: {fao.wfeN:.2f} nm" if hasattr(fao, 'wfeN') else "")
+
+        # The wfeN calculated from PSD should be constant
+        rel_diff = abs(wfeN_from_psd[1] - wfeN_from_psd[0]) / wfeN_from_psd[0]
+
+        self.assertLess(
+            rel_diff,
+            0.01,  # 1% tolerance
+            msg=f"wfeN from PSD should be independent of science wavelength. "
+                f"Got {wfeN_from_psd[0]:.2f} nm at {wavelengths[0]*1e9:.0f}nm and "
+                f"{wfeN_from_psd[1]:.2f} nm at {wavelengths[1]*1e9:.0f}nm "
+                f"(relative difference: {rel_diff*100:.2f}%)"
+        )
