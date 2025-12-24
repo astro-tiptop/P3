@@ -180,7 +180,7 @@ class fourierModel:
 
             # DEFINING THE MODELED ATMOSPHERE
             if (self.ao.dms.nRecLayers!=None) and \
-              (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
+                (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
                 weights_mod,heights_mod = FourierUtils.eqLayers(
                     self.ao.atm.weights,
                     self.ao.atm.heights,
@@ -234,7 +234,7 @@ class fourierModel:
             # FoV check: ensure the worst case across all DMs
             if np.max(rr) > self.freq.nOtf:
                 raise ValueError('Error : the PSF field of view is too small'
-                                 'to simulate the AO correction area\n')
+                                 ' to simulate the AO correction area\n')
 
             # DEFINING THE NOISE PSD
             if self.ao.wfs.processing.noiseVar == [None]:

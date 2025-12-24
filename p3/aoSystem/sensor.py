@@ -135,12 +135,12 @@ class sensor:
                 if np.any(var_ron > 5):
                     print(f'The read-out noise variance is very high ({var_ron:.1f} >5 rd^2),'
                           ' there is certainly smth wrong with your inputs, set to 5')
-                    var_ron = 5
+                    var_ron = np.minimum(var_ron, 5)
 
                 if np.any(var_shot > 5):
                     print(f'The shot noise variance is very high ({var_shot:.1f} >5 rd^2),'
                           ' there is certainly smth wrong with your inputs, set to 5')
-                    var_shot = 5
+                    var_shot = np.minimum(var_shot, 5)
 
             if self.wfstype.upper() == 'PYRAMID':
                 var_ron  = 4*ron**2/nph**2

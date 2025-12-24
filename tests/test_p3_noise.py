@@ -16,7 +16,7 @@ class TestNoiseVariance(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.pixel_scale = 400  # mas/pixel
-        self.fov = 12 # pixels
+        self.fov = 12  # pixels
         self.r0 = 0.20  # meters
         self.wvl = 750e-9  # meters
 
