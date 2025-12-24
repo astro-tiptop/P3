@@ -132,15 +132,16 @@ class sensor:
                     var_ron  = k_factor *  4*np.pi**2 * (ron/nph)**2
                     var_shot  = k_factor * np.pi**2/nph
 
-                if var_ron.any() > 3:
-                    print(f'The read-out noise variance is very high ({var_ron:.1f} >3 rd^2),'
-                          ' there is certainly smth wrong with your inputs, set to 0')
-                    var_ron = 0
+                if np.any(var_ron > 5):
+                    print(f'The read-out noise variance is very high ({var_ron:.1f} >5 rd^2),'
+                          ' there is certainly smth wrong with your inputs, set to 5')
+                    var_ron = 5
 
-                if var_shot.any() > 3:
-                    print(f'The shot noise variance is very high ({var_shot:.1f} >3 rd^2),'
-                          ' there is certainly smth wrong with your inputs, set to 0')
-                    var_shot = 0
+                if np.any(var_shot > 5):
+                    print(f'The shot noise variance is very high ({var_shot:.1f} >5 rd^2),'
+                          ' there is certainly smth wrong with your inputs, set to 5')
+                    var_shot = 5
+
             if self.wfstype.upper() == 'PYRAMID':
                 var_ron  = 4*ron**2/nph**2
                 var_shot = nph/nph**2
