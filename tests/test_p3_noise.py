@@ -426,7 +426,7 @@ class TestNoiseVariance(unittest.TestCase):
         noise_values = []
 
         wvl_wfs = 750e-9
-        r0_wfs = 0.20
+        r0_at_500nm = 0.20
 
         wfs = sensor(
             pixel_scale=self.pixel_scale,
@@ -443,7 +443,7 @@ class TestNoiseVariance(unittest.TestCase):
             noise_var = wfs.computeNoiseVarianceAtWavelength(
                 wvl_science=wvl_sci,
                 wvl_wfs=wvl_wfs,
-                r0_wfs=r0_wfs
+                r0_at_500nm=r0_at_500nm
             )
             rad2nm = wvl_sci * 1e9 / (2 * np.pi)
             noise_values.append(np.sqrt(noise_var[0]) * rad2nm)

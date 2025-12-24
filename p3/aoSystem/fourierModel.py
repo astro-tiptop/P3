@@ -220,10 +220,6 @@ class fourierModel:
                 self.ao.atm.L0
             )
 
-            #updating the atmosphere wavelength !
-            self.ao.atm.wvl  = self.freq.wvlRef
-            self.atm_mod.wvl = self.freq.wvlRef
-
             self.t_atmo = 1000*(time.time() - self.t_initFreq/1000 - tstart)
 
             vv = np.asarray(self.freq.psInMas)
@@ -240,16 +236,21 @@ class fourierModel:
                 raise ValueError('Error : the PSF field of view is too small'
                                  'to simulate the AO correction area\n')
 
-            # DEFINING THE NOISE AND ATMOSPHERE PSD
+            # DEFINING THE NOISE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
                 wvl_gs = self.gs.wvl[0]
-                r0_at_wvl_gs = self.ao.atm.r0 * (wvl_gs / 500e-9)**(6/5)
                 self.ao.wfs.processing.noiseVar = self.ao.wfs.computeNoiseVarianceAtWavelength(
                     wvl_science=self.freq.wvlRef,
                     wvl_wfs=wvl_gs,
-                    r0_wfs=r0_at_wvl_gs
+                    r0_at_500nm=self.ao.atm.r0,
                 )
 
+            # Updating the atmosphere wavelength !
+            # after noise PSD computation where r0 at 500 nm is needed
+            self.ao.atm.wvl  = self.freq.wvlRef
+            self.atm_mod.wvl = self.freq.wvlRef
+
+            # DEFINING THE ATMOSPHERE PSD
             self.Wn = np.mean(self.ao.wfs.processing.noiseVar) / (2*self.freq.kcMax_)**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
 

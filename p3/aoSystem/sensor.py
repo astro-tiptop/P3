@@ -149,7 +149,7 @@ class sensor:
 
         return varNoise
 
-    def computeNoiseVarianceAtWavelength(self, wvl_science, wvl_wfs, r0_wfs):
+    def computeNoiseVarianceAtWavelength(self, wvl_science, wvl_wfs, r0_at_500nm):
         """
         Compute noise variance scaled to science wavelength.
         
@@ -159,13 +159,16 @@ class sensor:
             Science wavelength in meters
         wvl_wfs : float
             WFS wavelength in meters
-        r0_wfs : float
-            Fried parameter at WFS wavelength in meters.
+        r0_at_500nm : float
+            Fried parameter at 500 nm in meters.
         Returns:
         --------
         noise_var_scaled : array
             Noise variance scaled to science wavelength
         """
+
+        # Calculate r0 at WFS wavelength
+        r0_wfs = r0_at_500nm * (wvl_wfs / 500e-9)**(6/5)
 
         # Calculate noise at WFS wavelength
         noise_var_wfs = self.NoiseVariance(r0_wfs, wvl_wfs)
