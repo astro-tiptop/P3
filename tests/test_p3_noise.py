@@ -5,7 +5,7 @@ Unit tests for sensor.NoiseVariance method
 """
 
 import unittest
-from p3.aoSystem import np, nnp, cpuArray
+from p3.aoSystem import np
 from p3.aoSystem.sensor import sensor
 from p3.aoSystem.fourierModel import fourierModel
 import pathlib
@@ -214,8 +214,6 @@ class TestNoiseVariance(unittest.TestCase):
             algorithm='cog'
         )
 
-        var_noise = wfs.NoiseVariance(self.r0, self.wvl)
-
         # At low flux, RON should dominate: var_ron >> var_shot
         # Estimate var_ron and var_shot separately
         ron = 5.0
@@ -294,7 +292,7 @@ class TestNoiseVariance(unittest.TestCase):
         self.assertLess(var_noise[0], 0.1)  # reasonable for 1000 ph
 
     def test_infinite_flux_gives_zero_photon_noise(self):
-        """Test that infinite flux gives only RON"""
+        """Test that infinite flux gives 0 noise variance"""
         wfs = sensor(
             pixel_scale=self.pixel_scale,
             fov=self.fov,
@@ -317,7 +315,12 @@ class TestNoiseVariance(unittest.TestCase):
         variances = {}
 
         for algo in algorithms:
-            params = [5, 0, 0] if algo in ['wcog', 'tcog'] else [0, 0, 0]
+            if algo == 'tcog':
+                params = [5, 0.5, 0]
+            elif algo == 'wcog':
+                params = [5, 0, 0]
+            else:
+                params = [0, 0, 0]
             wfs = sensor(
                 pixel_scale=self.pixel_scale,
                 fov=self.fov,
