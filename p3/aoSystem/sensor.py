@@ -113,24 +113,26 @@ class sensor:
                 if self.processing.algorithm == 'cog':
                     var_ron  = np.pi**2/3 * (ron**2 /nph**2) * (nPix**2/nD)**2
                     var_shot  = np.pi**2/(2*np.log(2)*nph) * (nT/nD)**2
-                if self.processing.algorithm == 'tcog':
+                elif self.processing.algorithm == 'tcog':
                     # Here we consider that the pixel used in the computation
                     # are the ones where the PSF is above the 0.5 w.r.t. the maximum value,
                     # so, nPix**2 is subsituted by np.ceil(nT**2*np.pi/4)
                     var_ron  = np.pi**2/3 * (ron**2 /nph**2) * (np.ceil(nT**2*np.pi/4)/nD)**2
                     var_shot  = np.pi**2/(2*np.log(2)*nph) * (nT/nD)**2
-                if self.processing.algorithm == 'wcog':
+                elif self.processing.algorithm == 'wcog':
                     var_ron  = np.pi**3/(32*np.log(2)**2) * (ron**2 /nph**2) \
                         * (nT**2+nW**2)**4/(nD**2*nW**4)
                     var_shot  = np.pi**2/(2*np.log(2)*nph) * (nT/nD)**2 \
                         * (nT**2+nW**2)**4/((2*nT**2+nW**2)**2*nW**4)
-                if self.processing.algorithm == 'qc':
+                elif self.processing.algorithm == 'qc':
                     if nT > nD:
                         k_factor = np.sqrt(2*np.pi) * (nT/(2*np.sqrt(2*np.log(2))) / nD)
                     else:
                         k_factor = 1
                     var_ron  = k_factor *  4*np.pi**2 * (ron/nph)**2
                     var_shot  = k_factor * np.pi**2/nph
+                else:
+                    raise ValueError('Unknown WFS processing algorithm')
 
                 if np.any(var_ron > 5):
                     print(f'The read-out noise variance is very high ({var_ron:.1f} >5 rd^2),'
