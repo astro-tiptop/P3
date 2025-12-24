@@ -942,13 +942,14 @@ class fourierModel:
             else:
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),dtype=complex)
                 # noise level is considered in the covariance matrix Cb
-                # and the noise gain is considered as 1
+                # and the noise gain is considered as follows (0.6 - 1.0)
+                noise_gain = min(1.0, 0.6 + 0.1333 * self.ao.rtc.holoop['delay'])
                 for j in range(self.ao.src.nSrc):
                     PW = np.matmul(self.PbetaDM[j],self.W)
                     PW_t = np.conj(PW.transpose(0,1,3,2))
                     tmp = np.matmul(PW,np.matmul(self.Cb,PW_t))
-                    psd[:,:,j] = self.freq.mskInAO_ * tmp[:, :, 0, 0]*self.freq.pistonFilterAO_
-
+                    psd[:,:,j] = self.freq.mskInAO_ * tmp[:, :, 0, 0]  \
+                        * self.freq.pistonFilterAO_ * noise_gain
 
         self.t_noisePSD = 1000*(time.time() - tstart)
         # NOTE: the noise variance is the same for all WFS
