@@ -936,7 +936,8 @@ class fourierModel:
             if self.nGs < 2:
                 psd = abs(self.Rx**2 + self.Ry**2)
                 psd = psd/(2*self.freq.kcMax_)**2
-                psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_
+                psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_ \
+                     * np.mean(self.ao.wfs.processing.noiseVar)
             else:
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),dtype=complex)
                 #where is the noise level ?
@@ -948,7 +949,7 @@ class fourierModel:
 
         self.t_noisePSD = 1000*(time.time() - tstart)
         # NOTE: the noise variance is the same for all WFS
-        return  psd*self.noiseGain * np.mean(self.ao.wfs.processing.noiseVar)
+        return  psd * self.noiseGain
 
     def reconstructionPSD(self):
         """ Power spectrum density of the wavefront reconstruction error
