@@ -484,6 +484,137 @@ class TestNoiseVariance(unittest.TestCase):
         self.assertEqual(len(set([round(v, 6) for v in noise_values])), len(noise_values),
                         "Noise should vary with WFS wavelength")
 
+    def test_invalid_wfs_type(self):
+        """Test that invalid WFS type raises ValueError"""
+        wfs = sensor(
+            pixel_scale=self.pixel_scale,
+            fov=self.fov,
+            nph=[1000],
+            ron=3.0,
+            wfstype='InvalidType',
+            nL=[40],
+            dsub=[0.2]
+        )
+
+        with self.assertRaises(ValueError) as context:
+            wfs.NoiseVariance(self.r0, self.wvl)
+
+        self.assertIn('Unknown WFS type', str(context.exception))
+
+    def test_invalid_algorithm(self):
+        """Test that invalid algorithm raises ValueError"""
+        wfs = sensor(
+            pixel_scale=self.pixel_scale,
+            fov=self.fov,
+            nph=[1000],
+            ron=3.0,
+            wfstype='Shack-Hartmann',
+            nL=[40],
+            dsub=[0.2],
+            algorithm='invalid_algo'
+        )
+
+        with self.assertRaises(ValueError) as context:
+            wfs.NoiseVariance(self.r0, self.wvl)
+
+        self.assertIn('Unknown WFS processing algorithm', str(context.exception))
+
+    def test_negative_r0(self):
+        """Test that negative r0 raises appropriate error or warning"""
+        wfs = sensor(
+            pixel_scale=self.pixel_scale,
+            fov=self.fov,
+            nph=[1000],
+            ron=3.0,
+            wfstype='Shack-Hartmann',
+            nL=[40],
+            dsub=[0.2],
+            algorithm='cog'
+        )
+
+        # Should either raise ValueError or give warning
+        # Depending on implementation, adjust assertion
+        with self.assertRaises((ValueError, RuntimeWarning)):
+            wfs.NoiseVariance(-0.1, self.wvl)
+
+    def test_zero_r0(self):
+        """Test that zero r0 raises ZeroDivisionError or similar"""
+        wfs = sensor(
+            pixel_scale=self.pixel_scale,
+            fov=self.fov,
+            nph=[1000],
+            ron=3.0,
+            wfstype='Shack-Hartmann',
+            nL=[40],
+            dsub=[0.2],
+            algorithm='cog'
+        )
+
+        with self.assertRaises((ZeroDivisionError, ValueError)):
+            wfs.NoiseVariance(0.0, self.wvl)
+
+    def test_negative_wavelength(self):
+        """Test that negative wavelength raises appropriate error"""
+        wfs = sensor(
+            pixel_scale=self.pixel_scale,
+            fov=self.fov,
+            nph=[1000],
+            ron=3.0,
+            wfstype='Shack-Hartmann',
+            nL=[40],
+            dsub=[0.2],
+            algorithm='cog'
+        )
+
+        with self.assertRaises((ValueError, RuntimeWarning)):
+            wfs.NoiseVariance(self.r0, -500e-9)
+
+    def test_zero_subaperture_diameter(self):
+        """Test that zero subaperture diameter causes issues"""
+        wfs = sensor(
+            pixel_scale=self.pixel_scale,
+            fov=self.fov,
+            nph=[1000],
+            ron=3.0,
+            wfstype='Shack-Hartmann',
+            nL=[40],
+            dsub=[0.0],  # zero diameter
+            algorithm='cog'
+        )
+
+        with self.assertRaises((ZeroDivisionError, ValueError)):
+            wfs.NoiseVariance(self.r0, self.wvl)
+
+    def test_negative_photon_flux(self):
+        """Test that negative photon flux raises error"""
+        with self.assertRaises((ValueError, AssertionError)):
+            wfs = sensor(
+                pixel_scale=self.pixel_scale,
+                fov=self.fov,
+                nph=[-1000],  # negative flux
+                ron=3.0,
+                wfstype='Shack-Hartmann',
+                nL=[40],
+                dsub=[0.2],
+                algorithm='cog'
+            )
+            wfs.NoiseVariance(self.r0, self.wvl)
+
+    def test_negative_ron(self):
+        """Test that negative RON raises error or warning"""
+        with self.assertRaises((ValueError, AssertionError)):
+            wfs = sensor(
+                pixel_scale=self.pixel_scale,
+                fov=self.fov,
+                nph=[1000],
+                ron=-3.0,  # negative RON
+                wfstype='Shack-Hartmann',
+                nL=[40],
+                dsub=[0.2],
+                algorithm='cog'
+            )
+            wfs.NoiseVariance(self.r0, self.wvl)
+
     def test_noise_wfeN_independence_from_science_wavelength(self):
         """Test that wfeN is independent of science wavelength using fourierModel"""
 

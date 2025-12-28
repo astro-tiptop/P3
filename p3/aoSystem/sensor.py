@@ -74,6 +74,12 @@ class sensor:
 
         rad2arcsec = 3600 * 180 / np.pi
 
+        # Input validation
+        if r0 <= 0:
+            raise ValueError(f"r0 must be positive, got {r0}")
+        if wvl <= 0:
+            raise ValueError(f"wavelength must be positive, got {wvl}")
+
         # parsing inputs
         varNoise = np.zeros(self.nWfs)
 
@@ -81,6 +87,15 @@ class sensor:
             pixelScale  = self.detector[k].psInMas/1e3 # in arcsec
             ron = self.detector[k].ron
             nph = np.array(self.detector[k].nph)
+
+            # Validate detector parameters
+            if ron < 0:
+                raise ValueError(f"RON must be non-negative, got {ron}")
+            if np.any(nph < 0):
+                raise ValueError(f"Photon flux must be non-negative, got {nph}")
+            if self.optics[k].dsub <= 0:
+                raise ValueError(f"Subaperture diameter must be positive, got {self.optics[k].dsub}")
+
             # pixel per subaperture, N_s in Thomas et al. 2006
             # nPix**2 is the total number of pixels used in the CoG calculation
             nPix = self.detector[k].fovInPix
