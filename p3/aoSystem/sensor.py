@@ -74,6 +74,12 @@ class sensor:
 
         rad2arcsec = 3600 * 180 / np.pi
 
+        # Input validation
+        if r0 <= 0:
+            raise ValueError(f"r0 must be positive, got {r0}")
+        if wvl <= 0:
+            raise ValueError(f"wavelength must be positive, got {wvl}")
+
         # parsing inputs
         varNoise = np.zeros(self.nWfs)
 
@@ -81,6 +87,16 @@ class sensor:
             pixelScale  = self.detector[k].psInMas/1e3 # in arcsec
             ron = self.detector[k].ron
             nph = np.array(self.detector[k].nph)
+
+            # Validate detector parameters
+            if ron < 0:
+                raise ValueError(f"RON must be non-negative, got {ron}")
+            if np.any(nph < 0):
+                raise ValueError(f"Photon flux must be non-negative, got {nph}")
+            if self.optics[k].dsub <= 0:
+                raise ValueError(f"Subaperture diameter must be positive,"
+                                 f" got {self.optics[k].dsub}")
+
             # pixel per subaperture, N_s in Thomas et al. 2006
             # nPix**2 is the total number of pixels used in the CoG calculation
             nPix = self.detector[k].fovInPix
@@ -93,9 +109,16 @@ class sensor:
 
                 # The full width at half-maximum (FWHM) of the spot, N_T in Thomas et al. 2006
                 # For diffraction-limited spots nT = nD = 2
+                # ----------------------------------------------------------
+                # FWHM with tip-tilt removed (modes 2-3 corrected)
+                # Start from total seeing FWHM
+                seeing_total = 0.98 * rad2arcsec * wvl / r0  # Total seeing FWHM ≈ λ/r0
+                # Then multiply by 1/sqrt(2) to get the tilt-removed FWHM
+                spot_fwhm = seeing_total / np.sqrt(2)
+                # ----------------------------------------------------------
                 nT = max(1,
                          np.hypot(max(self.detector[k].spotFWHM[0][0:2])/1e3,
-                                  rad2arcsec*wvl/r0)/pixelScale)
+                                  spot_fwhm)/pixelScale)
 
                 # for WCoG, Nw is the weighting function FWHM in pixel
                 nW = self.processing.settings[0]
@@ -104,18 +127,14 @@ class sensor:
                           f' the FWHM of the spot {nT}, forcing it to have the same size.')
                     nW = nT
 
-                # tCoG parameters
-                th = self.processing.settings[1]
-                new_val_th = self.processing.settings[2]
-
                 # read-out noise calculation & photo-noise calculation
                 # from Thomas et al. 2006
                 if self.processing.algorithm == 'cog':
                     var_ron  = np.pi**2/3 * (ron**2 /nph**2) * (nPix**2/nD)**2
                     var_shot  = np.pi**2/(2*np.log(2)*nph) * (nT/nD)**2
                 elif self.processing.algorithm == 'tcog':
-                    # Here we consider that the pixel used in the computation
-                    # are the ones where the PSF is above the 0.5 w.r.t. the maximum value,
+                    # Here we consider that the pixels used in the computation
+                    # are the ones where the PSF is above half of the maximum value,
                     # so, nPix**2 is subsituted by np.ceil(nT**2*np.pi/4)
                     var_ron  = np.pi**2/3 * (ron**2 /nph**2) * (np.ceil(nT**2*np.pi/4)/nD)**2
                     var_shot  = np.pi**2/(2*np.log(2)*nph) * (nT/nD)**2
@@ -134,19 +153,12 @@ class sensor:
                 else:
                     raise ValueError('Unknown WFS processing algorithm')
 
-                if np.any(var_ron > 5):
-                    print(f'The read-out noise variance is very high ({var_ron:.1f} >5 rd^2),'
-                          ' there is certainly smth wrong with your inputs, set to 5')
-                    var_ron = np.minimum(var_ron, 5)
-
-                if np.any(var_shot > 5):
-                    print(f'The shot noise variance is very high ({var_shot:.1f} >5 rd^2),'
-                          ' there is certainly smth wrong with your inputs, set to 5')
-                    var_shot = np.minimum(var_shot, 5)
-
-            if self.wfstype.upper() == 'PYRAMID':
+            elif self.wfstype.upper() == 'PYRAMID':
                 var_ron  = 4*ron**2/nph**2
                 var_shot = nph/nph**2
+
+            else:
+                raise ValueError('Unknown WFS type')
 
             varNoise[k] = var_ron + self.detector[k].excess * var_shot
 
