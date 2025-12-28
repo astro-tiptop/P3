@@ -94,7 +94,8 @@ class sensor:
             if np.any(nph < 0):
                 raise ValueError(f"Photon flux must be non-negative, got {nph}")
             if self.optics[k].dsub <= 0:
-                raise ValueError(f"Subaperture diameter must be positive, got {self.optics[k].dsub}")
+                raise ValueError(f"Subaperture diameter must be positive,"
+                                 f" got {self.optics[k].dsub}")
 
             # pixel per subaperture, N_s in Thomas et al. 2006
             # nPix**2 is the total number of pixels used in the CoG calculation
