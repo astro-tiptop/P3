@@ -826,7 +826,7 @@ class fourierModel:
     def aliasingPSD(self):
         """
         Aliasing error power spectrum density
-        TO BE REVIEWED IN THE CASE OF A PYRAMID WFSs
+        TO BE REVIEWED IN THE CASE OF A PYRAMID WFS
         """
 
         tstart  = time.time()
@@ -923,8 +923,7 @@ class fourierModel:
         # Compute final PSD
         psd = np.sum(PR * W_mn * np.abs(Q * avr) ** 2 * mask[:, :, None], axis=(0, 1))
         psd = np.reshape(psd, NN)
-#        test agaist old, non-vectorize computation
-#        print("Is PSD the same as old computation?", np.allclose(psd0, psd2,  rtol=1e-04, atol=1e-04))
+
         self.t_aliasingPSD = 1000*(time.time() - tstart)
         return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3)*0.0229
 
@@ -942,9 +941,11 @@ class fourierModel:
                       * self.noiseGain * np.mean(self.ao.wfs.processing.noiseVar)
             else:
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),dtype=complex)
-                # noise level is considered in the covariance matrix Cb
-                # and the noise gain is considered as follows (0.6 - 1.0)
-                noise_gain = min(1.0, 0.6 + 0.1333 * self.ao.rtc.holoop['delay'])
+                # - Noise level is considered in the covariance matrix Cb
+                # - Noise gain is considered to be that produced by
+                #   an integrator controller with a gain of 0.5.
+                #   The linear value ranges from 0.4 to 0.8 for a delay from 0 to 3 frames.
+                noise_gain = min(0.8, 0.4 + 0.1333 * self.ao.rtc.holoop['delay']) ** 2
                 for j in range(self.ao.src.nSrc):
                     PW = np.matmul(self.PbetaDM[j],self.W)
                     PW_t = np.conj(PW.transpose(0,1,3,2))
@@ -1018,11 +1019,13 @@ class fourierModel:
         hInt    = self.ao.rtc.holoop['gain']/(1.0 - z**(-1.0))
         rtfInt  = 1.0/(1.0 + hInt * z**(-self.ao.rtc.holoop['delay']))
 
-        #fig, _ = plt.subplots()
-        #plt.loglog(psd_freq,np.abs(rtfInt))
-        #fig, _ = plt.subplots()
-        #plt.loglog(psd_freq,psd_tip_wind)
-        #plt.loglog(psd_freq,np.abs(rtfInt**2*psd_tip_wind))
+        plot_debug = False
+        if plot_debug:
+            fig, _ = plt.subplots()
+            plt.loglog(psd_freq,np.abs(rtfInt))
+            fig, _ = plt.subplots()
+            plt.loglog(psd_freq,psd_tip_wind)
+            plt.loglog(psd_freq,np.abs(rtfInt**2*psd_tip_wind))
 
         power = np.abs(np.sum(rtfInt**2*(psd_tip_wind+psd_tilt_wind))*(psd_freq[1]-psd_freq[0]))
         rad2nm = (2*self.freq.kcMax_/self.freq.resAO) * self.freq.wvlRef*1e9/2/np.pi
