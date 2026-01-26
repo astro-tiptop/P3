@@ -770,9 +770,9 @@ class aoSystem():
 
     def configLO(self, verbose=True):
 
-        if not self.check_section_key('sources_LO') and verbose:
-
-            print('Warning: No information about the tip-tilt star can be retrieved')
+        if not self.check_section_key('sources_LO'):
+            if verbose:
+                print('Warning: No information about the tip-tilt star can be retrieved')
         else:
             if self.check_config_key('sources_LO','Wavelength'):
                 self.wvlGsLO = np.atleast_1d(self.get_config_value('sources_LO','Wavelength'))
