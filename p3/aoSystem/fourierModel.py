@@ -109,7 +109,8 @@ class fourierModel:
         if ao is None:
             self.ao = aoSystem(path_ini, path_root=path_root,
                                getPSDatNGSpositions=getPSDatNGSpositions,
-                               psdExpansion=psdExpansion)
+                               psdExpansion=psdExpansion,
+                               verbose=verbose)
         else:
             self.ao = ao
         self.my_data_map = self.ao.my_data_map

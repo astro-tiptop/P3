@@ -30,16 +30,16 @@ class aoSystem():
     def raiseMissingRequiredOpt(self,sec,opt):
         raise ValueError("'{}' is missing from section '{}'"
                          .format(opt,sec))
-        
+
     def raiseMissingRequiredSec(self,sec):
         raise ValueError("The section '{}' is missing from the parameter file"
                          .format(sec))
-        
+
     def raiseNotSameLength(self,sec,opt):
         raise ValueError("'{}' in section '{}' must have the same length"
                          .format(*opt,sec))
 
-    def check_section_key(self, primary):        
+    def check_section_key(self, primary):
         return primary in self.my_data_map.keys()
 
     def check_config_key(self, primary, secondary):
@@ -50,19 +50,21 @@ class aoSystem():
 
     def get_config_value(self, primary, secondary):
         return self.my_data_map[primary][secondary]
-    
+
     def resolve_path(self, path_value):
         """Use enhanced path resolution with TIPTOP support"""
         from p3.aoSystem import resolve_config_path, PATH_TIPTOP, detect_tiptop_path
-        
+
         path_p3 = str(pathlib.Path(__file__).parent.parent.absolute())
         # lazily re-try TIPTOP detection if it was None at import time
         path_tiptop = PATH_TIPTOP or detect_tiptop_path()
 
         return resolve_config_path(path_value, self.path_root, path_p3, path_tiptop)
 
-    def __init__(self,path_config,path_root='',getPSDatNGSpositions=False,
-                psdExpansion=False,coo_stars=None):
+    def __init__(self, path_config, path_root='',
+                 getPSDatNGSpositions=False,
+                 psdExpansion=False,
+                 coo_stars=None, verbose=True):
 
         if path_root is None:
             path_root = ''
@@ -72,21 +74,22 @@ class aoSystem():
         self.psdExpansion = psdExpansion
         self.error = False
         # verify if the file exists
-        if ospath.isfile(path_config) == False:
-            raise ValueError('The parameter file (.ini or .yml) could not be found.' + str(path_config))
+        if not ospath.isfile(path_config):
+            raise ValueError('The parameter file (.ini or .yml) could not be found.'\
+                             + str(path_config))
 
-        if path_config[-4::]=='.ini':
+        if path_config[-4:]=='.ini':
             # open the .ini file
             config = ConfigParser()
             config.optionxform = str
             config.read(path_config)
-            self.my_data_map = {} 
+            self.my_data_map = {}
             for section in config.sections():
                 self.my_data_map[section] = {}
                 for name,value in config.items(section):
                     self.my_data_map[section].update({name:eval(value)})
 
-        elif path_config[-4::]=='.yml':
+        elif path_config[-4:]=='.yml':
             with open(path_config) as f:
                 my_yaml_dict = yaml.safe_load(f)
             self.my_data_map = my_yaml_dict
@@ -95,9 +98,9 @@ class aoSystem():
 
         #%% TELESCOPE
         #----- grabbing main parameters
-        if not(self.check_section_key('telescope')):
+        if not self.check_section_key('telescope'):
             self.raiseMissingRequiredSec('telescope')
-        
+
         if self.check_config_key('telescope','TelescopeDiameter'):
             self.D = self.get_config_value('telescope','TelescopeDiameter')
         else:
@@ -173,7 +176,7 @@ class aoSystem():
                 raise ValueError(f"PathApodizer file not found: {path_apodizer}")
         else:
             path_apodizer = ''
-  
+
         #----- TELESCOPE ABERRATIONS
         if self.check_config_key('telescope', 'PathStatModes'):
             PathStatModes = self.get_config_value('telescope','PathStatModes')
@@ -184,7 +187,7 @@ class aoSystem():
             path_statModes = ''
 
         #----- EXTRA ERROR
-        if self.check_config_key('telescope', 'extraErrorNm'):       
+        if self.check_config_key('telescope', 'extraErrorNm'): 
             extraErrorNm = self.get_config_value('telescope','extraErrorNm')
         else:
             extraErrorNm = 0
@@ -207,7 +210,7 @@ class aoSystem():
         if self.check_config_key('telescope', 'extraErrorLoNm'): 
             extraErrorLoNm = self.get_config_value('telescope','extraErrorLoNm')
         else:
-            extraErrorLoNm = extraErrorNm 
+            extraErrorLoNm = extraErrorNm
 
         if self.check_config_key('telescope', 'extraErrorLoExp'):
             extraErrorLoExp = self.get_config_value('telescope','extraErrorLoExp')
@@ -224,7 +227,7 @@ class aoSystem():
         else:
             extraErrorLoMax = 0
 
-        # ----- class definition     
+        # ----- class definition
         self.tel = telescope(self.D, nPup,
                              zenith_angle=zenithAngle,
                              obsRatio=obsRatio,
@@ -259,7 +262,7 @@ class aoSystem():
             self.windPsdFile = 0
 
         #%% ATMOSPHERE
-        if not(self.check_section_key('atmosphere')):
+        if not self.check_section_key('atmosphere'):
             self.raiseMissingRequiredSec('atmosphere')
 
         if self.check_config_key('atmosphere','Wavelength'):
@@ -273,6 +276,7 @@ class aoSystem():
             if self.check_config_key('atmosphere','r0_value'):
                 r0 = self.get_config_value('atmosphere','r0_value')
             else:
+                r0 = None
                 self.raiseMissingRequiredOpt('atmosphere','Seeing')
 
         if self.check_config_key('atmosphere','L0'):
@@ -303,8 +307,9 @@ class aoSystem():
             wDir = list(np.array(wSpeed)*0.)
 
         #-----  verification
-        if not (len(weights) == len(heights) == len(wSpeed) == len(wDir)):
-            self.raiseNotSameLength('atmosphere',['Cn2Weights','Cn2Heights','WindSpeed','WindDirection'])
+        if not len(weights) == len(heights) == len(wSpeed) == len(wDir):
+            self.raiseNotSameLength('atmosphere',
+                                    ['Cn2Weights','Cn2Heights','WindSpeed','WindDirection'])
 
         #----- class definition
         self.atm = atmosphere(wvlAtm, r0*airmass**(-3.0/5.0),
@@ -312,17 +317,16 @@ class aoSystem():
                               np.array(heights)*airmass,
                               wSpeed,
                               wDir,
-                              L0)            
-        
+                              L0)
+
         #%%  GUIDE STARS
-        if not(self.check_section_key('sources_HO')):
+        if not self.check_section_key('sources_HO'):
             self.raiseMissingRequiredSec('sources_HO')
 
         if self.check_config_key('sources_HO','Wavelength'):
             self.wvlGs     = np.atleast_1d(self.get_config_value('sources_HO','Wavelength'))
         else:
             self.raiseMissingRequiredOpt('sources_HO', 'Wavelength')
-            return 0
 
         if self.check_config_key('sources_HO','Zenith'):
             self.zenithGs = self.get_config_value('sources_HO','Zenith')
@@ -349,24 +353,25 @@ class aoSystem():
         if heightGs == 0 and not self.check_section_key('sources_LO'):
             self.ngs = source(self.wvlGs,
                               self.zenithGs,self.azimuthGs,
-                              tag="NGS",verbose=True)
+                              tag="NGS",verbose=verbose)
         else:
             self.lgs = source(self.wvlGs,
                               self.zenithGs,self.azimuthGs,
                               height=heightGs*airmass,
-                              tag="LGS",verbose=True)
+                              tag="LGS",verbose=verbose)
 
-        self.configLO()
-        self.configLO_SC()
+        self.configLO(verbose=verbose)
+        self.configLO_SC(verbose=verbose)
 
-    def configLO_SC(self):
+    def configLO_SC(self, verbose=True):
         #%%  SCIENCE SOURCES
-        if not(self.check_section_key('sources_science')):
+        if not self.check_section_key('sources_science'):
             self.raiseMissingRequiredSec('sources_science')
 
         if self.check_config_key('sources_science','Wavelength'):
             wvlSrc = np.atleast_1d(self.get_config_value('sources_science','Wavelength'))
         else:
+            wvlSrc = None
             self.raiseMissingRequiredOpt('sources_science', 'Wavelength')
 
         if self.check_config_key('sources_science','Zenith'):
@@ -386,7 +391,6 @@ class aoSystem():
         #----- verification
         if len(zenithSrc) != len(azimuthSrc):
             self.raiseNotSameLength('sources_science', ['Zenith','Azimuth'])
-            return
 
         if self.getPSDatNGSpositions and self.check_config_key('sources_LO','Wavelength'):
             zenithSrc = zenithSrc +  (self.get_config_value('sources_LO','Zenith'))
@@ -398,17 +402,19 @@ class aoSystem():
                           tag="SCIENCE",verbose=True)
 
         #%% HIGH-ORDER WAVEFRONT SENSOR
-        if not(self.check_section_key('sensor_HO')):
+        if not self.check_section_key('sensor_HO'):
             self.raiseMissingRequiredSec('sensor_HO')
 
         if self.check_config_key('sensor_HO','PixelScale'):
             psInMas = self.get_config_value('sensor_HO','PixelScale')
         else:
+            psInMas = None
             self.raiseMissingRequiredOpt('sensor_HO', 'PixelScale')
 
         if self.check_config_key('sensor_HO','FieldOfView'):
             fov = self.get_config_value('sensor_HO','FieldOfView')
         else:
+            fov = None
             self.raiseMissingRequiredOpt('sensor_HO', 'FieldOfView')
 
         if self.check_config_key('sensor_HO','Binning'):
@@ -499,8 +505,8 @@ class aoSystem():
         else:
             wr = 5.0
 
-        if self.check_config_key('sensor_HO','ThresholdWCoG = 0.0'):
-            thr = self.get_config_value('sensor_HO','ThresholdWCoG = 0.0')
+        if self.check_config_key('sensor_HO','ThresholdWCoG'):
+            thr = self.get_config_value('sensor_HO','ThresholdWCoG')
         else:
             thr = 0.0
 
@@ -515,7 +521,8 @@ class aoSystem():
             excess = 1.0
 
         if self.check_config_key('sensor_HO','addMcaoWFsensConeError'):
-            self.addMcaoWFsensConeError = self.get_config_value('sensor_HO','addMcaoWFsensConeError')
+            self.addMcaoWFsensConeError = \
+                self.get_config_value('sensor_HO','addMcaoWFsensConeError')
         else:
             self.addMcaoWFsensConeError = False
 
@@ -577,21 +584,22 @@ class aoSystem():
                        loopGainLO=self.LoopGain_LO, frameRateLO=frameRate_LO, delayLO=delay_LO)
 
 #%% DEFORMABLE MIRRORS
-        if not(self.check_section_key('DM')):
+        if not self.check_section_key('DM'):
             self.raiseMissingRequiredSec('DM')
 
         if self.check_config_key('DM','DmPitchs'):
             DmPitchs = np.array(self.get_config_value('DM','DmPitchs'))
         else:
-            self.raiseMissingRequiredOpt('DM','DmPitchs')
+            DmPitchs = None
             self.error = True
-            return
+            self.raiseMissingRequiredOpt('DM','DmPitchs')
 
         if self.check_config_key('DM','DmHeights'):
             DmHeights = self.get_config_value('DM','DmHeights')
         else:
-            if len(DmPitchs) > 1:
-                DmHeights = self.raiseMissingRequiredOpt('DM','DmHeights')
+            if DmPitchs is not None and len(DmPitchs) > 1:
+                DmHeights = None
+                self.raiseMissingRequiredOpt('DM','DmHeights')
             else:
                 DmHeights = [0.0]
 
@@ -629,7 +637,8 @@ class aoSystem():
 
         # ----- verification
         if (len(opt_zen) != len(opt_az)) or (len(opt_zen) != len(opt_w)):
-            self.raiseNotSameLength('DM', ['OptimizationZenith','OptimizationAzimuth','OptimizationWeight'])
+            self.raiseNotSameLength('DM',
+                 ['OptimizationZenith','OptimizationAzimuth','OptimizationWeight'])
 
         if self.check_config_key('DM','OptimizationConditioning'):
             cond = self.get_config_value('DM','OptimizationConditioning')
@@ -656,7 +665,7 @@ class aoSystem():
                                     AoArea=AoArea)
 
         #%% SCIENCE DETECTOR
-        if not(self.check_section_key('sensor_science')):
+        if not self.check_section_key('sensor_science'):
             self.raiseMissingRequiredSec('sensor_science')
 
         if self.check_config_key('sensor_science','Name'):
@@ -736,8 +745,8 @@ class aoSystem():
 
         self.cam = detector(psInMas, fov, binning=Binning, spotFWHM=spotFWHM, saturation=saturation,
                             nph=nphSC, bandwidth=bw, transmittance=tr, dispersion=disp,
-                            gain=self.detectorGainScience, ron=ron, sky=sky, dark=dark, excess=excess,
-                            tag=camName)
+                            gain=self.detectorGainScience, ron=ron, sky=sky, dark=dark,
+                            excess=excess, tag=camName)
 
         # %% AO mode
         self.aoMode = 'SCAO'
@@ -759,9 +768,9 @@ class aoSystem():
             self.errorBreakdown()
 
 
-    def configLO(self):
+    def configLO(self, verbose=True):
 
-        if not self.check_section_key('sources_LO'):
+        if not self.check_section_key('sources_LO') and verbose:
 
             print('Warning: No information about the tip-tilt star can be retrieved')
         else:
@@ -776,7 +785,8 @@ class aoSystem():
             if len(self.zenithGsLO) != len(self.azimuthGsLO):
                 self.raiseNotSameLength('sources_LO', ['Zenith','Azimuth'])
 
-            self.ngs = source(self.wvlGsLO,self.zenithGsLO,self.azimuthGsLO,tag="NGS",verbose=True)
+            self.ngs = source(self.wvlGsLO,self.zenithGsLO,
+                              self.azimuthGsLO,tag="NGS",verbose=verbose)
 
 
     def configLOsensor(self):
@@ -784,16 +794,14 @@ class aoSystem():
         if self.check_config_key('sensor_LO','PixelScale'):
             psInMas = self.get_config_value('sensor_LO','PixelScale')
         else:
-            self.raiseMissingRequiredOpt('sensor_LO', 'PixelScale')
             self.error = True
-            return
+            self.raiseMissingRequiredOpt('sensor_LO', 'PixelScale')
 
         if self.check_config_key('sensor_LO','FieldOfView'):
             fov = self.get_config_value('sensor_LO','FieldOfView')
         else:
-            self.raiseMissingRequiredOpt('sensor_LO', 'FieldOfView')
             self.error = True
-            return
+            self.raiseMissingRequiredOpt('sensor_LO', 'FieldOfView')
 
         if self.check_config_key('sensor_LO','Binning'):
             Binning = self.get_config_value('sensor_LO','Binning')
@@ -932,14 +940,15 @@ class aoSystem():
         # Servo-lag errors
         ff = np.pi*0.5**2 # to account for the loss of valid actuator outside the pupil
         nMax = int(np.sqrt(ff)*(self.dms.nControlledRadialOrder[0]+1))
-        if hasattr(self.rtc,'ttloop') and self.tts !=None :
+        if hasattr(self.rtc,'ttloop') and self.tts is not None:
             nMin = 3
         else:
             nMin = 1
 
         nrad  = np.array(range(nMin,nMax))
-        self.wfe['HO Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.holoop['bandwidth'])\
-                                    * Dr053 * np.sum((nrad+1)**(-2/3)))
+        self.wfe['HO Servo-lag'] = \
+            rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.holoop['bandwidth'])\
+                        * Dr053 * np.sum((nrad+1)**(-2/3)))
 
         # Noise errors
         if self.wfs.processing.noiseVar == [None]:
@@ -949,13 +958,16 @@ class aoSystem():
 
         self.wfe['HO Noise'] = rad2nm(np.mean(varNoise))
 
-        if hasattr(self.rtc,'ttloop') and self.tts !=None:
-            self.wfe['TT Servo-lag'] = rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.ttloop['bandwidth'])* Dr053 * 2**(-2/3))
+        if hasattr(self.rtc,'ttloop') and self.tts is not None:
+            self.wfe['TT Servo-lag'] = \
+                rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.ttloop['bandwidth'])\
+                            * Dr053 * 2**(-2/3))
 
             if self.tts.processing.noiseVar == [None]:
-                #varNoise = self.tts.NoiseVariance(self.atm.r0 ,self.atm.wvl) # this line has been commented because it makes no sense
-                                                                              # to consider the open loop r0 in this computation:
-                                                                              # we expect the LO WFS to use a spot corrected by HO loop
+                #varNoise = self.tts.NoiseVariance(self.atm.r0 ,self.atm.wvl)
+                # the previuos line has been commented because it makes no sense
+                # to consider the open loop r0 in this computation:
+                # we expect the LO WFS to use a spot corrected by HO loop
                 varNoise = self.tts.NoiseVariance(self.tts.optics[0].dsub ,self.atm.wvl)
             else:
                 varNoise = self.tts.processing.noiseVar
@@ -967,7 +979,8 @@ class aoSystem():
 
         # Focal anisoplanatism
         if self.lgs and self.lgs.height[0] > 0:
-            self.wfe['Focal anisoplanatism'] = anisoplanatismModel.focal_anisoplanatism_variance(self.tel,self.atm,self.lgs)
+            self.wfe['Focal anisoplanatism'] = \
+                anisoplanatismModel.focal_anisoplanatism_variance(self.tel,self.atm,self.lgs)
         else:
             self.wfe['Focal anisoplanatism'] = 0
 
@@ -978,4 +991,3 @@ class aoSystem():
                                     + self.wfe['TT Servo-lag']**2 + self.wfe['TT Noise']**2\
                                     + self.wfe['Focal anisoplanatism']**2)
         self.wfe['Strehl'] = np.exp(-self.wfe['Total']**2 * (2*np.pi*1e-9/self.src.wvl[0])**2)
-
