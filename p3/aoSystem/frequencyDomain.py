@@ -73,7 +73,8 @@ class frequencyDomain():
         """"""
         return min(4,max(2,int(np.ceil(self.nOtf/self.resAO/2))))
 
-    def __init__(self, aoSys, kcExt=None, nyquistSampling=False, Hfilter=1,computeFocalAnisoCov=True):
+    def __init__(self, aoSys, kcExt=None, nyquistSampling=False,
+                 Hfilter=1, computeFocalAnisoCov=True, multiWvlPSD=False):
 
         # PARSING INPUTS TO GET THE SAMPLING VALUES
         self.ao = aoSys
@@ -89,7 +90,8 @@ class frequencyDomain():
         bw = self.ao.cam.bandwidth
         self.wvl_ = nnp.zeros(self.nWvl)
         for j in range(self.nWvlCen):
-            self.wvl_[j:(j+1)*self.nBin] = nnp.linspace(wvlCen_[j] - bw/2,wvlCen_[j] + bw/2,num=self.nBin)
+            self.wvl_[j:(j+1)*self.nBin] = \
+                nnp.linspace(wvlCen_[j] - bw/2,wvlCen_[j] + bw/2,num=self.nBin)
 
         # MANAGING THE PIXEL SCALE
         t0 = time.time()
@@ -145,28 +147,87 @@ class frequencyDomain():
         #  ---- FULL DOMAIN OF FREQUENCY
         self.kx_,self.ky_ = freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
         self.k2_          = self.kx_**2 + self.ky_**2
-        #piston filtering        
+        #piston filtering
         self.pistonFilter_ = pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
         self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
 
-
         self.pitch  = self.ao.dms.pitch
 
-        # MANAGING THE PIXEL SCALE                           
+        if self.multiWvlPSD:
+            # Pre-compute frequency domains for each wavelength
+            # Each wavelength can have a different resAO
+            self.resAO_wvl = np.zeros(self.nWvl, dtype=int)
+            self.PSDstep_wvl = np.zeros(self.nWvl)
+
+            self.kxAO_wvl = []
+            self.kyAO_wvl = []
+            self.k2AO_wvl = []
+            self.pistonFilterAO_wvl = []
+            self.mskInAO_wvl = []
+            self.mskOutAO_wvl = []
+
+            for idx_wvl in range(self.nWvl):
+                # Scale spatial frequencies based on wavelength ratio
+                wvl_ratio = self.wvl[idx_wvl] / self.wvlRef
+                PSDstep_wvl = self.PSDstep * wvl_ratio
+                self.PSDstep_wvl[idx_wvl] = PSDstep_wvl
+
+                # Calculate resAO for this wavelength
+                # Note: kc_ (DM cutoff) is independent of wavelength
+                resAO_wvl = int(np.max(2*self.kc_/PSDstep_wvl))
+                self.resAO_wvl[idx_wvl] = resAO_wvl
+
+                # Generate frequency arrays with scaled step and possibly different size
+                kxAO_w, kyAO_w = freq_array(resAO_wvl, offset=1e-10, L=PSDstep_wvl)
+                k2AO_w = kxAO_w**2 + kyAO_w**2
+
+                self.kxAO_wvl.append(kxAO_w)
+                self.kyAO_wvl.append(kyAO_w)
+                self.k2AO_wvl.append(k2AO_w)
+
+                # Piston filter per wavelength
+                pf_w = pistonFilter(self.ao.tel.D, np.sqrt(k2AO_w))
+                pf_w[self.resAO//2, self.resAO//2] = 0
+                self.pistonFilterAO_wvl.append(pf_w)
+
+                # Masks per wavelength
+                if self.ao.dms.AoArea == 'circle':
+                    mskInAO_w = k2AO_w < self.kcMax_**2
+                    mskOutAO_w = k2AO_w >= self.kcMax_**2
+                else:
+                    mskInAO_w = np.logical_and(abs(kxAO_w) < self.kcMax_, 
+                                            abs(kyAO_w) < self.kcMax_)
+                    mskOutAO_w = np.logical_or(abs(kxAO_w) >= self.kcMax_, 
+                                            abs(kyAO_w) >= self.kcMax_)
+                self.mskInAO_wvl.append(mskInAO_w)
+                self.mskOutAO_wvl.append(mskOutAO_w)
+
+            # Convert to arrays for easier indexing
+            self.kxAO_wvl = np.array(self.kxAO_wvl)  # Shape: (nWvl, resAO, resAO)
+            self.kyAO_wvl = np.array(self.kyAO_wvl)
+            self.k2AO_wvl = np.array(self.k2AO_wvl)
+            self.pistonFilterAO_wvl = np.array(self.pistonFilterAO_wvl)
+            self.mskInAO_wvl = np.array(self.mskInAO_wvl)
+            self.mskOutAO_wvl = np.array(self.mskOutAO_wvl)
+
+        # MANAGING THE PIXEL SCALE
         self.tfreq = 1000*(time.time()-t0)
 
         # DEFINING THE DOMAIN ANGULAR FREQUENCIES
         t0 = time.time()
-        self.U_, self.V_, self.U2_, self.V2_, self.UV_=  instantiateAngularFrequencies(self.nOtf, fact=2)
+        self.U_, self.V_, self.U2_, self.V2_, self.UV_= \
+            instantiateAngularFrequencies(self.nOtf, fact=2)
 
         # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
-        self.otfNCPA, self.otfDL, self.phaseMap = getStaticOTF(self.ao.tel, self.nOtf, self.sampRef, self.wvlRef)
+        self.otfNCPA, self.otfDL, self.phaseMap = \
+            getStaticOTF(self.ao.tel, self.nOtf, self.sampRef, self.wvlRef)
         self.totf = 1000*(time.time()-t0)
 
         # ANISOPLANATISM PHASE STRUCTURE FUNCTION
         t0 = time.time()
         if (self.ao.aoMode == 'SCAO') or (self.ao.aoMode == 'SLAO'):
-            self.dphi_ani = self.anisoplanatismPhaseStructureFunction(computeFocalAnisoCov=computeFocalAnisoCov)
+            self.dphi_ani = self.anisoplanatismPhaseStructureFunction(
+                computeFocalAnisoCov=computeFocalAnisoCov)
         else:
             self.isAniso = False
             self.dphi_ani = None
