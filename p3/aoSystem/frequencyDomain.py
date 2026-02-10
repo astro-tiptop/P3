@@ -164,6 +164,7 @@ class frequencyDomain():
             self.k2AO_wvl = []
             self.pistonFilterAO_wvl = []
             self.mskInAO_wvl = []
+            self.mskOut_wvl = []
             self.mskOutAO_wvl = []
 
             for idx_wvl in range(self.nWvl):
@@ -193,13 +194,17 @@ class frequencyDomain():
                 # Masks per wavelength
                 if self.ao.dms.AoArea == 'circle':
                     mskInAO_w = k2AO_w < self.kcMax_**2
+                    mskOut_w = k2_w >= self.kcMax_**2
                     mskOutAO_w = k2AO_w >= self.kcMax_**2
                 else:
-                    mskInAO_w = np.logical_and(abs(kxAO_w) < self.kcMax_, 
+                    mskInAO_w = np.logical_and(abs(kxAO_w) < self.kcMax_,
                                             abs(kyAO_w) < self.kcMax_)
-                    mskOutAO_w = np.logical_or(abs(kxAO_w) >= self.kcMax_, 
+                    mskOut_w = np.logical_or(abs(kx_) >= self.kcMax_,
+                                            abs(ky_) >= self.kcMax_)
+                    mskOutAO_w = np.logical_or(abs(kxAO_w) >= self.kcMax_,
                                             abs(kyAO_w) >= self.kcMax_)
                 self.mskInAO_wvl.append(mskInAO_w)
+                self.mskOut_wvl.append(mskOut_w)
                 self.mskOutAO_wvl.append(mskOutAO_w)
 
             # Convert to arrays for easier indexing

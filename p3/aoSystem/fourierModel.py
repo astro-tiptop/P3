@@ -896,12 +896,17 @@ class fourierModel:
         # Return the 3D PSD array in nm^2
         return psd
 
-    def fittingPSD(self):
+    def fittingPSD(self, wvl_idx=None):
         """ Fitting error power spectrum density """
         tstart  = time.time()
+
+        # Get frequency parameters for this wavelength
+        freq_params = self._get_freq_params(wvl_idx)
+        mskOut_ = freq_params['mskOut_']
+
         #Instantiate the function output
         psd = np.zeros((self.freq.nOtf,self.freq.nOtf))
-        psd[self.freq.mskOut_]  = self.ao.atm.spectrum(np.sqrt(self.freq.k2_[self.freq.mskOut_]))
+        psd[mskOut_]  = self.ao.atm.spectrum(np.sqrt(self.freq.k2_[mskOut_]))
         self.t_fittingPSD = 1000*(time.time() - tstart)
         return psd
 
@@ -1141,7 +1146,7 @@ class fourierModel:
         psd[:,:] = power*Wtilt1
 
         self.t_windShakePSD = 1000*(time.time() - tstart)
-        return self.freq.mskInAO_ * abs(psd)
+        return mskInAO * abs(psd)
 
     def spatioTemporalPSD(self):
         """%% Power spectrum density including reconstruction, field variations and temporal effects
