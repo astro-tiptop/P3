@@ -159,12 +159,20 @@ class frequencyDomain():
             self.resAO_wvl = np.zeros(self.nWvl, dtype=int)
             self.PSDstep_wvl = np.zeros(self.nWvl)
 
+            # Full OTF grids per wavelength (same size nOtf, different step)
+            self.kx_wvl = []
+            self.ky_wvl = []
+            self.k2_wvl = []
+            self.pistonFilter_wvl = []
+            self.mskOut_wvl = []
+            self.mskIn_wvl = []
+            
+            # AO grids per wavelength (different size resAO_wvl)
             self.kxAO_wvl = []
             self.kyAO_wvl = []
             self.k2AO_wvl = []
             self.pistonFilterAO_wvl = []
             self.mskInAO_wvl = []
-            self.mskOut_wvl = []
             self.mskOutAO_wvl = []
 
             for idx_wvl in range(self.nWvl):
@@ -173,12 +181,25 @@ class frequencyDomain():
                 PSDstep_wvl = self.PSDstep * wvl_ratio
                 self.PSDstep_wvl[idx_wvl] = PSDstep_wvl
 
+                # Full OTF grid with scaled step (same size nOtf)
+                kx_w, ky_w = freq_array(self.nOtf, offset=1e-10, L=PSDstep_wvl)
+                k2_w = kx_w**2 + ky_w**2
+                
+                self.kx_wvl.append(kx_w)
+                self.ky_wvl.append(ky_w)
+                self.k2_wvl.append(k2_w)
+                
+                # Piston filter for full OTF
+                pf = pistonFilter(self.ao.tel.D, np.sqrt(k2_w))
+                pf[self.nOtf//2, self.nOtf//2] = 0
+                self.pistonFilter_wvl.append(pf)
+                
                 # Calculate resAO for this wavelength
                 # Note: kc_ (DM cutoff) is independent of wavelength
                 resAO_wvl = int(np.max(2*self.kc_/PSDstep_wvl))
                 self.resAO_wvl[idx_wvl] = resAO_wvl
 
-                # Generate frequency arrays with scaled step and possibly different size
+                # Generate AO frequency arrays with scaled step and possibly different size
                 kxAO_w, kyAO_w = freq_array(resAO_wvl, offset=1e-10, L=PSDstep_wvl)
                 k2AO_w = kxAO_w**2 + kyAO_w**2
 
@@ -186,34 +207,33 @@ class frequencyDomain():
                 self.kyAO_wvl.append(kyAO_w)
                 self.k2AO_wvl.append(k2AO_w)
 
-                # Piston filter per wavelength
+                # Piston filter per wavelength (AO area)
                 pf_w = pistonFilter(self.ao.tel.D, np.sqrt(k2AO_w))
-                pf_w[self.resAO//2, self.resAO//2] = 0
+                pf_w[resAO_wvl//2, resAO_wvl//2] = 0
                 self.pistonFilterAO_wvl.append(pf_w)
 
                 # Masks per wavelength
                 if self.ao.dms.AoArea == 'circle':
-                    mskInAO_w = k2AO_w < self.kcMax_**2
                     mskOut_w = k2_w >= self.kcMax_**2
+                    mskIn_w = k2_w < self.kcMax_**2
+                    mskInAO_w = k2AO_w < self.kcMax_**2
                     mskOutAO_w = k2AO_w >= self.kcMax_**2
                 else:
+                    mskOut_w = np.logical_or(abs(kx_w) >= self.kcMax_, abs(ky_w) >= self.kcMax_)
+                    mskIn_w = np.logical_and(abs(kx_w) < self.kcMax_, abs(ky_w) < self.kcMax_)
                     mskInAO_w = np.logical_and(abs(kxAO_w) < self.kcMax_,
                                             abs(kyAO_w) < self.kcMax_)
-                    mskOut_w = np.logical_or(abs(kx_) >= self.kcMax_,
-                                            abs(ky_) >= self.kcMax_)
                     mskOutAO_w = np.logical_or(abs(kxAO_w) >= self.kcMax_,
                                             abs(kyAO_w) >= self.kcMax_)
-                self.mskInAO_wvl.append(mskInAO_w)
+                
                 self.mskOut_wvl.append(mskOut_w)
+                self.mskIn_wvl.append(mskIn_w)
+                self.mskInAO_wvl.append(mskInAO_w)
                 self.mskOutAO_wvl.append(mskOutAO_w)
 
-            # Convert to arrays for easier indexing
-            self.kxAO_wvl = np.array(self.kxAO_wvl)  # Shape: (nWvl, resAO, resAO)
-            self.kyAO_wvl = np.array(self.kyAO_wvl)
-            self.k2AO_wvl = np.array(self.k2AO_wvl)
-            self.pistonFilterAO_wvl = np.array(self.pistonFilterAO_wvl)
-            self.mskInAO_wvl = np.array(self.mskInAO_wvl)
-            self.mskOutAO_wvl = np.array(self.mskOutAO_wvl)
+            # Note: These remain as lists (not arrays) because some elements 
+            # (AO grids) can have different shapes (resAO_wvl[i], resAO_wvl[i])
+            # while OTF grids all have shape (nOtf, nOtf)
 
         # MANAGING THE PIXEL SCALE
         self.tfreq = 1000*(time.time()-t0)

@@ -311,16 +311,24 @@ class fourierModel:
         If wvl_idx is None or multiWvlPSD is False, returns reference wavelength params.
         
         Returns:
-            dict with keys: 'kxAO', 'kyAO', 'k2AO', 'pistonFilterAO', 'mskInAO', 'mskOutAO'
+            dict with keys: 'resAO', 'kxAO', 'kyAO', 'k2AO', 'pistonFilterAO', 'mskInAO', 'mskOutAO', 'Wphi',
+                           'kx', 'ky', 'k2', 'pistonFilter', 'mskOut', 'mskIn'
         """
         if not self.multiWvlPSD or wvl_idx is None:
             return {
+                'resAO': self.freq.resAO,
                 'kxAO': self.freq.kxAO_,
                 'kyAO': self.freq.kyAO_,
                 'k2AO': self.freq.k2AO_,
                 'pistonFilterAO': self.freq.pistonFilterAO_,
                 'mskInAO': self.freq.mskInAO_,
                 'mskOutAO': self.freq.mskOutAO_,
+                'kx': self.freq.kx_,
+                'ky': self.freq.ky_,
+                'k2': self.freq.k2_,
+                'pistonFilter': self.freq.pistonFilter_,
+                'mskOut': self.freq.mskOut_,
+                'mskIn': self.freq.mskIn_,
                 'Wphi': self.Wphi
             }
         else:
@@ -328,12 +336,19 @@ class fourierModel:
             Wphi_wvl = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_wvl[wvl_idx]))
 
             return {
+                'resAO': self.freq.resAO_wvl[wvl_idx],
                 'kxAO': self.freq.kxAO_wvl[wvl_idx],
                 'kyAO': self.freq.kyAO_wvl[wvl_idx],
                 'k2AO': self.freq.k2AO_wvl[wvl_idx],
                 'pistonFilterAO': self.freq.pistonFilterAO_wvl[wvl_idx],
                 'mskInAO': self.freq.mskInAO_wvl[wvl_idx],
                 'mskOutAO': self.freq.mskOutAO_wvl[wvl_idx],
+                'kx': self.freq.kx_wvl[wvl_idx],
+                'ky': self.freq.ky_wvl[wvl_idx],
+                'k2': self.freq.k2_wvl[wvl_idx],
+                'pistonFilter': self.freq.pistonFilter_wvl[wvl_idx],
+                'mskOut': self.freq.mskOut_wvl[wvl_idx],
+                'mskIn': self.freq.mskIn_wvl[wvl_idx],
                 'Wphi': Wphi_wvl
             }
 
@@ -788,7 +803,7 @@ class fourierModel:
             self.psdAlias = None
 
         # Differential refractive anisoplanatism
-        self.psdDiffRef = self.differentialRefractionPSD()
+        self.psdDiffRef = self.differentialRefractionPSD(wvl_idx=wvl_idx)
         psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdDiffRef
 
         # --- free memory
@@ -796,7 +811,7 @@ class fourierModel:
             self.psdDiffRef = None
 
         # Chromatism
-        self.psdChromatism = self.chromatismPSD()
+        self.psdChromatism = self.chromatismPSD(wvl_idx=wvl_idx)
         psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdChromatism
 
         # --- free memory
@@ -804,7 +819,7 @@ class fourierModel:
             self.psdChromatism = None
 
         # Add the noise and spatioTemporal PSD
-        self.psdSpatioTemporal = np.real(self.spatioTemporalPSD())
+        self.psdSpatioTemporal = np.real(self.spatioTemporalPSD(wvl_idx=wvl_idx))
         psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdSpatioTemporal
 
         # --- free memory
@@ -840,7 +855,7 @@ class fourierModel:
             psd *= wfe**2/psd.sum()
 
         # Fitting
-        self.psdFit = np.real(self.fittingPSD())
+        self.psdFit = np.real(self.fittingPSD(wvl_idx=wvl_idx))
         psd += np.repeat(self.psdFit[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
         # --- free memory
@@ -897,16 +912,21 @@ class fourierModel:
         return psd
 
     def fittingPSD(self, wvl_idx=None):
-        """ Fitting error power spectrum density """
+        """ Fitting error power spectrum density 
+        
+        Fitting error represents high spatial frequencies beyond DM cutoff.
+        It depends on wavelength through the scaled frequency grid.
+        """
         tstart  = time.time()
-
+        
         # Get frequency parameters for this wavelength
         freq_params = self._get_freq_params(wvl_idx)
-        mskOut_ = freq_params['mskOut_']
+        k2 = freq_params['k2']
+        mskOut = freq_params['mskOut']
 
         #Instantiate the function output
         psd = np.zeros((self.freq.nOtf,self.freq.nOtf))
-        psd[mskOut_]  = self.ao.atm.spectrum(np.sqrt(self.freq.k2_[mskOut_]))
+        psd[mskOut]  = self.ao.atm.spectrum(np.sqrt(k2[mskOut]))
         self.t_fittingPSD = 1000*(time.time() - tstart)
         return psd
 
@@ -1059,38 +1079,54 @@ class fourierModel:
         # NOTE: the noise variance is the same for all WFS
         return psd
 
-    def reconstructionPSD(self):
+    def reconstructionPSD(self, wvl_idx=None):
         """ Power spectrum density of the wavefront reconstruction error
         """
         tstart = time.time()
-        psd = np.zeros((self.freq.resAO,self.freq.resAO))
+        
+        # Get frequency parameters for this wavelength
+        freq_params = self._get_freq_params(wvl_idx)
+        resAO = freq_params['resAO']
+        mskInAO = freq_params['mskInAO']
+        pistonFilterAO = freq_params['pistonFilterAO']
+        Wphi = freq_params['Wphi']
+        
+        psd = np.zeros((resAO,resAO))
         if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
 
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
-        psd = abs(1-F)**2 * self.freq.mskInAO_ * self.Wphi * self.freq.pistonFilterAO_
+        psd = abs(1-F)**2 * mskInAO * Wphi * pistonFilterAO
 
         self.t_recPSD = 1000*(time.time() - tstart)
         return  psd
 
-    def servoLagPSD(self):
+    def servoLagPSD(self, wvl_idx=None):
         """ Servo-lag power spectrum density.
         Note : sometimes the sum becomes negative, a further analysis is needed
         """
         tstart = time.time()
-        psd = np.zeros((self.freq.resAO,self.freq.resAO))
+        
+        # Get frequency parameters for this wavelength
+        freq_params = self._get_freq_params(wvl_idx)
+        resAO = freq_params['resAO']
+        mskInAO = freq_params['mskInAO']
+        pistonFilterAO = freq_params['pistonFilterAO']
+        Wphi = freq_params['Wphi']
+        
+        psd = np.zeros((resAO,resAO))
         if hasattr(self, 'Rx') == False:
             self.reconstructionFilter()
 
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
-        Watm = self.Wphi * self.freq.pistonFilterAO_
+        Watm = Wphi * pistonFilterAO
         if self.ao.rtc.holoop['gain'] == 0:
             psd = abs(1-F)**2 * Watm
         else:
             psd = (1.0 + abs(F)**2*self.h2 - 2*np.real(F*self.h1))*Watm
 
         self.t_servoLagPSD = 1000*(time.time() - tstart)
-        return self.freq.mskInAO_ * abs(psd)
+        return mskInAO * abs(psd)
 
     def windShakePSD(self,wvl_idx=None):
         """ wind shake / vibrations power spectrum density.
@@ -1148,11 +1184,21 @@ class fourierModel:
         self.t_windShakePSD = 1000*(time.time() - tstart)
         return mskInAO * abs(psd)
 
-    def spatioTemporalPSD(self):
+    def spatioTemporalPSD(self, wvl_idx=None):
         """%% Power spectrum density including reconstruction, field variations and temporal effects
         """
         tstart = time.time()
-        nK = self.freq.resAO
+        
+        # Get frequency parameters for this wavelength
+        freq_params = self._get_freq_params(wvl_idx)
+        resAO = freq_params['resAO']
+        kxAO = freq_params['kxAO']
+        kyAO = freq_params['kyAO']
+        mskInAO = freq_params['mskInAO']
+        pistonFilterAO = freq_params['pistonFilterAO']
+        Wphi = freq_params['Wphi']
+        
+        nK = resAO
         psd = np.zeros((nK,nK,self.ao.src.nSrc),dtype=complex)
         i = complex(0,1)
         nH = self.ao.atm.nL
@@ -1161,7 +1207,7 @@ class fourierModel:
         deltaT = self.ao.rtc.holoop['delay']/self.ao.rtc.holoop['rate']
         wDir_x = nnp.cos(self.ao.atm.wDir*np.pi/180)
         wDir_y = nnp.sin(self.ao.atm.wDir*np.pi/180)
-        Watm = self.Wphi * self.freq.pistonFilterAO_
+        Watm = Wphi * pistonFilterAO
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
 
         for s in range(self.ao.src.nSrc):
@@ -1171,56 +1217,66 @@ class fourierModel:
                     A = np.zeros((nK, nK))
                     for l in range(self.ao.atm.nL):
                         A = A + Ws[l] \
-                            * np.exp(2*i*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]))
+                            * np.exp(2*i*np.pi*Hs[l]*(kxAO*th[1] + kyAO*th[0]))
                 else:
-                    A = np.ones((self.freq.resAO, self.freq.resAO))
+                    A = np.ones((resAO, resAO))
 
                 if (self.ao.rtc.holoop['gain'] == 0):
                     psd[:, :, s] = abs(1-F)**2 * Watm
                 else:
-                    psd[:, :, s] = self.freq.mskInAO_ * \
+                    psd[:, :, s] = mskInAO * \
                         (1 + abs(F)**2*self.h2 - 2*np.real(F*self.h1*A)) * Watm
             else:
                 # tomographic case
                 Beta = [self.ao.src.direction[0,s],self.ao.src.direction[1,s]]
                 PbetaL = np.zeros([nK, nK, 1, nH], dtype=complex)
-                fx = Beta[0]*self.freq.kxAO_
-                fy = Beta[1]*self.freq.kyAO_
+                fx = Beta[0]*kxAO
+                fy = Beta[1]*kyAO
                 for j in range(nH):
-                    freq_t = wDir_x[j]*self.freq.kxAO_+ wDir_y[j]*self.freq.kyAO_
+                    freq_t = wDir_x[j]*kxAO+ wDir_y[j]*kyAO
                     delta_h = Hs[j]*(fx+fy) - deltaT*self.ao.atm.wSpeed[j]*freq_t
                     PbetaL[: , :, 0, j] = np.exp(i*2*np.pi*delta_h)
 
                 proj = PbetaL - np.matmul(self.PbetaDM[s], self.Walpha)
                 proj_t = np.conj(proj.transpose(0, 1, 3, 2))
                 tmp = np.matmul(proj,np.matmul(self.Cphi, proj_t))
-                psd[:, :, s] = self.freq.mskInAO_ * tmp[:, :, 0, 0]*self.freq.pistonFilterAO_
+                psd[:, :, s] = mskInAO * tmp[:, :, 0, 0]*pistonFilterAO
         if self.reduce_memory:
             self.Walpha = None
         self.t_spatioTemporalPSD = 1000*(time.time() - tstart)
         return psd
 
-    def anisoplanatismPSD(self):
+    def anisoplanatismPSD(self, wvl_idx=None):
         """%% Anisoplanatism power spectrum density
         """
         tstart  = time.time()
-        psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc))
+        
+        # Get frequency parameters for this wavelength
+        freq_params = self._get_freq_params(wvl_idx)
+        resAO = freq_params['resAO']
+        kxAO = freq_params['kxAO']
+        kyAO = freq_params['kyAO']
+        mskInAO = freq_params['mskInAO']
+        pistonFilterAO = freq_params['pistonFilterAO']
+        Wphi = freq_params['Wphi']
+        
+        psd = np.zeros((resAO,resAO,self.ao.src.nSrc))
         Hs = self.ao.atm.heights * self.strechFactor
         Ws = self.ao.atm.weights
-        Watm = self.Wphi * self.freq.pistonFilterAO_
+        Watm = Wphi * pistonFilterAO
 
         for s in range(self.ao.src.nSrc):
             th  = self.ao.src.direction[:,s] - self.gs.direction[:,0]
             if any(th):
-                A = np.zeros((self.freq.resAO,self.freq.resAO))
+                A = np.zeros((resAO,resAO))
                 for l in range(self.ao.atm.nL):
                     A = A + 2 * Ws[l] * \
-                        (1 - np.cos(2*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0])))
-                psd[:,:,s] = self.freq.mskInAO_ * A*Watm
+                        (1 - np.cos(2*np.pi*Hs[l]*(kxAO*th[1] + kyAO*th[0])))
+                psd[:,:,s] = mskInAO * A*Watm
         self.t_anisoplanatismPSD = 1000*(time.time() - tstart)
         return np.real(psd)
 
-    def differentialRefractionPSD(self):
+    def differentialRefractionPSD(self, wvl_idx=None):
         def refractionIndex(wvl,nargout=1):
             ''' Refraction index -1 as a fonction of the wavelength.
             Valid for lambda between 0.2 and 4µm with 1 atm of pressure and 15 degrees Celsius
@@ -1251,14 +1307,24 @@ class fourierModel:
             return (refractionIndex(wvlSrc) - refractionIndex(wvl_gs)) * np.tan(zenithAngle)
 
         tstart  = time.time()
+        
+        # Get frequency parameters for this wavelength
+        freq_params = self._get_freq_params(wvl_idx)
+        resAO = freq_params['resAO']
+        kxAO = freq_params['kxAO']
+        kyAO = freq_params['kyAO']
+        k2AO = freq_params['k2AO']
+        mskInAO = freq_params['mskInAO']
+        pistonFilterAO = freq_params['pistonFilterAO']
+        Wphi = freq_params['Wphi']
 
-        psd= np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc))
+        psd= np.zeros((resAO,resAO,self.ao.src.nSrc))
         if self.ao.tel.zenith_angle != 0:
             Hs   = self.ao.atm.heights * self.strechFactor
             Ws   = self.ao.atm.weights
-            Watm = self.Wphi * self.freq.pistonFilterAO_
-            k    = np.sqrt(self.freq.k2AO_)
-            arg_k= np.arctan2(self.freq.kyAO_,self.freq.kxAO_)
+            Watm = Wphi * pistonFilterAO
+            k    = np.sqrt(k2AO)
+            arg_k= np.arctan2(kyAO,kxAO)
             azimuth = self.ao.src.azimuth
 
             theta = differentialRefractiveAnisoplanatism(
@@ -1270,16 +1336,23 @@ class fourierModel:
                 A = 0
                 for l in range(self.ao.atm.nL):
                     A = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*k*np.tan(theta)*np.cos(arg_k-azimuth[s])))
-                psd[:,:,s] = self.freq.mskInAO_ *A*Watm
+                psd[:,:,s] = mskInAO *A*Watm
 
         self.t_differentialRefractionPSD = 1000*(time.time() - tstart)
         return  psd
 
-    def chromatismPSD(self):
+    def chromatismPSD(self, wvl_idx=None):
         """ PSD of the chromatic effects"""
         tstart  = time.time()
-        Watm = self.Wphi * self.freq.pistonFilterAO_
-        psd= np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc))
+        
+        # Get frequency parameters for this wavelength
+        freq_params = self._get_freq_params(wvl_idx)
+        resAO = freq_params['resAO']
+        pistonFilterAO = freq_params['pistonFilterAO']
+        Wphi = freq_params['Wphi']
+        
+        Watm = Wphi * pistonFilterAO
+        psd= np.zeros((resAO,resAO,self.ao.src.nSrc))
         n2 =  23.7 + 6839.4 / (130-(self.gs.wvl[0]*1.e6)**(-2)) \
             + 45.47 / (38.9-(self.gs.wvl[0]*1.e6)**(-2))
         for s in range(self.ao.src.nSrc):
