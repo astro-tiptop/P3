@@ -919,7 +919,7 @@ class fourierModel:
         It depends on wavelength through the scaled frequency grid.
         """
         tstart  = time.time()
-        
+
         # Get frequency parameters for this wavelength
         freq_params = self._get_freq_params(wvl_idx)
         k2 = freq_params['k2']
@@ -944,6 +944,7 @@ class fourierModel:
         resAO = freq_params['resAO']
         kxAO = freq_params['kxAO']
         kyAO = freq_params['kyAO']
+        mskInAO = freq_params['mskInAO']
 
         psd = np.zeros((resAO,resAO))
         i = complex(0,1)
@@ -1091,7 +1092,7 @@ class fourierModel:
         mskInAO = freq_params['mskInAO']
         pistonFilterAO = freq_params['pistonFilterAO']
         Wphi = freq_params['Wphi']
-        
+
         psd = np.zeros((resAO,resAO))
         if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
@@ -1107,14 +1108,14 @@ class fourierModel:
         Note : sometimes the sum becomes negative, a further analysis is needed
         """
         tstart = time.time()
-        
+
         # Get frequency parameters for this wavelength
         freq_params = self._get_freq_params(wvl_idx)
         resAO = freq_params['resAO']
         mskInAO = freq_params['mskInAO']
         pistonFilterAO = freq_params['pistonFilterAO']
         Wphi = freq_params['Wphi']
-        
+
         psd = np.zeros((resAO,resAO))
         if hasattr(self, 'Rx') == False:
             self.reconstructionFilter()
@@ -1198,7 +1199,7 @@ class fourierModel:
         mskInAO = freq_params['mskInAO']
         pistonFilterAO = freq_params['pistonFilterAO']
         Wphi = freq_params['Wphi']
-        
+
         nK = resAO
         psd = np.zeros((nK,nK,self.ao.src.nSrc),dtype=complex)
         i = complex(0,1)
@@ -1251,7 +1252,7 @@ class fourierModel:
         """%% Anisoplanatism power spectrum density
         """
         tstart  = time.time()
-        
+
         # Get frequency parameters for this wavelength
         freq_params = self._get_freq_params(wvl_idx)
         resAO = freq_params['resAO']
@@ -1260,7 +1261,7 @@ class fourierModel:
         mskInAO = freq_params['mskInAO']
         pistonFilterAO = freq_params['pistonFilterAO']
         Wphi = freq_params['Wphi']
-        
+
         psd = np.zeros((resAO,resAO,self.ao.src.nSrc))
         Hs = self.ao.atm.heights * self.strechFactor
         Ws = self.ao.atm.weights
@@ -1345,13 +1346,13 @@ class fourierModel:
     def chromatismPSD(self, wvl_idx=None):
         """ PSD of the chromatic effects"""
         tstart  = time.time()
-        
+
         # Get frequency parameters for this wavelength
         freq_params = self._get_freq_params(wvl_idx)
         resAO = freq_params['resAO']
         pistonFilterAO = freq_params['pistonFilterAO']
         Wphi = freq_params['Wphi']
-        
+
         Watm = Wphi * pistonFilterAO
         psd= np.zeros((resAO,resAO,self.ao.src.nSrc))
         n2 =  23.7 + 6839.4 / (130-(self.gs.wvl[0]*1.e6)**(-2)) \
