@@ -492,12 +492,25 @@ class fourierModel:
 
         MP_t = np.conj(MP.transpose(0, 1, 3, 2))
         to_inv  = np.matmul(np.matmul(MP, self.Cphi_mod), MP_t) + self.Cb
+        rhs = np.matmul(self.Cphi_mod, MP_t)
 
-        # Wtomo
-        inv = np.linalg.inv(to_inv.astype(np.complex64))
+        # Try using solve (faster), fallback to pinv if fails
+        try:
+            # Standard solve
+            if self.verbose:
+                print("Tomography: Using standard solve")
+            Wtomo = np.linalg.solve(
+                to_inv.astype(np.complex64).transpose(0, 1, 3, 2),
+                rhs.astype(np.complex64).transpose(0, 1, 3, 2)
+            ).transpose(0, 1, 3, 2)
+        except np.linalg.LinAlgError as e:
+            # Fallback: Use pinv for singular/ill-conditioned matrices
+            if self.verbose:
+                print(f"Tomography: Standard solve failed ({e}), using pinv")
+            inv = np.linalg.pinv(to_inv.astype(np.complex64), rcond=np.finfo(np.float32).eps)
+            Wtomo = np.matmul(rhs, inv)
+
         to_inv = None
-        Wtomo = np.matmul(np.matmul(self.Cphi_mod, MP_t), inv)
-        self.t_tomo = 1000*(time.time() - tstart)
 
         return Wtomo
 
@@ -550,17 +563,24 @@ class fourierModel:
             # Tikhonov: use only the diagonal of to_inv for regularization
             to_inv_t = to_inv.transpose(0, 1, 3, 2)
             lambda_tikhonov = 1/self.ao.dms.opt_cond
-            # In-place addition on the diagonal of A to save memory
-            A = to_inv_t.astype(np.complex64) @ to_inv.astype(np.complex64)
-            to_inv = None
-            # Add lambda only on the diagonal
-            for i in range(nDm):
-                A[:, :, i, i] += lambda_tikhonov
-            b = to_inv_t.astype(np.complex64)
-            to_inv_t = None
-            mat2 = np.linalg.solve(A, b)
-            A = None
-            b = None
+            try:
+                # Build regularized system
+                A = to_inv_t.astype(np.complex64) @ to_inv.astype(np.complex64)
+                # Add regularization on diagonal
+                for ii in range(nDm):
+                    A[:, :, ii, ii] += lambda_tikhonov
+                b = to_inv_t.astype(np.complex64)
+                mat2 = np.linalg.solve(A, b)
+                A = None
+                b = None
+                if self.verbose:
+                    print("Optimal projector: Using Tikhonov regularization")
+            except np.linalg.LinAlgError as e:
+                # Fallback: use pinv on original to_inv
+                if self.verbose:
+                    print(f"Optimal projector: Tikhonov failed ({e}), using pinv")
+                mat2 = np.linalg.pinv(to_inv.astype(np.complex64),
+                                    rcond=1/self.ao.dms.opt_cond)
 
         Popt = np.matmul(mat2, mat1)
 
