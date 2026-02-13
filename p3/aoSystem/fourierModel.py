@@ -388,7 +388,8 @@ class fourierModel:
                     self.MPalphaL[:, :, g, h] = www*np.sinc(d_sub[g]*self.freq.kxAO_)\
                                                    *np.sinc(d_sub[g]*self.freq.kyAO_)\
                                                    *np.exp(i*2*np.pi*Hs[h]*(fx+fy))
-
+            fx = None
+            fy = None
             self.Walpha = np.matmul(self.W,self.MPalphaL)
         if self.reduce_memory:
             self.MPalphaL = None
@@ -1747,7 +1748,7 @@ class fourierModel:
         n_wvl = getattr(self, 'nwvl', 1)
         n_atm = getattr(self.ao.atm, 'nL', 1)
         n_dm = len(getattr(self.ao.dms, 'heights', [0]))
-
+        
         memory_breakdown = {}
         peak_breakdown = {}
 
@@ -1792,93 +1793,102 @@ class fourierModel:
         # ============ PEAK MEMORY (temporary arrays) ============
 
         if include_peak and self.ao.rtc.holoop['gain'] > 0:
-
+            
             # 1. tomographicReconstructor(): 4D matrices
             if n_gs > 1:
-                # M, P: (resAO, resAO, nGs, nGs/nAtm)
-                peak_breakdown['M'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
-                peak_breakdown['P'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
-                # MP: matmul(M, P) creates temporary for broadcasting
-                peak_breakdown['MP'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
-                # MP_t: transpose + conjugate creates copy
-                peak_breakdown['MP_t'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
-                # matmul(MP, Cphi_mod): intermediate result
-                peak_breakdown['MP_Cphi'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
-                # matmul result: to_inv
+                # M, P, MP matrices
+                peak_breakdown['tomo_M'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
+                peak_breakdown['tomo_P'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
+                peak_breakdown['tomo_MP'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
+                peak_breakdown['tomo_MP_t'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
+
+                # Cphi matrices (LARGE!)
+                peak_breakdown['tomo_Cphi'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
+                peak_breakdown['tomo_Cphi_mod'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
+
+                # Covariance computation
                 peak_breakdown['tomo_to_inv'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
-                # pinv creates temporary copies
-                peak_breakdown['tomo_inv'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
-                peak_breakdown['tomo_inv_work'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2 * 3
-                # Cphi with nAtm layers
-                peak_breakdown['Cphi'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
-                # Cphi_mod
-                peak_breakdown['Cphi_mod'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
-                # matmul(Cphi_mod, MP_t)
-                peak_breakdown['Cphi_MP_t'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
-                # Wtomo: final result
-                peak_breakdown['Wtomo'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
+                peak_breakdown['tomo_rhs'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
 
-                # 2. optimalProjector(): additional 4D matrices
-                # mat1: sum over directions
+                # solve workspace (estimated conservatively)
+                peak_breakdown['tomo_solve_work'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2 * 2
+
+                # Final Wtomo
+                peak_breakdown['tomo_Wtomo'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
+
+            # 2. optimalProjector(): 4D matrices
+            if n_gs > 1:
                 peak_breakdown['opt_mat1'] = res_ao * res_ao * n_dm * n_atm * dtype_size * 2
-                # to_inv: sum over directions
                 peak_breakdown['opt_to_inv'] = res_ao * res_ao * n_dm * n_dm * dtype_size * 2
-                # pinv/solve workspace
-                peak_breakdown['opt_work'] = res_ao * res_ao * n_dm * n_dm * dtype_size * 2 * 3
-                # mat2: inverse result
+                peak_breakdown['opt_A'] = res_ao * res_ao * n_dm * n_dm * dtype_size * 2
                 peak_breakdown['opt_mat2'] = res_ao * res_ao * n_dm * n_dm * dtype_size * 2
-                # Popt: matmul(mat2, mat1)
-                peak_breakdown['Popt'] = res_ao * res_ao * n_dm * n_atm * dtype_size * 2
+                peak_breakdown['opt_Popt'] = res_ao * res_ao * n_dm * n_atm * dtype_size * 2
 
-                # W = matmul(Popt, Wtomo): creates intermediate
-                peak_breakdown['W'] = res_ao * res_ao * n_dm * n_gs * dtype_size * 2
-                peak_breakdown['W_inter'] = res_ao * res_ao * n_dm * n_atm * dtype_size * 2
+                # W matrix
+                peak_breakdown['opt_W'] = res_ao * res_ao * n_dm * n_gs * dtype_size * 2
 
-            # 3. aliasingPSD(): broadcasting creates HUGE temporary arrays
-            # Original implementation: (2*nTimes, 2*nTimes, resAO**2)
-            n_shifts = (2 * n_times) ** 2
-            # km, kn: broadcasting creates full grids
+            # 3. aliasingPSD(): high memory usage due to large intermediate arrays,
+            # especially for the frequency grids and the avr computation
+            n_shifts = (2 * n_times) ** 2  # es. 16 per nTimes=2
+
+            # Frequency grids: (nShifts_x, nShifts_y, resAO²)
             peak_breakdown['alias_km'] = n_shifts * res_ao * res_ao * dtype_size * 2
             peak_breakdown['alias_kn'] = n_shifts * res_ao * res_ao * dtype_size * 2
-            # PR: pistonFilter result
+
+            # Piston filter, spectrum, Q
             peak_breakdown['alias_PR'] = n_shifts * res_ao * res_ao * dtype_size * 2
-            # W_mn: atmospheric spectrum
             peak_breakdown['alias_W_mn'] = n_shifts * res_ao * res_ao * dtype_size * 2
-            # Q: reconstructor application
             peak_breakdown['alias_Q'] = n_shifts * res_ao * res_ao * dtype_size * 2
-            # avr: sum over layers (nAtm, nShifts, resAO**2)
-            peak_breakdown['alias_avr_layer'] = n_atm * n_shifts * res_ao * res_ao * dtype_size * 2
+
+            # THIS IS THE BIG ONE: the avr array, which is computed as a sum over
+            # atmospheric layers of products of sinc and exp terms.
+            # avr = (np.sinc(km * vx_exp * T) * np.sinc(kn * vy_exp * T) * 
+            #        np.exp(2j * np.pi * (km * vx_exp + kn * vy_exp) * td) * tf_flat)
+            #
+            # NumPy crea array temporanei per:
+            # - km * vx_exp: (nAtm, nShifts, nShifts, K) → broadcasting
+            # - kn * vy_exp: (nAtm, nShifts, nShifts, K) → broadcasting
+            # - Each np.sinc(): temporary copy
+            # - Each np.exp(): temporary copy
+            # - Each multiplication: possible temporary copy
+
+            # Broadcasting: km * vx_exp → (35, 16, 51076) complex
+            peak_breakdown['alias_km_vx'] = n_atm * n_shifts * res_ao * res_ao * dtype_size * 2
+            peak_breakdown['alias_kn_vy'] = n_atm * n_shifts * res_ao * res_ao * dtype_size * 2
+
+            # Intermediate products (stima conservativa: 2-3 copie temporanee)
+            peak_breakdown['alias_sinc_products'] = 2 * n_atm * n_shifts * res_ao * res_ao * dtype_size * 2
+
+            # avr result: sum over layers → (nShifts, nShifts, K)
             peak_breakdown['alias_avr'] = n_shifts * res_ao * res_ao * dtype_size * 2
-            # Intermediate products
+
+            # Final result
             peak_breakdown['alias_result'] = n_shifts * res_ao * res_ao * dtype_size * 2
 
-            # 4. spatioTemporalPSD(): per source, creates projections
+            # 4. spatioTemporalPSD(): per source
             if n_gs > 1:
-                # PbetaL per source
+                # PbetaL: one per layer
                 peak_breakdown['ST_PbetaL'] = res_ao * res_ao * n_atm * dtype_size * 2
-                # PbetaDM @ Walpha: intermediate matmul
-                peak_breakdown['ST_PbetaDM_W'] = res_ao * res_ao * n_dm * n_atm * dtype_size * 2
-                # proj = PbetaL - result
+                # proj = PbetaL - PbetaDM @ Walpha
                 peak_breakdown['ST_proj'] = res_ao * res_ao * n_atm * dtype_size * 2
-                # matmul(proj, Cphi): intermediate
-                peak_breakdown['ST_proj_Cphi'] = res_ao * res_ao * n_atm * dtype_size * 2
-                # matmul(..., proj_t): final per source
+                peak_breakdown['ST_proj_t'] = res_ao * res_ao * n_atm * dtype_size * 2
+                # Intermediate matmul
+                peak_breakdown['ST_matmul'] = res_ao * res_ao * n_atm * dtype_size * 2
+                # Result per source
                 peak_breakdown['ST_result'] = res_ao * res_ao * dtype_size * 2
 
-            # 5. controller(): wind speed grids
-            n_theta = 1  # simplified
+            # 5. controller(): wind transfer functions
+            n_theta = 1
             peak_breakdown['ctrl_h1_buf'] = res_ao * res_ao * n_theta * dtype_size * 2
             peak_breakdown['ctrl_h2_buf'] = res_ao * res_ao * n_theta * dtype_size
             peak_breakdown['ctrl_hn_buf'] = res_ao * res_ao * n_theta * dtype_size
 
-            # 6. FFT operations (phaseStructureFunction)
-            # FFT creates temporary buffers for each wavelength/source
+            # 6. FFT operations
             peak_breakdown['fft_buffer'] = n_otf * n_otf * n_src * dtype_size * 2
             peak_breakdown['fft_work'] = n_otf * n_otf * dtype_size * 2
 
-            # 7. anisoplanatismPhaseStructureFunction (if computeFocalAnisoCov)
+            # 7. Anisoplanatism (if computeFocalAnisoCov)
             if self.computeFocalAnisoCov:
-                # Creates large covariance matrices
                 peak_breakdown['aniso_cov'] = res_ao * res_ao * n_src * n_src * dtype_size * 2
 
         # Compute totals
@@ -1897,9 +1907,13 @@ class fourierModel:
             'final_GB': final_gb,
             'peak_MB': peak_mb if include_peak else final_mb,
             'peak_GB': peak_gb if include_peak else final_gb,
-            'breakdown_final_MB': {k: v/(1024**2) for k, v in memory_breakdown.items()},
-            'breakdown_peak_temp_MB': {k: v/(1024**2) for k, v in peak_breakdown.items()} \
-                                      if include_peak else {},
+            'breakdown_final_MB': {k: v/(1024**2) for k, v in sorted(memory_breakdown.items(), 
+                                                                    key=lambda x: x[1], 
+                                                                    reverse=True)},
+            'breakdown_peak_temp_MB': {k: v/(1024**2) for k, v in sorted(peak_breakdown.items(), 
+                                                                        key=lambda x: x[1], 
+                                                                        reverse=True)} \
+                                    if include_peak else {},
             'dimensions': {
                 'nOtf': n_otf,
                 'resAO': res_ao,
@@ -1907,7 +1921,8 @@ class fourierModel:
                 'nGs': n_gs,
                 'nAtm': n_atm,
                 'nDM': n_dm,
-                'nTimes': n_times
+                'nTimes': n_times,
+                'nShifts_total': (2 * n_times) ** 2
             }
         }
 
