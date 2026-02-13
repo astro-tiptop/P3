@@ -563,7 +563,7 @@ class fourierModel:
 
         # Popt
         if nDir == 1:
-            mat2 = np.linalg.pinv(to_inv.astype(np.complex64),rcond=1/self.ao.dms.opt_cond)
+            mat2 = np.linalg.pinv(to_inv,rcond=1/self.ao.dms.opt_cond)
             to_inv = None
         else:
             # Tikhonov: use only the diagonal of to_inv for regularization
@@ -571,11 +571,11 @@ class fourierModel:
             lambda_tikhonov = 1/self.ao.dms.opt_cond
             try:
                 # Build regularized system
-                A = to_inv_t.astype(np.complex64) @ to_inv.astype(np.complex64)
+                A = to_inv_t @ to_inv
                 # Add regularization on diagonal
                 for ii in range(nDm):
                     A[:, :, ii, ii] += lambda_tikhonov
-                b = to_inv_t.astype(np.complex64)
+                b = to_inv_t
                 mat2 = np.linalg.solve(A, b)
                 A = None
                 b = None
@@ -585,7 +585,7 @@ class fourierModel:
                 # Fallback: use pinv on original to_inv
                 if self.verbose:
                     print(f"Optimal projector: Tikhonov failed ({e}), using pinv")
-                mat2 = np.linalg.pinv(to_inv.astype(np.complex64),
+                mat2 = np.linalg.pinv(to_inv,
                                     rcond=1/self.ao.dms.opt_cond)
 
         Popt = np.matmul(mat2, mat1)
