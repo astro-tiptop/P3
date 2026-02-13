@@ -426,13 +426,18 @@ class fourierModel:
             raise ValueError("The WFS type is not supported; must be Shack-Hartmann or Pyramid.")
         self.SxAv = Sx*Av
         self.SyAv = Sy*Av
+        Sx = None
+        Sy = None
+        Av = None
 
         # Reconstructor
         wvl_gs = self.gs.wvl[0]
         Watm = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_)) * (self.ao.atm.wvl/wvl_gs)**2
         gPSD = abs(self.SxAv)**2 + abs(self.SyAv)**2 + MV*self.Wn/Watm
+        Watm = None
         self.Rx = np.conj(self.SxAv)/gPSD
         self.Ry = np.conj(self.SyAv)/gPSD
+        gPSD = None
 
         # Set central point (i.e. kx=0,ky=0) to zero
         self.Rx[self.freq.resAO//2, self.freq.resAO//2] = 0
