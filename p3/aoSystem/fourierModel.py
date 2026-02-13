@@ -928,52 +928,60 @@ class fourierModel:
         )
         # Mask to exclude (0,0) shift
         mask = (mi != 0) | (ni != 0)
-        # Reshape mi and ni for broadcasting
-        mi = mi[:, :, None]  # Shape (N, N, 1)
-        ni = ni[:, :, None]  # Shape (N, N, 1)
-        # Ensure kxAO_ and kyAO_ are 1D
+        # Reshape for broadcasting
+        mi = mi[:, :, None]  # Shape (nShifts, nShifts, 1)
+        ni = ni[:, :, None]
+
+        # Frequency arrays (flatten to 1D for clean broadcasting)
         kxAO = self.freq.kxAO_.ravel()  # Shape (K,)
-        kyAO = self.freq.kyAO_.ravel()  # Shape (K,)
-        # Broadcast km and kn correctly
-        km = kxAO[None, None, :] - mi / d  # Shape (N, N, K)
-        kn = kyAO[None, None, :] - ni / d  # Shape (N, N, K)
-        NN = Rx.shape
-        # Compute PR using vectorized function
-        PR = FourierUtils.pistonFilter(self.ao.tel.D,
-                                       np.hypot(km, kn),
-                                       fm=mi[:, :, None] / d,
-                                       fn=ni[:, :, None] / d)
-        # Compute W_mn
+        kyAO = self.freq.kyAO_.ravel()
+
+        # Shifted frequencies (broadcasts to: nShifts x nShifts x K)
+        km = kxAO[None, None, :] - mi / d
+        kn = kyAO[None, None, :] - ni / d
+
+        NN = self.Rx.shape
+
+        # Piston filter
+        PR = FourierUtils.pistonFilter(
+            self.ao.tel.D,
+            np.hypot(km, kn),
+            fm=mi[:, :, None] / d,
+            fn=ni[:, :, None] / d
+        )
+
+        # Atmospheric spectrum
         W_mn = (km**2 + kn**2 + 1 / self.ao.atm.L0**2) ** (-11 / 6)
-        # Ensure Rx and Ry are 1D (flatten if needed)
-        Rx = Rx.ravel()  # Shape (K,)
-        Ry = Ry.ravel()  # Shape (K,)
-        # Ensure Rx and Ry are reshaped correctly for broadcasting
-        Rx = Rx[None, None, :]  # Shape (1, 1, K)
-        Ry = Ry[None, None, :]  # Shape (1, 1, K)
-        # Compute Q factor
+
+        # Reconstructor (reshape for broadcasting)
+        Rx = Rx.ravel()[None, None, :]  # Shape (1, 1, K)
+        Ry = Ry.ravel()[None, None, :]
+
+        # Q factor
         Q = (Rx * km + Ry * kn) * (np.sinc(d * km) * np.sinc(d * kn))
-        # Compute avr using broadcasting
-        vx_exp = vx.ravel()
-        vy_exp = vy.ravel()
-        vx_exp = vx_exp[:, None, None, None]  # Shape (nL, 1, 1, 1)
-        vy_exp = vy_exp[:, None, None, None]  # Shape (nL, 1, 1, 1)
-        vx_exp = np.asarray(vx_exp)
-        vy_exp = np.asarray(vy_exp)
-        f1 = km * vx_exp * T
-        f2 = km * vx_exp * T
-        f3 = 2j * np.pi * km * vx_exp * td
-        f4 = 2j * np.pi * kn * vy_exp * td
-        # Ensure tf is correctly shaped for broadcasting
-        tf = np.asarray(tf.ravel()[None, None, None, :]) # Shape (1, 1, K)
-        avr = np.sum( np.asarray(weights[:, None, None, None]) * \
-            (np.sinc(f1) * np.sinc(f2) * np.exp(f3) * np.exp(f4) * tf), axis=0 )
-        # Compute final PSD
+
+        # Layer-dependent terms (reshape for broadcasting)
+        vx_exp = np.asarray(vx.ravel()[:, None, None, None])  # Shape (nL, 1, 1, 1)
+        vy_exp = np.asarray(vy.ravel()[:, None, None, None])
+        tf_flat = np.asarray(tf.ravel()[None, None, None, :])  # Shape (1, 1, 1, K)
+        weights_exp = np.asarray(weights[:, None, None, None])
+
+        # Compute layer-averaged transfer function
+        # This is the memory bottleneck: creates (nL, nShifts, nShifts, K) arrays
+        avr = (np.sinc(km * vx_exp * T) *
+            np.sinc(kn * vy_exp * T) *
+            np.exp(2j * np.pi * (km * vx_exp + kn * vy_exp) * td) *
+            tf_flat)
+
+        # Sum over atmospheric layers
+        avr = np.sum(weights_exp * avr, axis=0)  # Shape (nShifts, nShifts, K)
+
+        # Compute aliasing PSD
         psd = np.sum(PR * W_mn * np.abs(Q * avr) ** 2 * mask[:, :, None], axis=(0, 1))
         psd = np.reshape(psd, NN)
 
-        self.t_aliasingPSD = 1000*(time.time() - tstart)
-        return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3)*0.0229
+        self.t_aliasingPSD = 1000 * (time.time() - tstart)
+        return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3) * 0.0229
 
     def noisePSD(self):
         """Noise error power spectrum density
