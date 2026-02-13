@@ -311,8 +311,9 @@ class fourierModel:
         If wvl_idx is None or multiWvlPSD is False, returns reference wavelength params.
         
         Returns:
-            dict with keys: 'resAO', 'kxAO', 'kyAO', 'k2AO', 'pistonFilterAO', 'mskInAO', 'mskOutAO', 'Wphi',
-                           'kx', 'ky', 'k2', 'pistonFilter', 'mskOut', 'mskIn'
+            dict with keys: 'resAO', 'kxAO', 'kyAO', 'k2AO', 'pistonFilterAO',
+                            'mskInAO', 'mskOutAO', 'Wphi', 'kx', 'ky', 'k2',
+                            'pistonFilter', 'mskOut', 'mskIn'
         """
         if not self.multiWvlPSD or wvl_idx is None:
             return {

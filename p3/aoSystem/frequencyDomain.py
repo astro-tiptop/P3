@@ -81,6 +81,7 @@ class frequencyDomain():
 
         self.kcExt  = kcExt
         self.Hfilter = Hfilter
+        self.multiWvlPSD = multiWvlPSD
 
         # MANAGING THE WAVELENGTH
         self.nBin = self.ao.cam.nWvl # number of spectral bins for polychromatic PSFs
