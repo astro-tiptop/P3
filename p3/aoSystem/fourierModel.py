@@ -912,6 +912,7 @@ class fourierModel:
             np.arange(-self.freq.nTimes, self.freq.nTimes),
             indexing="ij"
         )
+        # Mask to exclude (0,0) shift
         mask = (mi != 0) | (ni != 0)
         mi = mi[:, :, None]  # Shape (nShifts, nShifts, 1)
         ni = ni[:, :, None]
@@ -921,7 +922,7 @@ class fourierModel:
         kyAO = self.freq.kyAO_.ravel()
 
         # Shifted frequencies (broadcasts to: nShifts x nShifts x K)
-        km = kxAO[None, None, :] - mi / d 
+        km = kxAO[None, None, :] - mi / d
         kn = kyAO[None, None, :] - ni / d
 
         NN = self.Rx.shape
