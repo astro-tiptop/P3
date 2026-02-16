@@ -967,8 +967,8 @@ class fourierModel:
             vy_chunk = vy[chunk_start:chunk_end]
 
             # Broadcast to (n_layers_chunk, 1, 1, 1) for proper broadcasting
-            vx_bc = vx_chunk[:, None, None, None]
-            vy_bc = vy_chunk[:, None, None, None]
+            vx_bc = np.asarray(vx_chunk[:, None, None, None])
+            vy_bc = np.asarray(vy_chunk[:, None, None, None])
 
             # Compute transfer function for all layers in chunk simultaneously
             # Broadcasting: (n_layers_chunk, nShifts, nShifts, K)
