@@ -881,7 +881,7 @@ class fourierModel:
     def aliasingPSD(self):
         """
         Aliasing error power spectrum density
-        Memory-optimized: process layers in fixed-size chunks to limit peak memory usage
+        Memory-optimized with GPU-aware vectorized implementation
         TO BE REVIEWED IN THE CASE OF A PYRAMID WFS
         """
         tstart = time.time()
@@ -946,8 +946,8 @@ class fourierModel:
 
         tf_flat = np.asarray(tf.ravel()[None, None, :])
 
-        # **FIXED-SIZE CHUNKED PROCESSING**:
-        # Always allocate chunk_size layers, even for the last chunk
+        # **VECTORIZED CHUNKED PROCESSING**:
+        # Process layers in chunks with full vectorization
         chunk_size = 5
         avr_sum = np.zeros((mi.shape[0], mi.shape[1], len(kxAO)), dtype=complex)
 
@@ -961,12 +961,23 @@ class fourierModel:
             # Reset chunk array to zero (reusing allocation)
             avr_chunk.fill(0)
 
-            # Compute transfer function for layers in this chunk
-            for i_local, l_global in enumerate(range(chunk_start, chunk_end)):
-                avr_chunk[i_local] = (np.sinc(km * vx[l_global] * T) *
-                                    np.sinc(kn * vy[l_global] * T) *
-                                    np.exp(2j * np.pi * (km * vx[l_global] + kn * vy[l_global]) * td) *
-                                    tf_flat)
+            # **VECTORIZED COMPUTATION FOR ALL LAYERS IN CHUNK**
+            # Extract velocity components for this chunk
+            vx_chunk = vx[chunk_start:chunk_end]  # Shape: (n_layers_chunk,)
+            vy_chunk = vy[chunk_start:chunk_end]
+
+            # Broadcast to (n_layers_chunk, 1, 1, 1) for proper broadcasting
+            vx_bc = vx_chunk[:, None, None, None]
+            vy_bc = vy_chunk[:, None, None, None]
+
+            # Compute transfer function for all layers in chunk simultaneously
+            # Broadcasting: (n_layers_chunk, nShifts, nShifts, K)
+            avr_chunk[:n_layers_chunk] = (
+                np.sinc(km[None, :, :, :] * vx_bc * T) *
+                np.sinc(kn[None, :, :, :] * vy_bc * T) *
+                np.exp(2j * np.pi * (km[None, :, :, :] * vx_bc + kn[None, :, :, :] * vy_bc) * td) *
+                tf_flat[None, :, :, :]
+            )
 
             # Weighted sum over ONLY the valid layers in this chunk
             # For the last chunk, only sum over the first n_layers_chunk elements
