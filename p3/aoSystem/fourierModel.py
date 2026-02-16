@@ -1753,8 +1753,19 @@ class fourierModel:
         Approximate memory estimation (in MB) for the fourierModel 
         when calcPSF is False.
         
-        Based on empirical measurements showing aliasing PSD as the main bottleneck
-        (~2GB for typical SCAO systems).
+        Updated to reflect chunked aliasing PSD computation.
+        
+        Parameters
+        ----------
+        dtype_size : int, optional
+            Size in bytes of the data type (default: 8 for float64/complex128)
+        include_peak : bool, optional
+            If True, includes peak memory estimate during initComputations (default: True)
+        
+        Returns
+        -------
+        dict
+            Dictionary with detailed memory estimate per component
         """
 
         # Main dimensions
@@ -1835,26 +1846,27 @@ class fourierModel:
                 peak_breakdown['opt_mat1'] = res_ao * res_ao * n_dm * n_atm * dtype_size * 2
                 peak_breakdown['opt_A'] = res_ao * res_ao * n_dm * n_dm * dtype_size * 2
 
-            # 3. aliasingPSD(): MEMORY BOTTLENECK - NOW WITH FIXED-SIZE CHUNKING
+            # 3. aliasingPSD(): **UPDATED WITH CHUNKING**
+            # Now uses fixed-size chunks instead of allocating all layers at once
             n_shifts = (2 * n_times) ** 2
-            chunk_size = 5  # Fixed size
-
-            # Memory for one chunk (always chunk_size, not min(chunk_size, nAtm))
+            chunk_size = 5  # Fixed chunk size as in the implementation
+            
+            # Memory for one vectorized chunk (n_layers_chunk, nShifts, nShifts, resAO, resAO)
+            # Always allocate chunk_size layers (even if last chunk is smaller)
             peak_breakdown['alias_avr_chunk'] = chunk_size * n_shifts * res_ao * res_ao * dtype_size * 2
-
-            # Also account for avr_sum accumulator (persistent during loop)
+            
+            # Accumulator for summing chunks (nShifts, nShifts, resAO, resAO)
             peak_breakdown['alias_avr_sum'] = n_shifts * res_ao * res_ao * dtype_size * 2
+            
+            # Intermediate arrays (km, kn, PR, W_mn, Q, etc.)
+            peak_breakdown['alias_intermediates'] = 5 * n_shifts * res_ao * res_ao * dtype_size * 2
 
-            # 4. spatioTemporalPSD() - per source, relatively small
+            # 4. spatioTemporalPSD() - per source
             if n_gs > 1:
                 peak_breakdown['ST_proj'] = res_ao * res_ao * n_atm * dtype_size * 2
 
             # 5. FFT operations
             peak_breakdown['fft_buffer'] = n_otf * n_otf * dtype_size * 2
-
-        # safety margins: 20% relative and 5 MB absolute
-        peak_breakdown['safety_margin'] = max(0.2 * sum(memory_breakdown.values()), 5 * 1024**2)
-        peak_breakdown['safety_margin_absolute'] = 5 * 1024**2
 
         # Compute totals
         total_final = sum(memory_breakdown.values())
@@ -1887,8 +1899,9 @@ class fourierModel:
                 'nAtm': n_atm,
                 'nDM': n_dm,
                 'nTimes': n_times,
-                'nShifts_total': (2 * n_times) ** 2,
-                'aliasing_factor': n_atm * (2 * n_times) ** 2
+                'nShifts': (2 * n_times) ** 2,
+                'chunk_size': 5,
+                'n_chunks': (n_atm + 4) // 5  # Ceiling division
             }
         }
 
