@@ -709,12 +709,6 @@ class fourierModel:
         """ Total power spectrum density in nm^2.m^2
         """
         tstart  = time.time()
-        
-        # monitor memory usage
-        import psutil
-        process = psutil.Process()
-        mem_before = process.memory_info().rss / 1024**2  # in MB
-        print(f"Memory usage before PSD computation: {mem_before:.2f} MB")
 
         dk     = 2*self.freq.kcMax_/self.freq.resAO
         rad2nm = self.freq.wvlRef*1e9/2/np.pi
@@ -740,11 +734,6 @@ class fourierModel:
             else:
                 psd[id1:id2,id1:id2,:] = self.psdNoise
 
-            # memory prints
-            mem_after_noise = process.memory_info().rss / 1024**2  # in MB
-            print(f"Memory usage after noise PSD computation: {mem_after_noise:.2f} MB")
-            print(f"Memory increase due to noise PSD: {mem_after_noise - mem_before:.2f} MB")
-
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdNoise = None
@@ -756,11 +745,6 @@ class fourierModel:
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:]\
             + np.repeat(self.psdAlias[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
-            # memory prints
-            mem_after_aliasing = process.memory_info().rss / 1024**2  # in MB
-            print(f"Memory usage after aliasing PSD computation: {mem_after_aliasing:.2f} MB")
-            print(f"Memory increase due to aliasing PSD: {mem_after_aliasing - mem_after_noise:.2f} MB")
-
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdAlias = None
@@ -768,11 +752,6 @@ class fourierModel:
             # Differential refractive anisoplanatism
             self.psdDiffRef = self.differentialRefractionPSD()
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdDiffRef
-
-            # memory prints
-            mem_after_diff_ref = process.memory_info().rss / 1024**2  # in MB
-            print(f"Memory usage after differential refraction PSD computation: {mem_after_diff_ref:.2f} MB")
-            print(f"Memory increase due to differential refraction PSD: {mem_after_diff_ref - mem_after_aliasing:.2f} MB")
 
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
@@ -782,11 +761,6 @@ class fourierModel:
             self.psdChromatism = self.chromatismPSD()
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdChromatism
 
-            # memory prints
-            mem_after_chromatism = process.memory_info().rss / 1024**2  # in MB
-            print(f"Memory usage after chromatism PSD computation: {mem_after_chromatism:.2f} MB")
-            print(f"Memory increase due to chromatism PSD: {mem_after_chromatism - mem_after_diff_ref:.2f} MB")
-
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdChromatism = None
@@ -794,11 +768,6 @@ class fourierModel:
             # Add the noise and spatioTemporal PSD
             self.psdSpatioTemporal = np.real(self.spatioTemporalPSD())
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdSpatioTemporal
-
-            # memory prints
-            mem_after_spatio_temporal = process.memory_info().rss / 1024**2  # in MB
-            print(f"Memory usage after spatio-temporal PSD computation: {mem_after_spatio_temporal:.2f} MB")
-            print(f"Memory increase due to spatio-temporal PSD: {mem_after_spatio_temporal - mem_after_chromatism:.2f} MB")
 
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
@@ -812,11 +781,6 @@ class fourierModel:
                 self.psdCone = self.focalAnisoplanatismPSD()
                 psd += np.repeat(self.psdCone[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
-                # memory prints
-                mem_after_cone = process.memory_info().rss / 1024**2  # in MB
-                print(f"Memory usage after cone effect PSD computation: {mem_after_cone:.2f} MB")
-                print(f"Memory increase due to cone effect PSD: {mem_after_cone - mem_after_spatio_temporal:.2f} MB")
-
                 # --- free memory
                 if self.reduce_memory and not self.getErrorBreakDown:
                     self.psdCone = None
@@ -828,11 +792,6 @@ class fourierModel:
                     print('MCAO and laser case: adding error due to reduced volume for WF sensing')
                 self.psdMcaoWFsensCone = self.mcaoWFsensConePSD(psd)
                 psd += self.psdMcaoWFsensCone
-
-                # memory prints
-                mem_after_mcao_wf_sens_cone = process.memory_info().rss / 1024**2  # in MB
-                print(f"Memory usage after MCAO WF sensing cone PSD computation: {mem_after_mcao_wf_sens_cone:.2f} MB")
-                print(f"Memory increase due to MCAO WF sensing cone PSD: {mem_after_mcao_wf_sens_cone - mem_after_cone:.2f} MB")
 
                 # --- free memory
                 if self.reduce_memory and not self.getErrorBreakDown:
