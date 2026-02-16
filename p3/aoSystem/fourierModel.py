@@ -981,7 +981,7 @@ class fourierModel:
 
             # Weighted sum over ONLY the valid layers in this chunk
             # For the last chunk, only sum over the first n_layers_chunk elements
-            weights_chunk = weights[chunk_start:chunk_end][:, None, None, None]
+            weights_chunk = np.asarray(weights[chunk_start:chunk_end][:, None, None, None])
             avr_sum += np.sum(weights_chunk * avr_chunk[:n_layers_chunk], axis=0)
 
         # Free chunk memory
