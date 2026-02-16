@@ -1020,6 +1020,8 @@ class fourierModel:
 
         self.t_aliasingPSD = 1000 * (time.time() - tstart)
         return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3) * 0.0229
+        self.t_aliasingPSD = 1000 * (time.time() - tstart)
+        return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3) * 0.0229
 
     def noisePSD(self):
         """Noise error power spectrum density
