@@ -1799,7 +1799,7 @@ class fourierModel:
         # ============ PEAK MEMORY (temporary arrays) ============
 
         if include_peak and self.ao.rtc.holoop['gain'] > 0:
-            
+
             # 1. tomographicReconstructor(): 4D matrices
             if n_gs > 1:
                 # M, P, MP matrices
@@ -1817,7 +1817,8 @@ class fourierModel:
                 peak_breakdown['tomo_rhs'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
 
                 # solve workspace (estimated conservatively)
-                peak_breakdown['tomo_solve_work'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2 * 2
+                peak_breakdown['tomo_solve_work'] = res_ao * res_ao * n_gs \
+                                                    * n_gs * dtype_size * 2 * 2
 
                 # Final Wtomo
                 peak_breakdown['tomo_Wtomo'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
@@ -1848,10 +1849,10 @@ class fourierModel:
 
             # THIS IS THE BIG ONE: the avr array, which is computed as a sum over
             # atmospheric layers of products of sinc and exp terms.
-            # avr = (np.sinc(km * vx_exp * T) * np.sinc(kn * vy_exp * T) * 
+            # avr = (np.sinc(km * vx_exp * T) * np.sinc(kn * vy_exp * T) *
             #        np.exp(2j * np.pi * (km * vx_exp + kn * vy_exp) * td) * tf_flat)
             #
-            # NumPy crea array temporanei per:
+            # NumPy create temporary array for:
             # - km * vx_exp: (nAtm, nShifts, nShifts, K) → broadcasting
             # - kn * vy_exp: (nAtm, nShifts, nShifts, K) → broadcasting
             # - Each np.sinc(): temporary copy
@@ -1862,8 +1863,9 @@ class fourierModel:
             peak_breakdown['alias_km_vx'] = n_atm * n_shifts * res_ao * res_ao * dtype_size * 2
             peak_breakdown['alias_kn_vy'] = n_atm * n_shifts * res_ao * res_ao * dtype_size * 2
 
-            # Intermediate products (stima conservativa: 2-3 copie temporanee)
-            peak_breakdown['alias_sinc_products'] = 2 * n_atm * n_shifts * res_ao * res_ao * dtype_size * 2
+            # Intermediate products (conservative estimate: 2-3 temporary copies)
+            peak_breakdown['alias_sinc_products'] = 2 * n_atm * n_shifts * res_ao \
+                                                    * res_ao * dtype_size * 2
 
             # avr result: sum over layers → (nShifts, nShifts, K)
             peak_breakdown['alias_avr'] = n_shifts * res_ao * res_ao * dtype_size * 2
