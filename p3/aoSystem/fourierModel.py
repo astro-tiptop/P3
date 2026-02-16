@@ -912,8 +912,9 @@ class fourierModel:
             np.arange(-self.freq.nTimes, self.freq.nTimes),
             indexing="ij"
         )
+        # Mask to exclude (0,0) shift
         mask = (mi != 0) | (ni != 0)
-        mi = mi[:, :, None]
+        mi = mi[:, :, None]  # Shape (nShifts, nShifts, 1)
         ni = ni[:, :, None]
 
         # Frequency arrays (flatten to 1D for clean broadcasting)
