@@ -32,3 +32,5 @@ pip-delete-this-directory.txt
 nosetests.xml
 coverage.xml
 
+.vscode
+.DS_Store
