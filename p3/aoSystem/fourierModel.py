@@ -1719,6 +1719,165 @@ class fourierModel:
 
         self.t_getPsfMetrics = 1000*(time.time() - tstart)
 
+    def estimate_memory_usage(self, dtype_size=8, include_peak=True):
+        """
+        Approximate memory estimation (in MB) for the fourierModel 
+        when calcPSF is False.
+        
+        Updated to reflect chunked aliasing PSD computation.
+        
+        Parameters
+        ----------
+        dtype_size : int, optional
+            Size in bytes of the data type (default: 8 for float64/complex128)
+        include_peak : bool, optional
+            If True, includes peak memory estimate during initComputations (default: True)
+        
+        Returns
+        -------
+        dict
+            Dictionary with detailed memory estimate per component
+        """
+
+        # Main dimensions
+        if not hasattr(self, 'freq'):
+            from p3.aoSystem.frequencyDomain import frequencyDomain
+            freq = frequencyDomain(
+                self.ao,
+                nyquistSampling=self.nyquistSampling,
+                computeFocalAnisoCov=self.computeFocalAnisoCov
+            )
+            n_otf = getattr(freq, 'nOtf', 0)
+            res_ao = getattr(freq, 'resAO', 0)
+            n_times = freq.nTimes
+        else:
+            n_otf = getattr(self.freq, 'nOtf', 0)
+            res_ao = getattr(self.freq, 'resAO', 0)
+            n_times = self.freq.nTimes
+
+        n_gs = getattr(self, 'nGs', 1)
+        n_src = getattr(self.ao.src, 'nSrc', n_gs)
+        n_wvl = getattr(self, 'nwvl', 1)
+        n_atm = getattr(self.ao.atm, 'nL', 1)
+        n_dm = len(getattr(self.ao.dms, 'heights', [0]))
+
+        memory_breakdown = {}
+        peak_breakdown = {}
+
+        # ============ FINAL MEMORY (persistent arrays) ============
+
+        # Main PSD (3D: nOtf x nOtf x nSrc)
+        memory_breakdown['PSD'] = n_otf * n_otf * n_src * dtype_size
+
+        # Structure function
+        memory_breakdown['SF'] = n_otf * n_otf * n_src * dtype_size
+
+        # Reconstructor arrays (if gain > 0)
+        if self.ao.rtc.holoop['gain'] > 0:
+            memory_breakdown['Rx_Ry'] = 2 * res_ao * res_ao * dtype_size * 2  # complex
+            memory_breakdown['SxAv_SyAv'] = 2 * res_ao * res_ao * dtype_size * 2
+            memory_breakdown['Wphi'] = res_ao * res_ao * dtype_size
+            memory_breakdown['h1_h2_hn'] = 3 * res_ao * res_ao * dtype_size
+
+            # Tomography (if nGs > 1 and not reduce_memory)
+            if n_gs > 1 and not self.reduce_memory:
+                memory_breakdown['Walpha'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
+                memory_breakdown['PbetaDM'] = res_ao * res_ao * n_src * n_dm * dtype_size * 2
+                memory_breakdown['Cb'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
+                memory_breakdown['Cphi'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
+
+        # Partial PSDs (if getErrorBreakDown or not reduce_memory)
+        if self.getErrorBreakDown or not self.reduce_memory:
+            memory_breakdown['psdFit'] = n_otf * n_otf * dtype_size
+            memory_breakdown['psdAlias'] = res_ao * res_ao * dtype_size
+            memory_breakdown['psdNoise'] = res_ao * res_ao * (n_src if n_gs > 1 else 1) * dtype_size
+            memory_breakdown['psdSpatioTemporal'] = res_ao * res_ao * n_src * dtype_size
+            memory_breakdown['psdDiffRef'] = res_ao * res_ao * n_src * dtype_size
+            memory_breakdown['psdChromatism'] = res_ao * res_ao * n_src * dtype_size
+
+        # Frequency arrays
+        memory_breakdown['freq_arrays'] = 5 * n_otf * n_otf * dtype_size
+        memory_breakdown['freq_arrays_AO'] = 5 * res_ao * res_ao * dtype_size
+
+        # Static OTF
+        memory_breakdown['otfDL_otfNCPA'] = 2 * n_otf * n_otf * dtype_size * 2  # complex
+
+        # ============ PEAK MEMORY (temporary arrays) ============
+
+        if include_peak and self.ao.rtc.holoop['gain'] > 0:
+
+            # 1. tomographicReconstructor(): memory-intensive for MCAO
+            if n_gs > 1:
+                peak_breakdown['tomo_Cphi'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
+                peak_breakdown['tomo_to_inv'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
+                peak_breakdown['tomo_Wtomo'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
+
+            # 2. optimalProjector()
+            if n_gs > 1:
+                peak_breakdown['opt_mat1'] = res_ao * res_ao * n_dm * n_atm * dtype_size * 2
+                peak_breakdown['opt_A'] = res_ao * res_ao * n_dm * n_dm * dtype_size * 2
+
+            # 3. aliasingPSD(): **UPDATED WITH CHUNKING**
+            # Now uses fixed-size chunks instead of allocating all layers at once
+            n_shifts = (2 * n_times) ** 2
+            chunk_size = 5  # Fixed chunk size as in the implementation
+            
+            # Memory for one vectorized chunk (n_layers_chunk, nShifts, nShifts, resAO, resAO)
+            # Always allocate chunk_size layers (even if last chunk is smaller)
+            peak_breakdown['alias_avr_chunk'] = chunk_size * n_shifts * res_ao * res_ao * dtype_size * 2
+            
+            # Accumulator for summing chunks (nShifts, nShifts, resAO, resAO)
+            peak_breakdown['alias_avr_sum'] = n_shifts * res_ao * res_ao * dtype_size * 2
+            
+            # Intermediate arrays (km, kn, PR, W_mn, Q, etc.)
+            peak_breakdown['alias_intermediates'] = 5 * n_shifts * res_ao * res_ao * dtype_size * 2
+
+            # 4. spatioTemporalPSD() - per source
+            if n_gs > 1:
+                peak_breakdown['ST_proj'] = res_ao * res_ao * n_atm * dtype_size * 2
+
+            # 5. FFT operations
+            peak_breakdown['fft_buffer'] = n_otf * n_otf * dtype_size * 2
+
+        # Compute totals
+        total_final = sum(memory_breakdown.values())
+        total_peak_temp = sum(peak_breakdown.values())
+        total_peak = total_final + total_peak_temp
+
+        final_mb = total_final / (1024**2)
+        final_gb = total_final / (1024**3)
+        peak_mb = total_peak / (1024**2)
+        peak_gb = total_peak / (1024**3)
+
+        # Prepare output
+        result = {
+            'final_MB': final_mb,
+            'final_GB': final_gb,
+            'peak_MB': peak_mb if include_peak else final_mb,
+            'peak_GB': peak_gb if include_peak else final_gb,
+            'breakdown_final_MB': {k: v/(1024**2) for k, v in sorted(memory_breakdown.items(), 
+                                                                    key=lambda x: x[1], 
+                                                                    reverse=True)},
+            'breakdown_peak_temp_MB': {k: v/(1024**2) for k, v in sorted(peak_breakdown.items(), 
+                                                                        key=lambda x: x[1], 
+                                                                        reverse=True)} \
+                                    if include_peak else {},
+            'dimensions': {
+                'nOtf': n_otf,
+                'resAO': res_ao,
+                'nSrc': n_src,
+                'nGs': n_gs,
+                'nAtm': n_atm,
+                'nDM': n_dm,
+                'nTimes': n_times,
+                'nShifts': (2 * n_times) ** 2,
+                'chunk_size': 5,
+                'n_chunks': (n_atm + 4) // 5  # Ceiling division
+            }
+        }
+
+        return result
+
 #%% DISPLAY
 
     def displayResults(self,eeRadiusInMas=75,displayContour=False):
