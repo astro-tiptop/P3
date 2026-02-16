@@ -709,6 +709,12 @@ class fourierModel:
         """ Total power spectrum density in nm^2.m^2
         """
         tstart  = time.time()
+        
+        # monitor memory usage
+        import psutil
+        process = psutil.Process()
+        mem_before = process.memory_info().rss / 1024**2  # in MB
+        print(f"Memory usage before PSD computation: {mem_before:.2f} MB")
 
         dk     = 2*self.freq.kcMax_/self.freq.resAO
         rad2nm = self.freq.wvlRef*1e9/2/np.pi
@@ -734,6 +740,11 @@ class fourierModel:
             else:
                 psd[id1:id2,id1:id2,:] = self.psdNoise
 
+            # memory prints
+            mem_after_noise = process.memory_info().rss / 1024**2  # in MB
+            print(f"Memory usage after noise PSD computation: {mem_after_noise:.2f} MB")
+            print(f"Memory increase due to noise PSD: {mem_after_noise - mem_before:.2f} MB")
+
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdNoise = None
@@ -745,6 +756,11 @@ class fourierModel:
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:]\
             + np.repeat(self.psdAlias[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
+            # memory prints
+            mem_after_aliasing = process.memory_info().rss / 1024**2  # in MB
+            print(f"Memory usage after aliasing PSD computation: {mem_after_aliasing:.2f} MB")
+            print(f"Memory increase due to aliasing PSD: {mem_after_aliasing - mem_after_noise:.2f} MB")
+
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdAlias = None
@@ -752,6 +768,11 @@ class fourierModel:
             # Differential refractive anisoplanatism
             self.psdDiffRef = self.differentialRefractionPSD()
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdDiffRef
+
+            # memory prints
+            mem_after_diff_ref = process.memory_info().rss / 1024**2  # in MB
+            print(f"Memory usage after differential refraction PSD computation: {mem_after_diff_ref:.2f} MB")
+            print(f"Memory increase due to differential refraction PSD: {mem_after_diff_ref - mem_after_aliasing:.2f} MB")
 
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
@@ -761,6 +782,11 @@ class fourierModel:
             self.psdChromatism = self.chromatismPSD()
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdChromatism
 
+            # memory prints
+            mem_after_chromatism = process.memory_info().rss / 1024**2  # in MB
+            print(f"Memory usage after chromatism PSD computation: {mem_after_chromatism:.2f} MB")
+            print(f"Memory increase due to chromatism PSD: {mem_after_chromatism - mem_after_diff_ref:.2f} MB")
+
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdChromatism = None
@@ -768,6 +794,11 @@ class fourierModel:
             # Add the noise and spatioTemporal PSD
             self.psdSpatioTemporal = np.real(self.spatioTemporalPSD())
             psd[id1:id2,id1:id2,:] = psd[id1:id2,id1:id2,:] + self.psdSpatioTemporal
+
+            # memory prints
+            mem_after_spatio_temporal = process.memory_info().rss / 1024**2  # in MB
+            print(f"Memory usage after spatio-temporal PSD computation: {mem_after_spatio_temporal:.2f} MB")
+            print(f"Memory increase due to spatio-temporal PSD: {mem_after_spatio_temporal - mem_after_chromatism:.2f} MB")
 
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
@@ -781,6 +812,11 @@ class fourierModel:
                 self.psdCone = self.focalAnisoplanatismPSD()
                 psd += np.repeat(self.psdCone[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
+                # memory prints
+                mem_after_cone = process.memory_info().rss / 1024**2  # in MB
+                print(f"Memory usage after cone effect PSD computation: {mem_after_cone:.2f} MB")
+                print(f"Memory increase due to cone effect PSD: {mem_after_cone - mem_after_spatio_temporal:.2f} MB")
+
                 # --- free memory
                 if self.reduce_memory and not self.getErrorBreakDown:
                     self.psdCone = None
@@ -792,6 +828,11 @@ class fourierModel:
                     print('MCAO and laser case: adding error due to reduced volume for WF sensing')
                 self.psdMcaoWFsensCone = self.mcaoWFsensConePSD(psd)
                 psd += self.psdMcaoWFsensCone
+
+                # memory prints
+                mem_after_mcao_wf_sens_cone = process.memory_info().rss / 1024**2  # in MB
+                print(f"Memory usage after MCAO WF sensing cone PSD computation: {mem_after_mcao_wf_sens_cone:.2f} MB")
+                print(f"Memory increase due to MCAO WF sensing cone PSD: {mem_after_mcao_wf_sens_cone - mem_after_cone:.2f} MB")
 
                 # --- free memory
                 if self.reduce_memory and not self.getErrorBreakDown:
@@ -881,69 +922,45 @@ class fourierModel:
     def aliasingPSD(self):
         """
         Aliasing error power spectrum density
-        TO BE REVIEWED IN THE CASE OF A PYRAMID WFS
+        Memory-optimized: process layers in fixed-size chunks to limit peak memory usage
         """
-
-        tstart  = time.time()
-        psd = np.zeros((self.freq.resAO,self.freq.resAO))
-        i = complex(0,1)
+        tstart = time.time()
+        psd = np.zeros((self.freq.resAO, self.freq.resAO))
+        i = complex(0, 1)
         d = self.ao.wfs.optics[0].dsub
         clock_rate = np.array([self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)])
-        T = np.mean(clock_rate/self.ao.rtc.holoop['rate'])
+        T = np.mean(clock_rate / self.ao.rtc.holoop['rate'])
         td = T * self.ao.rtc.holoop['delay']
-        vx = self.ao.atm.wSpeed*nnp.cos(self.ao.atm.wDir*np.pi/180)
-        vy = self.ao.atm.wSpeed*nnp.sin(self.ao.atm.wDir*np.pi/180)
+        vx = self.ao.atm.wSpeed * nnp.cos(self.ao.atm.wDir * np.pi / 180)
+        vy = self.ao.atm.wSpeed * nnp.sin(self.ao.atm.wDir * np.pi / 180)
         weights = self.ao.atm.weights
-        w = 2*i*np.pi*d
+        w = 2 * i * np.pi * d
 
         if hasattr(self, 'Rx') == False:
             self.reconstructionFilter()
-        Rx = self.Rx*w
-        Ry = self.Ry*w
+        Rx = self.Rx * w
+        Ry = self.Ry * w
 
         if self.ao.rtc.holoop['gain'] == 0:
             tf = 1
         else:
             tf = self.h1
 
-        '''
-        # old, non vectorized computation, as a refernece
-        # loops on frequency shifts
-        psd = np.zeros((self.freq.resAO,self.freq.resAO))
-        for mi in range(-self.freq.nTimes,self.freq.nTimes):
-            for ni in range(-self.freq.nTimes,self.freq.nTimes):
-                if (mi!=0) | (ni!=0):
-                    km   = self.freq.kxAO_ - mi/d
-                    kn   = self.freq.kyAO_ - ni/d
-                    print('km', km.shape)
-                    PR   = FourierUtils.pistonFilter(self.ao.tel.D,np.hypot(km,kn),fm=mi/d,fn=ni/d)
-                    W_mn = (km**2 + kn**2 + 1/self.ao.atm.L0**2)**(-11/6)     
-                    Q    = (Rx*km + Ry*kn) * (np.sinc(d*km)*np.sinc(d*kn))
-                    avr  = 0
-                        
-                    for l in range(self.ao.atm.nL):
-                        avr +=  weights[l] * (np.sinc(km*vx[l]*T) * np.sinc(kn*vy[l]*T)
-                        * np.exp(2*i*np.pi*km*vx[l]*td)*np.exp(2*i*np.pi*kn*vy[l]*td)*tf)
-                                                          
-                    psd0 += PR*W_mn * abs(Q*avr)**2
-        '''
         # Create grid of frequency shifts
         mi, ni = np.meshgrid(
             np.arange(-self.freq.nTimes, self.freq.nTimes),
             np.arange(-self.freq.nTimes, self.freq.nTimes),
             indexing="ij"
         )
-        # Mask to exclude (0,0) shift
         mask = (mi != 0) | (ni != 0)
-        # Reshape for broadcasting
-        mi = mi[:, :, None]  # Shape (nShifts, nShifts, 1)
+        mi = mi[:, :, None]
         ni = ni[:, :, None]
 
-        # Frequency arrays (flatten to 1D for clean broadcasting)
-        kxAO = self.freq.kxAO_.ravel()  # Shape (K,)
+        # Frequency arrays
+        kxAO = self.freq.kxAO_.ravel()
         kyAO = self.freq.kyAO_.ravel()
 
-        # Shifted frequencies (broadcasts to: nShifts x nShifts x K)
+        # Shifted frequencies
         km = kxAO[None, None, :] - mi / d
         kn = kyAO[None, None, :] - ni / d
 
@@ -960,31 +977,45 @@ class fourierModel:
         # Atmospheric spectrum
         W_mn = (km**2 + kn**2 + 1 / self.ao.atm.L0**2) ** (-11 / 6)
 
-        # Reconstructor (reshape for broadcasting)
-        Rx = Rx.ravel()[None, None, :]  # Shape (1, 1, K)
+        # Reconstructor
+        Rx = Rx.ravel()[None, None, :]
         Ry = Ry.ravel()[None, None, :]
-
-        # Q factor
         Q = (Rx * km + Ry * kn) * (np.sinc(d * km) * np.sinc(d * kn))
 
-        # Layer-dependent terms (reshape for broadcasting)
-        vx_exp = np.asarray(vx.ravel()[:, None, None, None])  # Shape (nL, 1, 1, 1)
-        vy_exp = np.asarray(vy.ravel()[:, None, None, None])
-        tf_flat = np.asarray(tf.ravel()[None, None, None, :])  # Shape (1, 1, 1, K)
-        weights_exp = np.asarray(weights[:, None, None, None])
+        tf_flat = np.asarray(tf.ravel()[None, None, :])
 
-        # Compute layer-averaged transfer function
-        # This is the memory bottleneck: creates (nL, nShifts, nShifts, K) arrays
-        avr = (np.sinc(km * vx_exp * T) *
-            np.sinc(kn * vy_exp * T) *
-            np.exp(2j * np.pi * (km * vx_exp + kn * vy_exp) * td) *
-            tf_flat)
+        # **FIXED-SIZE CHUNKED PROCESSING**:
+        # Always allocate chunk_size layers, even for the last chunk
+        chunk_size = 5
+        avr_sum = np.zeros((mi.shape[0], mi.shape[1], len(kxAO)), dtype=complex)
 
-        # Sum over atmospheric layers
-        avr = np.sum(weights_exp * avr, axis=0)  # Shape (nShifts, nShifts, K)
+        # Pre-allocate chunk array ONCE (fixed size, reused across iterations)
+        avr_chunk = np.zeros((chunk_size, mi.shape[0], mi.shape[1], len(kxAO)), dtype=complex)
+
+        for chunk_start in range(0, self.ao.atm.nL, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, self.ao.atm.nL)
+            n_layers_chunk = chunk_end - chunk_start
+
+            # Reset chunk array to zero (reusing allocation)
+            avr_chunk.fill(0)
+
+            # Compute transfer function for layers in this chunk
+            for i_local, l_global in enumerate(range(chunk_start, chunk_end)):
+                avr_chunk[i_local] = (np.sinc(km * vx[l_global] * T) *
+                                    np.sinc(kn * vy[l_global] * T) *
+                                    np.exp(2j * np.pi * (km * vx[l_global] + kn * vy[l_global]) * td) *
+                                    tf_flat)
+
+            # Weighted sum over ONLY the valid layers in this chunk
+            # For the last chunk, only sum over the first n_layers_chunk elements
+            weights_chunk = weights[chunk_start:chunk_end][:, None, None, None]
+            avr_sum += np.sum(weights_chunk * avr_chunk[:n_layers_chunk], axis=0)
+
+        # Free chunk memory
+        del avr_chunk
 
         # Compute aliasing PSD
-        psd = np.sum(PR * W_mn * np.abs(Q * avr) ** 2 * mask[:, :, None], axis=(0, 1))
+        psd = np.sum(PR * W_mn * np.abs(Q * avr_sum) ** 2 * mask[:, :, None], axis=(0, 1))
         psd = np.reshape(psd, NN)
 
         self.t_aliasingPSD = 1000 * (time.time() - tstart)
@@ -1720,17 +1751,8 @@ class fourierModel:
         Approximate memory estimation (in MB) for the fourierModel 
         when calcPSF is False.
         
-        Parameters
-        ----------
-        dtype_size : int, optional
-            Size in bytes of the data type (default: 8 for float64/complex128)
-        include_peak : bool, optional
-            If True, includes peak memory estimate during initComputations (default: True)
-        
-        Returns
-        -------
-        dict
-            Dictionary with detailed memory estimate per component
+        Based on empirical measurements showing aliasing PSD as the main bottleneck
+        (~2GB for typical SCAO systems).
         """
 
         # Main dimensions
@@ -1754,7 +1776,7 @@ class fourierModel:
         n_wvl = getattr(self, 'nwvl', 1)
         n_atm = getattr(self.ao.atm, 'nL', 1)
         n_dm = len(getattr(self.ao.dms, 'heights', [0]))
-        
+
         memory_breakdown = {}
         peak_breakdown = {}
 
@@ -1800,104 +1822,37 @@ class fourierModel:
 
         if include_peak and self.ao.rtc.holoop['gain'] > 0:
 
-            # 1. tomographicReconstructor(): 4D matrices
+            # 1. tomographicReconstructor(): memory-intensive for MCAO
             if n_gs > 1:
-                # M, P, MP matrices
-                peak_breakdown['tomo_M'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
-                peak_breakdown['tomo_P'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
-                peak_breakdown['tomo_MP'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
-                peak_breakdown['tomo_MP_t'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
-
-                # Cphi matrices (LARGE!)
                 peak_breakdown['tomo_Cphi'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
-                peak_breakdown['tomo_Cphi_mod'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
-
-                # Covariance computation
                 peak_breakdown['tomo_to_inv'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
-                peak_breakdown['tomo_rhs'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
-
-                # solve workspace (estimated conservatively)
-                peak_breakdown['tomo_solve_work'] = res_ao * res_ao * n_gs \
-                                                    * n_gs * dtype_size * 2 * 2
-
-                # Final Wtomo
                 peak_breakdown['tomo_Wtomo'] = res_ao * res_ao * n_atm * n_gs * dtype_size * 2
 
-            # 2. optimalProjector(): 4D matrices
+            # 2. optimalProjector()
             if n_gs > 1:
                 peak_breakdown['opt_mat1'] = res_ao * res_ao * n_dm * n_atm * dtype_size * 2
-                peak_breakdown['opt_to_inv'] = res_ao * res_ao * n_dm * n_dm * dtype_size * 2
                 peak_breakdown['opt_A'] = res_ao * res_ao * n_dm * n_dm * dtype_size * 2
-                peak_breakdown['opt_mat2'] = res_ao * res_ao * n_dm * n_dm * dtype_size * 2
-                peak_breakdown['opt_Popt'] = res_ao * res_ao * n_dm * n_atm * dtype_size * 2
 
-                # W matrix
-                peak_breakdown['opt_W'] = res_ao * res_ao * n_dm * n_gs * dtype_size * 2
+            # 3. aliasingPSD(): MEMORY BOTTLENECK - NOW WITH FIXED-SIZE CHUNKING
+            n_shifts = (2 * n_times) ** 2
+            chunk_size = 5  # Fixed size
 
-            # 3. aliasingPSD(): high memory usage due to large intermediate arrays,
-            # especially for the frequency grids and the avr computation
-            n_shifts = (2 * n_times) ** 2  # es. 16 per nTimes=2
+            # Memory for one chunk (always chunk_size, not min(chunk_size, nAtm))
+            peak_breakdown['alias_avr_chunk'] = chunk_size * n_shifts * res_ao * res_ao * dtype_size * 2
 
-            # Frequency grids: (nShifts_x, nShifts_y, resAO²)
-            peak_breakdown['alias_km'] = n_shifts * res_ao * res_ao * dtype_size * 2
-            peak_breakdown['alias_kn'] = n_shifts * res_ao * res_ao * dtype_size * 2
+            # Also account for avr_sum accumulator (persistent during loop)
+            peak_breakdown['alias_avr_sum'] = n_shifts * res_ao * res_ao * dtype_size * 2
 
-            # Piston filter, spectrum, Q
-            peak_breakdown['alias_PR'] = n_shifts * res_ao * res_ao * dtype_size * 2
-            peak_breakdown['alias_W_mn'] = n_shifts * res_ao * res_ao * dtype_size * 2
-            peak_breakdown['alias_Q'] = n_shifts * res_ao * res_ao * dtype_size * 2
-
-            # THIS IS THE BIG ONE: the avr array, which is computed as a sum over
-            # atmospheric layers of products of sinc and exp terms.
-            # avr = (np.sinc(km * vx_exp * T) * np.sinc(kn * vy_exp * T) *
-            #        np.exp(2j * np.pi * (km * vx_exp + kn * vy_exp) * td) * tf_flat)
-            #
-            # NumPy create temporary array for:
-            # - km * vx_exp: (nAtm, nShifts, nShifts, K) → broadcasting
-            # - kn * vy_exp: (nAtm, nShifts, nShifts, K) → broadcasting
-            # - Each np.sinc(): temporary copy
-            # - Each np.exp(): temporary copy
-            # - Each multiplication: possible temporary copy
-
-            # Broadcasting: km * vx_exp → (35, 16, 51076) complex
-            peak_breakdown['alias_km_vx'] = n_atm * n_shifts * res_ao * res_ao * dtype_size * 2
-            peak_breakdown['alias_kn_vy'] = n_atm * n_shifts * res_ao * res_ao * dtype_size * 2
-
-            # Intermediate products (conservative estimate: 2-3 temporary copies)
-            peak_breakdown['alias_sinc_products'] = 2 * n_atm * n_shifts * res_ao \
-                                                    * res_ao * dtype_size * 2
-
-            # avr result: sum over layers → (nShifts, nShifts, K)
-            peak_breakdown['alias_avr'] = n_shifts * res_ao * res_ao * dtype_size * 2
-
-            # Final result
-            peak_breakdown['alias_result'] = n_shifts * res_ao * res_ao * dtype_size * 2
-
-            # 4. spatioTemporalPSD(): per source
+            # 4. spatioTemporalPSD() - per source, relatively small
             if n_gs > 1:
-                # PbetaL: one per layer
-                peak_breakdown['ST_PbetaL'] = res_ao * res_ao * n_atm * dtype_size * 2
-                # proj = PbetaL - PbetaDM @ Walpha
                 peak_breakdown['ST_proj'] = res_ao * res_ao * n_atm * dtype_size * 2
-                peak_breakdown['ST_proj_t'] = res_ao * res_ao * n_atm * dtype_size * 2
-                # Intermediate matmul
-                peak_breakdown['ST_matmul'] = res_ao * res_ao * n_atm * dtype_size * 2
-                # Result per source
-                peak_breakdown['ST_result'] = res_ao * res_ao * dtype_size * 2
 
-            # 5. controller(): wind transfer functions
-            n_theta = 1
-            peak_breakdown['ctrl_h1_buf'] = res_ao * res_ao * n_theta * dtype_size * 2
-            peak_breakdown['ctrl_h2_buf'] = res_ao * res_ao * n_theta * dtype_size
-            peak_breakdown['ctrl_hn_buf'] = res_ao * res_ao * n_theta * dtype_size
+            # 5. FFT operations
+            peak_breakdown['fft_buffer'] = n_otf * n_otf * dtype_size * 2
 
-            # 6. FFT operations
-            peak_breakdown['fft_buffer'] = n_otf * n_otf * n_src * dtype_size * 2
-            peak_breakdown['fft_work'] = n_otf * n_otf * dtype_size * 2
-
-            # 7. Anisoplanatism (if computeFocalAnisoCov)
-            if self.computeFocalAnisoCov:
-                peak_breakdown['aniso_cov'] = res_ao * res_ao * n_src * n_src * dtype_size * 2
+        # safety margins: 20% relative and 5 MB absolute
+        peak_breakdown['safety_margin'] = max(0.2 * sum(memory_breakdown.values()), 5 * 1024**2)
+        peak_breakdown['safety_margin_absolute'] = 5 * 1024**2
 
         # Compute totals
         total_final = sum(memory_breakdown.values())
@@ -1930,7 +1885,8 @@ class fourierModel:
                 'nAtm': n_atm,
                 'nDM': n_dm,
                 'nTimes': n_times,
-                'nShifts_total': (2 * n_times) ** 2
+                'nShifts_total': (2 * n_times) ** 2,
+                'aliasing_factor': n_atm * (2 * n_times) ** 2
             }
         }
 
