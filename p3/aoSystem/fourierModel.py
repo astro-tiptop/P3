@@ -916,12 +916,12 @@ class fourierModel:
         mi = mi[:, :, None]  # Shape (nShifts, nShifts, 1)
         ni = ni[:, :, None]
 
-        # Frequency arrays
-        kxAO = self.freq.kxAO_.ravel()
+        # Frequency arrays (flatten to 1D for clean broadcasting)
+        kxAO = self.freq.kxAO_.ravel()  # Shape (K,)
         kyAO = self.freq.kyAO_.ravel()
 
-        # Shifted frequencies
-        km = kxAO[None, None, :] - mi / d
+        # Shifted frequencies (broadcasts to: nShifts x nShifts x K)
+        km = kxAO[None, None, :] - mi / d 
         kn = kyAO[None, None, :] - ni / d
 
         NN = self.Rx.shape
@@ -937,8 +937,8 @@ class fourierModel:
         # Atmospheric spectrum
         W_mn = (km**2 + kn**2 + 1 / self.ao.atm.L0**2) ** (-11 / 6)
 
-        # Reconstructor
-        Rx = Rx.ravel()[None, None, :]
+        # Reconstructor (reshape for broadcasting)
+        Rx = Rx.ravel()[None, None, :]  # Shape (1, 1, K)
         Ry = Ry.ravel()[None, None, :]
         # Q factor
         Q = (Rx * km + Ry * kn) * (np.sinc(d * km) * np.sinc(d * kn))
@@ -990,8 +990,6 @@ class fourierModel:
         psd = np.sum(PR * W_mn * np.abs(Q * avr_sum) ** 2 * mask[:, :, None], axis=(0, 1))
         psd = np.reshape(psd, NN)
 
-        self.t_aliasingPSD = 1000 * (time.time() - tstart)
-        return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3) * 0.0229
         self.t_aliasingPSD = 1000 * (time.time() - tstart)
         return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3) * 0.0229
 
