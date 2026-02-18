@@ -948,7 +948,7 @@ class fourierModel:
 
         # **VECTORIZED CHUNKED PROCESSING**:
         # Process layers in chunks with full vectorization
-        chunk_size = 5
+        chunk_size = min(5, self.ao.atm.nL)  # Adjust chunk size
         avr_sum = np.zeros((mi.shape[0], mi.shape[1], len(kxAO)), dtype=complex)
 
         # Pre-allocate chunk array ONCE (fixed size, reused across iterations)
@@ -1820,15 +1820,15 @@ class fourierModel:
             # 3. aliasingPSD(): **UPDATED WITH CHUNKING**
             # Now uses fixed-size chunks instead of allocating all layers at once
             n_shifts = (2 * n_times) ** 2
-            chunk_size = 5  # Fixed chunk size as in the implementation
-            
+            chunk_size = min(5, n_atm)  # Adjust chunk size
+
             # Memory for one vectorized chunk (n_layers_chunk, nShifts, nShifts, resAO, resAO)
             # Always allocate chunk_size layers (even if last chunk is smaller)
             peak_breakdown['alias_avr_chunk'] = chunk_size * n_shifts * res_ao * res_ao * dtype_size * 2
-            
+
             # Accumulator for summing chunks (nShifts, nShifts, resAO, resAO)
             peak_breakdown['alias_avr_sum'] = n_shifts * res_ao * res_ao * dtype_size * 2
-            
+
             # Intermediate arrays (km, kn, PR, W_mn, Q, etc.)
             peak_breakdown['alias_intermediates'] = 5 * n_shifts * res_ao * res_ao * dtype_size * 2
 
