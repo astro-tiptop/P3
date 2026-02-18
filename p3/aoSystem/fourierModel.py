@@ -2147,4 +2147,7 @@ class fourierModel:
 
 import pathlib
 file_ini0 = str(pathlib.Path(__file__).parent.parent.absolute()) + '/dummy.ini'
-faoDummy = fourierModel(path_ini=file_ini0, calcPSF=False, verbose=False, display=False, path_root="", doComputations=True)
+faoDummy = fourierModel(path_ini=file_ini0, calcPSF=False, verbose=False, display=False,
+                        path_root="", doComputations=True, computeFocalAnisoCov=False,
+                        reduce_memory=True)
+faoDummy = None
