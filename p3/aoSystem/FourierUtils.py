@@ -52,15 +52,16 @@ def fftsym(x):
     elif x.ndim ==1:
         return fft.fftshift(x)
 
-def freq_array(nX,L=1,offset=1e-10):
-    k2D = np.mgrid[0:nX, 0:nX].astype(float)
+def freq_array(nX, L=1, offset=1e-10, dtype=np.float64):
+    k2D = np.mgrid[0:nX, 0:nX].astype(dtype)
     k2D[0] -= nX//2
     k2D[1] -= nX//2
-    k2D     *= np.asarray(L)
-    k2D     += offset
+    k2D     *= np.asarray(L, dtype=dtype)
+    k2D     += np.asarray(offset, dtype=dtype)
     return k2D[0],k2D[1]
 
-def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1):
+def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1,
+                 dtype=np.float64):
     """
     Returns the instrumental OTF including the static aberration and the
     diffraction-limited OTF.
@@ -69,7 +70,7 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1):
     nPup = tel.pupil.shape[0]
 
     # ADDING STATIC MAP
-    phaseStat = np.zeros((nPup,nPup))
+    phaseStat = np.zeros((nPup,nPup), dtype=dtype)
     if not tel.opdMap_on is None and nnp.any(tel.opdMap_on):
         if theta_ext:
             tel.opdMap_on = scnd.rotate(tel.opdMap_on,theta_ext,reshape=False)
@@ -77,7 +78,7 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1):
 
     # ADDING USER-SPECIFIED STATIC MODES
     phaseMap = 0
-    xStat = np.asarray(xStat)
+    xStat = np.asarray(xStat, dtype=dtype)
     if not tel.statModes is None and nnp.any(tel.statModes):
         if tel.statModes.shape[2]==xStat.size:
             phaseMap = 2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)
@@ -102,11 +103,14 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1):
             otfDL = interpolateSupport(otfDL, nOtf)
             otfDL/= otfDL.max()
 
+    otfStat = otfStat.astype(dtype)
+    otfDL = otfDL.astype(dtype)
+
     return otfStat, otfDL, phaseMap
 
-def instantiateAngularFrequencies(nOtf,fact=2):
+def instantiateAngularFrequencies(nOtf, fact=2, dtype=np.float64):
     # DEFINING THE DOMAIN ANGULAR FREQUENCIES
-    U_,V_  = shift_array(nOtf, nOtf, fact=fact) #from -1 to 1
+    U_,V_  = shift_array(nOtf, nOtf, fact=fact, dtype=dtype) #from -1 to 1
     U2_    = U_**2
     V2_    = V_**2
     UV_    = U_*V_
@@ -187,17 +191,17 @@ def otfShannon2psf(otf,nqSmpl,fovInPixel):
         # Interpolate the PSF to set the PSF pixel scale
         psf    = interpolateSupport(psf,fovInPixel)
     return psf
-                        
-def pistonFilter(D,f,fm=0,fn=0):    
-    f[np.where(np.equal(f,0))] = 1e-10 
+
+def pistonFilter(D, f, fm=0, fn=0, dtype=np.float64):
+    f[np.where(np.equal(f,0))] = 1e-10
     if len(f.shape) ==1:
-        Fx,Fy = np.meshgrid(f,f)
+        Fx,Fy = np.meshgrid(f, f, dtype=dtype)
         FX    = Fx -fm
         FY    = Fy -fn
         F     = np.pi*D*np.hypot(FX,FY)
     else:
         F     = np.pi*D*f
-    R         = sombrero(1,F)
+    R         = sombrero(1, F, dtype=dtype)
     pFilter   =  1 - 4 * R**2
     pFilter[np.where(pFilter<0)] = 0
     return pFilter
@@ -256,23 +260,23 @@ def pupil2psf(pupil,phase,overSampling):
 def sf2otf(sf):
     return np.exp(-0.5 * sf)
 
-def shift_array(nX, nY, fact=2*np.pi*complex(0,1)):
-    X, Y = np.mgrid[0:nX,0:nY].astype(float)
+def shift_array(nX, nY, fact=2*np.pi*complex(0,1), dtype=np.float64):
+    X, Y = np.mgrid[0:nX,0:nY].astype(dtype)
     X = (X-nX/2) * fact/nX
     Y = (Y-nY/2) * fact/nY
     return X,Y
 
-def sombrero(n,x):
-    x = np.asarray(x)
+def sombrero(n, x, dtype=np.float64):
+    x = np.asarray(x, dtype=dtype)
     if n==0:
         return spc.jv(0,x)/x
     else:
         if n>1:
-            out = np.zeros(x.shape)
+            out = np.zeros(x.shape, dtype=dtype)
         else:
-            out = 0.5*np.ones(x.shape)
+            out = 0.5*np.ones(x.shape, dtype=dtype)
 
-        out = np.zeros_like(x)
+        out = np.zeros_like(x, dtype=dtype)
         idx = x!=0
         out[idx] = spc.j1(x[idx])/x[idx]
         return out
@@ -600,7 +604,7 @@ def binning(image, k):
             out += image[i:k*S0:k, j:k*S1:k]
     return out
 
-def create_wavelength_vector(ao):
+def create_wavelength_vector(ao, dtype=np.float64):
     '''
         Returns the the vector containing all wavelengths from the  aoSystem
         object setup. The function accounts for the wavelength of the ao.src
@@ -627,9 +631,10 @@ def create_wavelength_vector(ao):
 
     # creating the vector of wavelengths
     nwvl = n_bin * n_cen
-    wvl = np.zeros(nwvl)
+    wvl = np.zeros(nwvl, dtype=dtype)
     for j in range(n_cen):
-        wvl[j:(j+1)*n_bin] = np.linspace(w_min[j], w_max[j], num=n_bin)
+        wvl[j:(j+1)*n_bin] = np.linspace(w_min[j], w_max[j], num=n_bin,
+                                         dtype=dtype)
 
     return wvl, nwvl
 

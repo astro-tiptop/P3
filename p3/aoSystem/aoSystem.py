@@ -61,6 +61,7 @@ class aoSystem():
 
         return resolve_config_path(path_value, self.path_root, path_p3, path_tiptop)
 
+
     def __init__(self, path_config, path_root='',
                  getPSDatNGSpositions=False,
                  psdExpansion=False,
@@ -69,6 +70,7 @@ class aoSystem():
         if path_root is None:
             path_root = ''
         self.path_root = path_root
+
 
         self.coo_stars = coo_stars
         self.psdExpansion = psdExpansion
@@ -88,11 +90,25 @@ class aoSystem():
                 self.my_data_map[section] = {}
                 for name,value in config.items(section):
                     self.my_data_map[section].update({name:eval(value)})
-
         elif path_config[-4:]=='.yml':
             with open(path_config) as f:
                 my_yaml_dict = yaml.safe_load(f)
             self.my_data_map = my_yaml_dict
+
+        # Precision parameter: look for 'precision' in [COMPUTATION] section
+        self.precision = 'double'
+        if self.check_section_key('COMPUTATION') and self.check_config_key('COMPUTATION', 'precision'):
+            self.precision = str(self.get_config_value('COMPUTATION', 'precision')).lower()
+
+        # Set dtype and complex_dtype for fourierModel
+        self.dtype = np.float64
+        self.complex_dtype = np.complex128
+        if self.precision == 'single':
+            self.dtype = np.float32
+            self.complex_dtype = np.complex64
+        elif self.precision == 'double':
+            self.dtype = np.float64
+            self.complex_dtype = np.complex128
 
         self.getPSDatNGSpositions = getPSDatNGSpositions
 
