@@ -262,7 +262,8 @@ class aoSystem():
                              extraErrorLoNm=extraErrorLoNm,
                              extraErrorLoExp=extraErrorLoExp,
                              extraErrorLoMin=extraErrorLoMin,
-                             extraErrorLoMax=extraErrorLoMax)
+                             extraErrorLoMax=extraErrorLoMax,
+                             precision=self.precision)
 
         if self.check_config_key('telescope', 'TechnicalFoV'):
             self.TechnicalFoV = self.get_config_value('telescope','TechnicalFoV')

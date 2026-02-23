@@ -69,34 +69,37 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1,
     # DEFINING THE RESOLUTION/PUPIL
     nPup = tel.pupil.shape[0]
 
+    complex_dtype = np.complex128 if dtype == np.float64 else np.complex64
+
     # ADDING STATIC MAP
     phaseStat = np.zeros((nPup,nPup), dtype=dtype)
     if not tel.opdMap_on is None and nnp.any(tel.opdMap_on):
         if theta_ext:
             tel.opdMap_on = scnd.rotate(tel.opdMap_on,theta_ext,reshape=False)
-        phaseStat = (2*np.pi*1e-9/wvl) * tel.opdMap_on
+        phaseStat = ((2*np.pi*1e-9/wvl) * tel.opdMap_on).astype(dtype)
 
     # ADDING USER-SPECIFIED STATIC MODES
     phaseMap = 0
     xStat = np.asarray(xStat, dtype=dtype)
     if not tel.statModes is None and nnp.any(tel.statModes):
         if tel.statModes.shape[2]==xStat.size:
-            phaseMap = 2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)
+            phaseMap = (2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)).astype(dtype)
             phaseStat += phaseMap
 
     # FILTERING
     if not nnp.isscalar(spatialFilter):
+        spatialFilter = np.asarray(spatialFilter, dtype=dtype)
         phaseStat = (np.dot(spatialFilter,phaseStat.reshape(-1))).reshape((nPup,nPup))
 
     # INSTRUMENTAL OTF
-    otfStat = pupil2otf(tel.pupil * tel.apodizer, phaseStat, samp)
+    otfStat = np.real(pupil2otf(tel.pupil * tel.apodizer, phaseStat, samp)()
     if not otfStat is None and nnp.any(otfStat.shape!=nOtf):
         otfStat = interpolateSupport(otfStat,nOtf)
     otfStat /= otfStat.max()
 
     # DIFFRACTION-LIMITED OTF
     if nnp.all(phaseStat == 0):
-        otfDL = otfStat
+        otfDL = np.real(otfStat)
     else:
         otfDL = np.real(pupil2otf(tel.pupil * tel.apodizer, 0*phaseStat, samp))
         if nnp.any(otfDL.shape !=nOtf):
@@ -756,9 +759,11 @@ def interpolateSupport(image, n_out, kind='spline'):
                 fun_imag = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
 
         if np.any(np.iscomplex(image)):
-            return np.asarray(fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew))
+            return np.asarray(fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew),
+                              dtype=image.dtype)
         else:
-            return np.asarray(fun_real(unew,vnew))
+            return np.asarray(fun_real(unew,vnew),
+                              dtype=image.dtype)
 
 
 

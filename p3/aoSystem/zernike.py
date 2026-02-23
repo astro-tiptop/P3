@@ -28,7 +28,9 @@ class zernike:
     '''
 
 
-    def __init__(self,jIndex,resolution,D=None,pupil=[], unitNorm=False,radius=[],angle=[],cobs=0):
+    def __init__(self, jIndex, resolution, D=None, pupil=[],
+                 unitNorm=False, radius=[], angle=[], cobs=0,
+                 dtype=np.float64):
 
         # PARSING INPUTS
         if type(jIndex) != list:
@@ -49,10 +51,10 @@ class zernike:
         # DEFINE GEOMETRY
         if not self.radius:
             u           = self.resolution
-            x1D         = 2*np.linspace(-(u-1)/2,(u-1)/2,u)/u
-            x2D, y2D    = np.meshgrid(x1D,x1D)
-            self.radius = np.hypot(x2D,y2D)
-            self.angle  = np.arctan2(y2D,x2D)
+            x1D         = 2*np.linspace(-(u-1)/2,(u-1)/2,u, dtype=self.dtype)/u
+            x2D, y2D    = np.meshgrid(x1D,x1D).astype(self.dtype)
+            self.radius = np.hypot(x2D,y2D).astype(self.dtype)
+            self.angle  = np.arctan2(y2D,x2D).astype(self.dtype)
         else:
             self.resolution = len(self.radius)
 
@@ -63,7 +65,7 @@ class zernike:
         # GET RADIAL/AZIMUTHAL ORDERS
         self.n,self.m = self.findNM()
         self.nollNorm = np.sqrt((2-(self.m==0))*(self.n+1))
-        self.coeffs   = np.zeros(self.nModes)
+        self.coeffs   = np.zeros(self.nModes, dtype=self.dtype)
 
         # DEFINING POLYNOMIALS
         self.modes = self.polynomials(unitNorm=unitNorm)
@@ -91,8 +93,8 @@ class zernike:
         jIndex = np.asarray(jIndex).astype('int')
         self.nModes   = len(self.jIndex)
 
-        n = np.zeros(self.nModes)
-        m = np.zeros(self.nModes)
+        n = np.zeros(self.nModes, dtype=int)
+        m = np.zeros(self.nModes, dtype=int)
 
         for k in range(self.nModes):
             n[k] = int(np.sqrt(2 * jIndex[k] - 1) + 0.5) - 1
@@ -122,7 +124,7 @@ class zernike:
         '''
 
         def R_fun(r,n,m):
-            R = np.zeros(r.shape)
+            R = np.zeros(r.shape, dtype=self.dtype)
             s1 = int( (n + m)/2 )
             s2 = int( (n - m)/2 )
 
@@ -140,7 +142,7 @@ class zernike:
             mv      = self.m
             nf      = self.nModes
             pupLog  = self.pupil
-            modes   = np.zeros((nf,self.resolution,self.resolution))
+            modes   = np.zeros((nf,self.resolution,self.resolution), dtype=self.dtype)
             r       = self.radius[pupLog]
             o       = self.angle[pupLog]
 
@@ -205,7 +207,7 @@ class zernike:
                         z = np.array([z])
                     else:
                         z = np.atleast_1d(z)
-                    out = np.zeros(np.size(z))
+                    out = np.zeros(np.size(z), dtype=self.dtype)
                     indz = list(np.where(z == 0)[0])
                     #import pdb
                     #pdb.set_trace()
@@ -214,13 +216,13 @@ class zernike:
 
                     indnz = list(np.where(z!=0)[0])
                     if len(indnz):
-                        z    = np.array([z[i] for i in indnz])
+                        z    = np.array([z[i] for i in indnz], dtype=self.dtype)
                         ck   = 1
                         step = np.inf
                         k    = 0
                         som  = ck
-                        a    = np.array(a)
-                        b    = np.array(b)
+                        a    = np.array(a, dtype=self.dtype)
+                        b    = np.array(b, dtype=self.dtype)
                         while (k<=nmax) & (step>tol):
                             ckp1 = np.prod(a+k) * z * ck/np.prod(b+k)
                             step = abs(abs(ck) - abs(ckp1))
@@ -290,7 +292,7 @@ class zernike:
         mv      = np.append(mv[index],mv[-1])
         nv      = np.append(nv[index],nv[-1])
         nf      = len(nv)
-        zern_var= np.zeros(self.nModes)
+        zern_var= np.zeros(self.nModes, dtype=self.dtype)
 
         for cpt in range(nf):
             j = jv[cpt]
@@ -336,7 +338,7 @@ class zernike:
             print('tilts filters are either Z, G or ZG')
 
         # integration
-        cov = np.zeros((2, 2))
+        cov = np.zeros((2, 2), dtype=self.dtype)
         cov[0, 0] = integrate.quad(lambda f: f*sumLayers(f, 2, 2)*tiltsFilter(f), 0, np.inf)[0]
         cov[0, 1] = integrate.quad(lambda f: f*sumLayers(f, 2, 3)*tiltsFilter(f), 0, np.inf)[0]
         cov[1, 0] = integrate.quad(lambda f: f*sumLayers(f ,3, 2)*tiltsFilter(f), 0, np.inf)[0]
