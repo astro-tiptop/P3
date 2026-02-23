@@ -334,7 +334,8 @@ class aoSystem():
                               np.array(heights)*airmass,
                               wSpeed,
                               wDir,
-                              L0)
+                              L0,
+                              precision=self.precision)
 
         #%%  GUIDE STARS
         if not self.check_section_key('sources_HO'):
@@ -673,13 +674,17 @@ class aoSystem():
             AoArea = 'circle'
 
         # ----- creating the dm class
-        self.dms = deformableMirror(nActu, DmPitchs,
-                                    heights=DmHeights, mechCoupling=InfCoupling,
+        self.dms = deformableMirror(nActu,
+                                    DmPitchs,
+                                    heights=DmHeights,
+                                    mechCoupling=InfCoupling,
                                     modes=InfModel,
                                     opt_dir=[opt_zen,opt_az],
                                     opt_weights=opt_w,
-                                    opt_cond=cond,n_rec = nrec,
-                                    AoArea=AoArea)
+                                    opt_cond=cond,
+                                    n_rec = nrec,
+                                    AoArea=AoArea,
+                                    precision=self.precision)
 
         #%% SCIENCE DETECTOR
         if not self.check_section_key('sensor_science'):
