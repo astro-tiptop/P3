@@ -375,7 +375,7 @@ class fourierModel:
             h_dm = self.ao.dms.heights
             nDm = len(h_dm)
             nK = self.freq.resAO
-            i = complex(0, 1)
+            i = self.complex_dtype(1j)
             nH = self.ao.atm.nL
             Hs = self.ao.atm.heights * self.strechFactor
             #d = self.freq.pitch[0]
@@ -446,8 +446,8 @@ class fourierModel:
             Sy = Sx.T
         else:
             raise ValueError("The WFS type is not supported; must be Shack-Hartmann or Pyramid.")
-        self.SxAv = Sx*Av
-        self.SyAv = Sy*Av
+        self.SxAv = (Sx*Av).astype(self.complex_dtype)
+        self.SyAv = (Sy*Av).astype(self.complex_dtype)
         Sx = None
         Sy = None
         Av = None
@@ -457,8 +457,8 @@ class fourierModel:
         Watm = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_)) * (self.ao.atm.wvl/wvl_gs)**2
         gPSD = abs(self.SxAv)**2 + abs(self.SyAv)**2 + MV*self.Wn/Watm
         Watm = None
-        self.Rx = np.conj(self.SxAv)/gPSD
-        self.Ry = np.conj(self.SyAv)/gPSD
+        self.Rx = (np.conj(self.SxAv)/gPSD).astype(self.complex_dtype)
+        self.Ry = (np.conj(self.SyAv)/gPSD).astype(self.complex_dtype)
         gPSD = None
 
         # Set central point (i.e. kx=0,ky=0) to zero
@@ -506,10 +506,11 @@ class fourierModel:
         # Atmospheric PSD with the true atmosphere
         self.Cphi = np.zeros([nK,nK,nL,nL],
                              dtype=self.complex_dtype)
-        cte = (24 * spc.gamma(6/5)/5)**(5/6) * (spc.gamma(11/6)**2. / (2.*np.pi**(11/3)))
-        kernel = self.ao.atm.r0**(-5/3) * cte \
+        cte = (24 * spc.gamma(6/5)/5)**(5/6) \
+               * (spc.gamma(11/6)**2. / (2.*np.pi**(11/3))).astype(self.dtype)
+        kernel = (self.ao.atm.r0**(-5/3) * cte \
             * (self.freq.k2AO_ + 1/self.ao.atm.L0**2)**(-11/6) \
-            * self.freq.pistonFilterAO_
+            * self.freq.pistonFilterAO_).astype(self.dtype)
         self.Cphi = kernel.repeat(nL**2, axis=1)
         self.Cphi = self.Cphi.reshape((nK, nK, nL, nL)) * np.diag(self.ao.atm.weights)
 
@@ -604,7 +605,8 @@ class fourierModel:
                 # Build regularized system
                 A = to_inv_t.astype(np.complex64) @ to_inv.astype(np.complex64)
                 # Add regularization on diagonal as a fraction of the trace
-                lambda_reg = np.mean(np.diagonal(A, axis1=2, axis2=3)) * lambda_tikhonov
+                lambda_reg = (np.mean(np.diagonal(A, axis1=2, axis2=3)) \
+                             * lambda_tikhonov).astype(self.dtype)
                 idx = np.arange(nDm)
                 A[:, :, idx, idx] += lambda_reg
                 b = to_inv_t.astype(np.complex64)
