@@ -561,18 +561,18 @@ class fourierModel:
         i = complex(0,1)
 
         mat1 = np.zeros([nK, nK, nDm, nL],
-                        dtype=self.complex_dtype)
+                        dtype=np.complex64)
         to_inv = np.zeros([nK, nK, nDm, nDm],
-                          dtype=self.complex_dtype)
+                          dtype=np.complex64)
         theta_x = self.ao.dms.opt_dir[0]/206264.8 * nnp.cos(self.ao.dms.opt_dir[1]*np.pi/180)
         theta_y = self.ao.dms.opt_dir[0]/206264.8 * nnp.sin(self.ao.dms.opt_dir[1]*np.pi/180)
 
         Pdm = np.zeros([nK, nK, 1, nDm],
-                       dtype=self.complex_dtype)
+                       dtype=np.complex64)
         Pl = np.zeros([nK, nK, 1, nL],
-                      dtype=self.complex_dtype)
+                      dtype=np.complex64)
         Pdm_t = np.zeros([nK, nK, nDm, 1],
-                         dtype=self.complex_dtype)
+                         dtype=np.complex64)
         for d_o in range(nDir):                 #loop on optimization directions
             Pdm.fill(0)
             Pl.fill(0)
