@@ -1666,7 +1666,7 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=Fa
 
 #%% Data treatment
 
-def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
+def eqLayers(Cn2, altitudes, nEqLayers, power=5/3, dtype=np.float32):
     '''
              Cn2         ::  The input Cn2 profile (vector)
              altitudes   ::  The input altitudes (vector)
@@ -1686,19 +1686,20 @@ def eqLayers(Cn2, altitudes, nEqLayers, power=5/3):
     for iii in range(nEqLayers-1):
         if posSlab[iii] >= posSlab[iii+1]:
             posSlab[iii+1] = posSlab[iii]+1
-                              
+
     posSlab1 = np.concatenate((posSlab, np.asarray([nAltitudes])))
     posSlab2 = cpuArray(posSlab1)
     posSlab = posSlab2.astype(int)
 
-    Cn2eq = np.zeros(nEqLayers)
-    altEq = np.zeros(nEqLayers)
+    Cn2eq = np.zeros(nEqLayers, dtype=dtype)
+    altEq = np.zeros(nEqLayers, dtype=dtype)
 
     for ii in range(nEqLayers):
-        Cn2eq[ii] = sum(Cn2[posSlab[ii].item():posSlab[ii+1].item()])
-        altEq[ii] = (sum(altitudes[posSlab[ii].item():posSlab[ii+1].item()]**(power) * Cn2[posSlab[ii].item():posSlab[ii+1].item()])/Cn2eq[ii])**(1/power)
-       
-    return cpuArray(Cn2eq),cpuArray(altEq)
+        Cn2eq[ii] = sum(Cn2[posSlab[ii].item():posSlab[ii+1].item()]).astype(dtype)
+        altEq[ii] = ((sum(altitudes[posSlab[ii].item():posSlab[ii+1].item()]**(power) \
+                    * Cn2[posSlab[ii].item():posSlab[ii+1].item()])/Cn2eq[ii])**(1/power)).astype(dtype)
+
+    return cpuArray(Cn2eq), cpuArray(altEq)
 
 def toeplitz(matrix):
     n , m = matrix.shape

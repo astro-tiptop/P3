@@ -202,7 +202,8 @@ class fourierModel:
                 weights_mod,heights_mod = FourierUtils.eqLayers(
                     self.ao.atm.weights,
                     self.ao.atm.heights,
-                    self.ao.dms.nRecLayers
+                    self.ao.dms.nRecLayers,
+                    dtype=self.dtype
                 )
                 if self.ao.dms.nRecLayers == 1:
                     heights_mod = [0.0]
@@ -1414,7 +1415,9 @@ class fourierModel:
         z = np.exp(xc)
 
         # piston filter
-        pf = FourierUtils.pistonFilter(self.ao.tel.D, np.sqrt(self.freq.k2_), dtype=self.dtype)
+        pf = FourierUtils.pistonFilter(self.ao.tel.D,
+                                       np.sqrt(self.freq.k2_),
+                                       dtype=self.dtype)
         pf = pf[id1:id2, id1:id2]
 
         # Vectorize source-dependent calculations
@@ -1500,7 +1503,9 @@ class fourierModel:
 
         k   = np.sqrt(self.freq.k2_)
         psd = k**self.ao.tel.extraErrorExp
-        pf  = FourierUtils.pistonFilter(self.ao.tel.D, k, dtype=self.dtype)
+        pf  = FourierUtils.pistonFilter(self.ao.tel.D,
+                                        k,
+                                        dtype=self.dtype)
         psd = psd * pf
         if self.ao.tel.extraErrorMin>0:
             psd[np.where(k<self.ao.tel.extraErrorMin)] = 0
@@ -1528,7 +1533,9 @@ class fourierModel:
         tstart = time.time()
 
         k = np.sqrt(self.freq.k2_)
-        pf = FourierUtils.pistonFilter(self.ao.tel.D, k, dtype=self.dtype)
+        pf = FourierUtils.pistonFilter(self.ao.tel.D,
+                                       k,
+                                       dtype=self.dtype)
         rad2nm = (2 * self.freq.kcMax_ / self.freq.resAO) * self.freq.wvlRef * 1e9 / (2 * np.pi)
 
         psd = k**self.ao.tel.extraErrorLoExp * pf
@@ -1724,7 +1731,8 @@ class fourierModel:
         tstart  = time.time()
 
         # ----------------- GETTING THE PARAMETERS
-        (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat) = FourierUtils.sort_params_from_labels(self,x0)
+        Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat \
+            = FourierUtils.sort_params_from_labels(self, x0)
 
         # ----------------- MANAGING THE PIXEL OTF
         otfPixel=1
@@ -1761,11 +1769,11 @@ class fourierModel:
                              dtype=self.dtype)
 
         if getEnsquaredEnergy==True:
-            self.EnsqE   = np.zeros((int(self.freq.nOtf/2)+1,self.ao.src.nSrc,self.freq.nWvl),
-                                     dtype=self.dtype)
+            self.EnsqE = np.zeros((int(self.freq.nOtf/2)+1,self.ao.src.nSrc,self.freq.nWvl),
+                                  dtype=self.dtype)
         if getEncircledEnergy==True:
-            rr,radialprofile = FourierUtils.radial_profile(self.PSF[:,:,0,0])
-            self.EncE   = np.zeros((len(radialprofile),self.ao.src.nSrc,self.freq.nWvl),
+            rr, radialprofile = FourierUtils.radial_profile(self.PSF[:,:,0,0])
+            self.EncE = np.zeros((len(radialprofile),self.ao.src.nSrc,self.freq.nWvl),
                                    dtype=self.dtype)
         for n in range(self.ao.src.nSrc):
             for j in range(self.freq.nWvl):
@@ -1782,7 +1790,7 @@ class fourierModel:
 
         self.t_getPsfMetrics = 1000*(time.time() - tstart)
 
-    def estimate_memory_usage(self, dtype_size=8, include_peak=True):
+    def estimate_memory_usage(self, include_peak=True):
         """
         Approximate memory estimation (in MB) for the fourierModel 
         when calcPSF is False.
@@ -1791,8 +1799,6 @@ class fourierModel:
         
         Parameters
         ----------
-        dtype_size : int, optional
-            Size in bytes of the data type (default: 8 for float64/complex128)
         include_peak : bool, optional
             If True, includes peak memory estimate during initComputations (default: True)
         
@@ -1801,6 +1807,11 @@ class fourierModel:
         dict
             Dictionary with detailed memory estimate per component
         """
+
+        if self.dtype == np.float32:
+            dtype_size = 4
+        else:
+            dtype_size = 8
 
         # Main dimensions
         if not hasattr(self, 'freq'):
@@ -1919,7 +1930,7 @@ class fourierModel:
             'peak_MB': peak_mb if include_peak else final_mb,
             'peak_GB': peak_gb if include_peak else final_gb,
             'breakdown_final_MB': {k: v/(1024**2) for k, v in sorted(memory_breakdown.items(), 
-                                                                    key=lambda x: x[1], 
+                                                                    key=lambda x: x[1],
                                                                     reverse=True)},
             'breakdown_peak_temp_MB': {k: v/(1024**2) for k, v in sorted(peak_breakdown.items(), 
                                                                         key=lambda x: x[1], 
