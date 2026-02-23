@@ -1815,7 +1815,6 @@ class fourierModel:
 
         # Main dimensions
         if not hasattr(self, 'freq'):
-            from p3.aoSystem.frequencyDomain import frequencyDomain
             freq = frequencyDomain(
                 self.ao,
                 nyquistSampling=self.nyquistSampling,
@@ -1933,7 +1932,7 @@ class fourierModel:
                                                                     key=lambda x: x[1],
                                                                     reverse=True)},
             'breakdown_peak_temp_MB': {k: v/(1024**2) for k, v in sorted(peak_breakdown.items(), 
-                                                                        key=lambda x: x[1], 
+                                                                        key=lambda x: x[1],
                                                                         reverse=True)} \
                                     if include_peak else {},
             'dimensions': {
@@ -1979,13 +1978,13 @@ class fourierModel:
                     nmax = self.ao.src.zenith.argmax()
                     plt.figure()
                     if self.PSF.shape[2] >1 and self.PSF.shape[3] == 1:
-                        plt.title("PSFs at {:.1f} and {:.1f} arcsec from"
-                                  " center".format(self.ao.src.zenith[nmin],self.ao.src.zenith[nmax]))
+                        plt.title(f"PSFs at {self.ao.src.zenith[nmin]:.1f} and"
+                                  f" {self.ao.src.zenith[nmax]:.1f} arcsec from center")
                         P = np.concatenate((self.PSF[:,:,nmin,0],self.PSF[:,:,nmax,0]),axis=1)
                     elif self.PSF.shape[2] >1 and self.PSF.shape[3] >1:
-                        plt.title("PSFs at {:.0f} and {:.0f} arcsec from center\n - Top: {:.0f}nm"
-                                  " - Bottom:{:.0f} nm".format(self.ao.src.zenith[0],
-                                    self.ao.src.zenith[-1],1e9*self.wvl[0],1e9*self.wvl[-1]))
+                        plt.title(f"PSFs at {self.ao.src.zenith[0]:.0f} and {self.ao.src.zenith[-1]:.0f}"
+                                  f" arcsec from center\n - Top: {1e9*self.wvl[0]:.0f}nm -"
+                                  f" Bottom:{1e9*self.wvl[-1]:.0f} nm")
                         P1 = np.concatenate((self.PSF[:,:,nmin,0],self.PSF[:,:,nmax,0]),axis=1)
                         P2 = np.concatenate((self.PSF[:,:,nmin,-1],self.PSF[:,:,nmax,-1]),axis=1)
                         P  = np.concatenate((P1,P2),axis=0)
@@ -2002,15 +2001,16 @@ class fourierModel:
                         plt.figure()
                         plt.plot(self.ao.src.zenith,self.SR[:,0],'bo',markersize=10)
                         plt.xlabel("Off-axis distance")
-                        plt.ylabel("Strehl-ratio at {:.1f} nm (percents)".format(self.freq.wvlRef*1e9))
+                        plt.ylabel(f"Strehl-ratio at {self.freq.wvlRef*1e9:.1f} nm (percents)")
                         plt.show()
 
                     # FWHM
                     if hasattr(self,'FWHM') and np.any(self.FWHM) and self.FWHM.size > 1:
                         plt.figure()
-                        plt.plot(self.ao.src.zenith,0.5*(self.FWHM[0,:,0]+self.FWHM[1,:,0]),'bo',markersize=10)
+                        plt.plot(self.ao.src.zenith,0.5*(self.FWHM[0,:,0]+self.FWHM[1,:,0]),
+                                 'bo',markersize=10)
                         plt.xlabel("Off-axis distance")
-                        plt.ylabel("Mean FWHM at {:.1f} nm (mas)".format(self.freq.wvlRef*1e9))
+                        plt.ylabel(f"Mean FWHM at {self.freq.wvlRef*1e9:.1f} nm (mas)")
                         plt.show()
 
                     # Ensquared energy
@@ -2023,8 +2023,8 @@ class fourierModel:
                         plt.figure()
                         plt.plot(self.ao.src.zenith,EEtrue,'bo',markersize=10)
                         plt.xlabel("Off-axis distance")
-                        plt.ylabel("{:.1f}-mas-side Ensquared energy at {:.1f} nm"
-                                   "(percents)".format(eeRadiusInMas,self.freq.wvlRef*1e9))
+                        plt.ylabel(f"{eeRadiusInMas:.1f}-mas-side Ensquared energy at"
+                                   f" {self.freq.wvlRef*1e9:.1f} nm (percents)")
                         plt.show()
 
                     if hasattr(self,'EncE') and np.any(self.EncE):
@@ -2036,8 +2036,8 @@ class fourierModel:
                         plt.figure()
                         plt.plot(self.ao.src.zenith,EEtrue,'bo',markersize=10)
                         plt.xlabel("Off-axis distance")
-                        plt.ylabel("{:.1f}-mas-diameter Encircled energy at {:.1f} nm"
-                                   " (percents)".format(eeRadiusInMas*2,self.freq.wvlRef*1e9))
+                        plt.ylabel(f"{eeRadiusInMas*2:.1f}-mas-diameter Encircled energy at"
+                                   f" {self.freq.wvlRef*1e9:.1f} nm (percents)")
                         plt.show()
 
         self.t_displayResults = 1000*(time.time() - tstart)
@@ -2063,7 +2063,7 @@ class fourierModel:
                 contours = plt.contour(X, Y, SR, nIntervals, colors='black')
                 plt.clabel(contours, inline=True,fmt='%1.1f')
                 plt.contourf(X,Y,SR)
-                plt.title("Strehl-ratio at {:.1f} nm (percents)".format(self.freq.wvl[wvlIndex]*1e9))
+                plt.title(f"Strehl-ratio at {self.freq.wvl[wvlIndex]*1e9:.1f} nm (percents)")
                 plt.colorbar()
 
             # FWHM
@@ -2073,7 +2073,7 @@ class fourierModel:
                 contours = plt.contour(X, Y, FWHM, nIntervals, colors='black')
                 plt.clabel(contours, inline=True,fmt='%1.1f')
                 plt.contourf(X,Y,FWHM)
-                plt.title("Mean FWHM at {:.1f} nm (mas)".format(self.freq.wvl[wvlIndex]*1e9))
+                plt.title(f"Mean FWHM at {self.freq.wvl[wvlIndex]*1e9:.1f} nm (mas)")
                 plt.colorbar()
 
             # Ensquared Enery
@@ -2088,8 +2088,8 @@ class fourierModel:
                 contours = plt.contour(X, Y, EE, nIntervals, colors='black')
                 plt.clabel(contours, inline=True,fmt='%1.1f')
                 plt.contourf(X,Y,EE)
-                plt.title("{:.1f}-mas-side Ensquared energy at {:.1f} nm"
-                          " (percents)".format(eeRadiusInMas*2,self.freq.wvl[wvlIndex]*1e9))
+                plt.title(f"{eeRadiusInMas*2:.1f}-mas-side Ensquared energy at"
+                          f" {self.freq.wvl[wvlIndex]*1e9:.1f} nm (percents)")
                 plt.colorbar()
 
             # Encircled Enery
@@ -2104,8 +2104,8 @@ class fourierModel:
                 contours = plt.contour(X, Y, EE, nIntervals, colors='black')
                 plt.clabel(contours, inline=True,fmt='%1.1f')
                 plt.contourf(X,Y,EE)
-                plt.title("{:.1f}-mas-diameter Encircled energy at {:.1f} nm"
-                          " (percents)".format(eeRadiusInMas*2,self.freq.wvl[wvlIndex]*1e9))
+                plt.title(f"{eeRadiusInMas*2:.1f}-mas-diameter Encircled energy at"
+                          f" {self.freq.wvl[wvlIndex]*1e9:.1f} nm (percents)")
                 plt.colorbar()
         else:
             print('You must define a square grid for PSF evaluations directions'
@@ -2143,11 +2143,13 @@ class fourierModel:
                 print("\n--- Reconstructors & Controller ---")
 
                 if self.t_reconstructor > 0:
-                    print(f"{'WFS reconstructors initialization:':<45} {self.t_reconstructor:>8.1f} ms")
+                    print(f"{'WFS reconstructors initialization:':<45}"
+                          f" {self.t_reconstructor:>8.1f} ms")
 
                 if self.nGs > 1:
                     if self.t_finalReconstructor > 0:
-                        print(f"{'Final reconstructor calculation:':<45} {self.t_finalReconstructor:>8.1f} ms")
+                        print(f"{'Final reconstructor calculation:':<45}"
+                              f" {self.t_finalReconstructor:>8.1f} ms")
 
                     if self.t_tomo > 0:
                         print(f"  {'- Tomography:':<43} {self.t_tomo:>8.1f} ms")
@@ -2175,10 +2177,12 @@ class fourierModel:
                     print(f"{'Spatio-temporal PSD:':<45} {self.t_spatioTemporalPSD:>8.1f} ms")
 
                 if self.t_windShakePSD > 0:
-                    print(f"{'Wind shake/vibrations PSD:':<45} {self.t_windShakePSD:>8.1f} ms")
+                    print(f"{'Wind shake/vibrations PSD:':<45}"
+                          f" {self.t_windShakePSD:>8.1f} ms")
 
                 if self.t_focalAnisoplanatism > 0:
-                    print(f"{'Focal anisoplanatism PSD:':<45} {self.t_focalAnisoplanatism:>8.1f} ms")
+                    print(f"{'Focal anisoplanatism PSD:':<45}"
+                          f" {self.t_focalAnisoplanatism:>8.1f} ms")
 
                 if self.t_mcaoWFsensCone > 0:
                     print(f"{'MCAO WFS cone effect PSD:':<45} {self.t_mcaoWFsensCone:>8.1f} ms")
@@ -2193,10 +2197,12 @@ class fourierModel:
                     print(f"{'Tilt filter calculation:':<45} {self.t_tiltFilter:>8.1f} ms")
 
                 if self.t_focusFilter > 0:
-                    print(f"{'Focus filter calculation:':<45} {self.t_focusFilter:>8.1f} ms")
+                    print(f"{'Focus filter calculation:':<45}"
+                          f" {self.t_focusFilter:>8.1f} ms")
 
                 if self.t_powerSpectrumDensity > 0:
-                    print(f"\n{'Total PSD calculation:':<45} {self.t_powerSpectrumDensity:>8.1f} ms")
+                    print(f"\n{'Total PSD calculation:':<45}"
+                          f"{self.t_powerSpectrumDensity:>8.1f} ms")
 
             # Analysis
             print("\n--- Analysis ---")
