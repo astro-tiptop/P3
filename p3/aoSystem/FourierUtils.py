@@ -92,7 +92,7 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1,
         phaseStat = (np.dot(spatialFilter,phaseStat.reshape(-1))).reshape((nPup,nPup))
 
     # INSTRUMENTAL OTF
-    otfStat = np.real(pupil2otf(tel.pupil * tel.apodizer, phaseStat, samp)()
+    otfStat = np.real(pupil2otf(tel.pupil * tel.apodizer, phaseStat, samp))
     if not otfStat is None and nnp.any(otfStat.shape!=nOtf):
         otfStat = interpolateSupport(otfStat,nOtf)
     otfStat /= otfStat.max()
