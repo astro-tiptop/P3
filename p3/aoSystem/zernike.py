@@ -54,7 +54,7 @@ class zernike:
         if not self.radius:
             u           = self.resolution
             x1D         = 2*np.linspace(-(u-1)/2,(u-1)/2,u, dtype=self.dtype)/u
-            x2D, y2D    = np.meshgrid(x1D,x1D).astype(self.dtype)
+            x2D, y2D    = np.meshgrid(x1D,x1D)
             self.radius = np.hypot(x2D,y2D).astype(self.dtype)
             self.angle  = np.arctan2(y2D,x2D).astype(self.dtype)
         else:
