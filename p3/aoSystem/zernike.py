@@ -47,6 +47,8 @@ class zernike:
         self.pupil      = pupil
         self.radius     = radius
         self.angle      = angle
+        
+        self.dtype      = dtype
 
         # DEFINE GEOMETRY
         if not self.radius:
