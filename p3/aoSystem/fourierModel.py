@@ -607,7 +607,7 @@ class fourierModel:
                 A = to_inv_t.astype(np.complex64) @ to_inv.astype(np.complex64)
                 # Add regularization on diagonal as a fraction of the trace
                 lambda_reg = (np.mean(np.diagonal(A, axis1=2, axis2=3)) \
-                             * lambda_tikhonov).astype(self.dtype)
+                             * lambda_tikhonov).astype(self.complex_dtype)
                 idx = np.arange(nDm)
                 A[:, :, idx, idx] += lambda_reg
                 b = to_inv_t.astype(np.complex64)
