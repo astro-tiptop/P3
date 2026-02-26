@@ -152,9 +152,10 @@ class zernike:
             ind_m = np.argwhere(mv==0)
             if len(ind_m) > 0:
                 for cpt in ind_m:
-                    n = nv[cpt]
-                    m = mv[cpt]
-                    modes[int(cpt),pupLog] = np.sqrt(n+1)*R_fun(r,n,m)
+                    idx = int(cpt.item())
+                    n = nv[idx]
+                    m = mv[idx]
+                    modes[idx,pupLog] = np.sqrt(n+1)*R_fun(r,n,m)
 
             mod_mode = np.asarray(self.jIndex).astype('int')%2
 
@@ -162,17 +163,19 @@ class zernike:
             ind_m = np.argwhere(np.logical_and(np.logical_not(mod_mode),mv))
             if len(ind_m) > 0:
                 for cpt in ind_m:
-                    n = int(nv[cpt])
-                    m = int(mv[cpt])
-                    modes[int(cpt),pupLog] = np.sqrt(n+1)*R_fun(r,n,m)*np.sqrt(2)*np.cos(m*o)
+                    idx = int(cpt.item())
+                    n = int(nv[idx])
+                    m = int(mv[idx])
+                    modes[idx,pupLog] = np.sqrt(n+1)*R_fun(r,n,m)*np.sqrt(2)*np.cos(m*o)
 
            # Odd polynomes
             ind_m = np.argwhere(np.logical_and(mod_mode,mv))
             if len(ind_m) > 0:
                 for cpt in ind_m:
-                    n = int(nv[cpt])
-                    m = int(mv[cpt])
-                    modes[int(cpt),pupLog] = np.sqrt(n+1)*R_fun(r,n,m)*np.sqrt(2)*np.sin(m*o)
+                    idx = int(cpt.item())
+                    n = int(nv[idx])
+                    m = int(mv[idx])
+                    modes[idx,pupLog] = np.sqrt(n+1)*R_fun(r,n,m)*np.sqrt(2)*np.sin(m*o)
 
         if unitNorm:
             modes = modes * np.diag(1/self.nollNorm)
@@ -297,9 +300,10 @@ class zernike:
         zern_var= np.zeros(self.nModes, dtype=self.dtype)
 
         for cpt in range(nf):
-            j = jv[cpt]
-            n = nv[cpt]
-            m = mv[cpt]
+            idx = int(np.asarray(cpt).item())
+            j = jv[idx]
+            n = nv[idx]
+            m = mv[idx]
             index   = [i for i, x in enumerate(nv0==n) if x]
             zern_var[index] = zernCovCoef(dr0,dL0,j,j,n,m,n,m)
 
