@@ -424,7 +424,7 @@ class fourierModel:
         """
         tstart = time.time()
         # reconstructor derivation
-        i = complex(0,1)
+        i = self.complex_dtype(1j)
         d = self.ao.wfs.optics[0].dsub
 
         if self.ao.wfs.optics[0].wfstype.upper()=='SHACK-HARTMANN':
@@ -471,6 +471,10 @@ class fourierModel:
     def tomographicReconstructor(self):
         """
         Computes the tomographic reconstructor based on Neichel+09.
+        
+        Here we forced single precision for the matrix multiplications to save memory and
+        speed up computations, as the tomographic reconstructor is not very sensitive to
+        precision.
         """
         tstart = time.time()
         k = np.sqrt(self.freq.k2AO_)
@@ -479,7 +483,7 @@ class fourierModel:
         h_mod = self.atm_mod.heights*self.strechFactor_mod
         nL_mod = len(h_mod)
         nGs = self.nGs
-        i = complex(0,1)
+        i = np.complex64(1j)
         d = [self.ao.wfs.optics[j].dsub for j in range(nGs)]   #sub-aperture size
 
         # WFS operator and projection matrices
@@ -541,7 +545,8 @@ class fourierModel:
             # Fallback: Use pinv for singular/ill-conditioned matrices
             if self.verbose:
                 print(f"Tomography: Standard solve failed ({e}), using pinv")
-            inv = np.linalg.pinv(to_inv.astype(np.complex64), rcond=np.finfo(np.float32).eps)
+            inv = np.linalg.pinv(to_inv.astype(np.complex64),
+                                 rcond=np.finfo(np.float32).eps)
             Wtomo = np.matmul(rhs, inv)
 
         to_inv = None
@@ -551,6 +556,10 @@ class fourierModel:
     def optimalProjector(self):
         """
         Computes the projector from layers to DM from Neichel+09.
+        
+        Here we forced single precision for the matrix multiplications
+        to save memory and speed up computations, as the optimal projector
+        is not very sensitive to precision.
         """
         tstart = time.time()
         k = np.sqrt(self.freq.k2AO_)
@@ -560,14 +569,16 @@ class fourierModel:
         h_mod = self.atm_mod.heights * cpuArray(self.strechFactor_mod)
         nL = len(h_mod)
         nK = self.freq.resAO
-        i = complex(0,1)
+        i = np.complex64(1j)
 
         mat1 = np.zeros([nK, nK, nDm, nL],
                         dtype=np.complex64)
         to_inv = np.zeros([nK, nK, nDm, nDm],
                           dtype=np.complex64)
-        theta_x = self.ao.dms.opt_dir[0]/206264.8 * nnp.cos(self.ao.dms.opt_dir[1]*np.pi/180)
-        theta_y = self.ao.dms.opt_dir[0]/206264.8 * nnp.sin(self.ao.dms.opt_dir[1]*np.pi/180)
+        theta_x = self.ao.dms.opt_dir[0]/206264.8 \
+                * nnp.cos(self.ao.dms.opt_dir[1]*np.pi/180)
+        theta_y = self.ao.dms.opt_dir[0]/206264.8 \
+                * nnp.sin(self.ao.dms.opt_dir[1]*np.pi/180)
 
         Pdm = np.zeros([nK, nK, 1, nDm],
                        dtype=np.complex64)
@@ -596,7 +607,8 @@ class fourierModel:
 
         # Popt
         if nDir == 1:
-            mat2 = np.linalg.pinv(to_inv.astype(np.complex64),rcond=1/self.ao.dms.opt_cond)
+            mat2 = np.linalg.pinv(to_inv.astype(np.complex64),
+                                  rcond=1/self.ao.dms.opt_cond)
             to_inv = None
         else:
             # Tikhonov: use only the diagonal of to_inv for regularization
@@ -639,7 +651,7 @@ class fourierModel:
 
         if self.ao.rtc.holoop['gain']:
 
-            i = complex(0,1)
+            i = self.complex_dtype(1j)
             vx = self.ao.atm.wSpeed*nnp.cos(self.ao.atm.wDir*np.pi/180)
             vy = self.ao.atm.wSpeed*nnp.sin(self.ao.atm.wDir*np.pi/180)
             nPts = self.freq.resAO
@@ -926,7 +938,7 @@ class fourierModel:
         tstart = time.time()
         psd = np.zeros((self.freq.resAO, self.freq.resAO),
                        dtype=self.dtype)
-        i = complex(0, 1)
+        i = self.complex_dtype(1j)
         d = self.ao.wfs.optics[0].dsub
         clock_rate = np.array([self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)])
         T = np.mean(clock_rate / self.ao.rtc.holoop['rate'])
@@ -1131,7 +1143,7 @@ class fourierModel:
         psd_tilt_wind = np.interp(psd_freq, psd_data[0,:], psd_data[2,:],left=0,right=0)
 
         #rejection transfer function
-        ic      = complex(0,1)
+        ic      = self.complex_dtype(1j)
         z       = np.exp(-2*ic*np.pi/self.ao.rtc.holoop['rate']*psd_freq)
         hInt    = self.ao.rtc.holoop['gain']/(1.0 - z**(-1.0))
         rtfInt  = 1.0/(1.0 + hInt * z**(-self.ao.rtc.holoop['delay']))
@@ -1160,7 +1172,7 @@ class fourierModel:
         nK = self.freq.resAO
         psd = np.zeros((nK,nK,self.ao.src.nSrc),
                        dtype=self.dtype)
-        i = complex(0,1)
+        i = self.complex_dtype(1j)
         nH = self.ao.atm.nL
         Hs = self.ao.atm.heights * self.strechFactor
         Ws = self.ao.atm.weights
