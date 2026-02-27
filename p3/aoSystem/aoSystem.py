@@ -96,13 +96,15 @@ class aoSystem():
             self.my_data_map = my_yaml_dict
 
         # Precision parameter: look for 'precision' in [COMPUTATION] section
-        self.precision = 'double'
+        # Default to 'single' if not specified, and set dtype and complex_dtype accordingly
+        self.precision = 'single'
+        self.dtype = None
+        self.complex_dtype = None
+
         if self.check_section_key('COMPUTATION') and self.check_config_key('COMPUTATION', 'precision'):
             self.precision = str(self.get_config_value('COMPUTATION', 'precision')).lower()
 
         # Set dtype and complex_dtype for fourierModel
-        self.dtype = np.float64
-        self.complex_dtype = np.complex128
         if self.precision == 'single':
             self.dtype = np.float32
             self.complex_dtype = np.complex64
