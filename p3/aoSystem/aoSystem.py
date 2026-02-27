@@ -61,6 +61,7 @@ class aoSystem():
 
         return resolve_config_path(path_value, self.path_root, path_p3, path_tiptop)
 
+
     def __init__(self, path_config, path_root='',
                  getPSDatNGSpositions=False,
                  psdExpansion=False,
@@ -69,6 +70,7 @@ class aoSystem():
         if path_root is None:
             path_root = ''
         self.path_root = path_root
+
 
         self.coo_stars = coo_stars
         self.psdExpansion = psdExpansion
@@ -88,11 +90,27 @@ class aoSystem():
                 self.my_data_map[section] = {}
                 for name,value in config.items(section):
                     self.my_data_map[section].update({name:eval(value)})
-
         elif path_config[-4:]=='.yml':
             with open(path_config) as f:
                 my_yaml_dict = yaml.safe_load(f)
             self.my_data_map = my_yaml_dict
+
+        # Precision parameter: look for 'precision' in [COMPUTATION] section
+        # Default to 'single' if not specified, and set dtype and complex_dtype accordingly
+        self.precision = 'single'
+        self.dtype = None
+        self.complex_dtype = None
+
+        if self.check_section_key('COMPUTATION') and self.check_config_key('COMPUTATION', 'precision'):
+            self.precision = str(self.get_config_value('COMPUTATION', 'precision')).lower()
+
+        # Set dtype and complex_dtype for fourierModel
+        if self.precision == 'single':
+            self.dtype = np.float32
+            self.complex_dtype = np.complex64
+        elif self.precision == 'double':
+            self.dtype = np.float64
+            self.complex_dtype = np.complex128
 
         self.getPSDatNGSpositions = getPSDatNGSpositions
 
@@ -246,7 +264,8 @@ class aoSystem():
                              extraErrorLoNm=extraErrorLoNm,
                              extraErrorLoExp=extraErrorLoExp,
                              extraErrorLoMin=extraErrorLoMin,
-                             extraErrorLoMax=extraErrorLoMax)
+                             extraErrorLoMax=extraErrorLoMax,
+                             precision=self.precision)
 
         if self.check_config_key('telescope', 'TechnicalFoV'):
             self.TechnicalFoV = self.get_config_value('telescope','TechnicalFoV')
@@ -317,7 +336,8 @@ class aoSystem():
                               np.array(heights)*airmass,
                               wSpeed,
                               wDir,
-                              L0)
+                              L0,
+                              precision=self.precision)
 
         #%%  GUIDE STARS
         if not self.check_section_key('sources_HO'):
@@ -363,7 +383,7 @@ class aoSystem():
         self.configLO(verbose=verbose)
         self.configLO_SC(verbose=verbose)
 
-    def configLO_SC(self, verbose=True):
+    def configLO_SC(self, verbose=False):
         #%%  SCIENCE SOURCES
         if not self.check_section_key('sources_science'):
             self.raiseMissingRequiredSec('sources_science')
@@ -399,7 +419,7 @@ class aoSystem():
         #----- class definition
         self.src = source(wvlSrc,
                           zenithSrc, azimuthSrc,
-                          tag="SCIENCE",verbose=True)
+                          tag="SCIENCE",verbose=verbose)
 
         #%% HIGH-ORDER WAVEFRONT SENSOR
         if not self.check_section_key('sensor_HO'):
@@ -656,13 +676,17 @@ class aoSystem():
             AoArea = 'circle'
 
         # ----- creating the dm class
-        self.dms = deformableMirror(nActu, DmPitchs,
-                                    heights=DmHeights, mechCoupling=InfCoupling,
+        self.dms = deformableMirror(nActu,
+                                    DmPitchs,
+                                    heights=DmHeights,
+                                    mechCoupling=InfCoupling,
                                     modes=InfModel,
                                     opt_dir=[opt_zen,opt_az],
                                     opt_weights=opt_w,
-                                    opt_cond=cond,n_rec = nrec,
-                                    AoArea=AoArea)
+                                    opt_cond=cond,
+                                    n_rec = nrec,
+                                    AoArea=AoArea,
+                                    precision=self.precision)
 
         #%% SCIENCE DETECTOR
         if not self.check_section_key('sensor_science'):
@@ -768,7 +792,7 @@ class aoSystem():
             self.errorBreakdown()
 
 
-    def configLO(self, verbose=True):
+    def configLO(self, verbose=False):
 
         if not self.check_section_key('sources_LO'):
             if verbose:

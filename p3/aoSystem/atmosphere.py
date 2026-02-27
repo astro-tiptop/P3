@@ -85,16 +85,25 @@ class atmosphere:
         return 0.314 * 1000 * self.r0/self.meanWind
 
     def __init__(self, wvl, r0, weights, heights, wSpeed=0.0, wDir=0.0,
-                 L0=math.inf, verbose=False):
+                 L0=math.inf, verbose=False, precision='double'):
+
+        if precision == 'single':
+            self.dtype = np.float32
+            self.complex_dtype = np.complex64
+        elif precision == 'double':
+            self.dtype = np.float64
+            self.complex_dtype = np.complex128
+        else:
+            raise ValueError(f"precision must be 'single' or 'double', not {precision}")
 
         # PARSING INPUTS
         self.r0 = r0
         self.p_wvl = wvl # = source.wvl
         self.nL = len(weights)
-        self.weights = np.array(weights)
-        self.heights = np.array(heights)
-        self.wSpeed = np.array(wSpeed)
-        self.wDir = np.array(wDir)
+        self.weights = np.array(weights, dtype=self.dtype)
+        self.heights = np.array(heights, dtype=self.dtype)
+        self.wSpeed = np.array(wSpeed, dtype=self.dtype)
+        self.wDir = np.array(wDir, dtype=self.dtype)
         self.verbose = verbose
 
         # MANAGE THE L0 VALUE
@@ -102,7 +111,7 @@ class atmosphere:
             self.L0 = L0
             L0 = L0*np.ones(self.nL)
         elif (not np.isscalar(L0) and len(L0)>1):
-            L0 = np.array(L0[0:self.nL])
+            L0 = np.array(L0[0:self.nL], dtype=self.dtype)
             self.L0 = (np.sum(self.weights * L0**(5/3)))** (3/5)/sum(self.weights)
         if np.isscalar(wSpeed):
             wSpeed  = wSpeed*np.ones(self.nL)
@@ -121,7 +130,7 @@ class atmosphere:
 
 
 
-    def slab(self,layerIndex):
+    def slab(self, layerIndex):
         """SLAB Create a single turbulence layer atmosphere object
         singledAtm = slab(atm,k) creates an atmosphere object from
         the old atm object and the k-th turbulent layer"""
@@ -139,39 +148,43 @@ class atmosphere:
            atm.display prints information about the atmosphere object
         """
 
-
-        s = ('___ ATMOSPHERE ___\n')
+        s = '___ ATMOSPHERE ___\n'
         if np.isinf(self.L0):
-            s += " Kolmogorov-Tatarski atmospheric turbulence :\n"
-            s+= ".wavelength\t= %5.2fmicron,\n.r0 \t\t= %5.2fcm,\n.seeing \t= %5.2farcsec,\n"%(self.wvl*1e6,self.r0*1e2,self.seeing)
+            s += "Kolmogorov-Tatarski atmospheric turbulence:\n"
+            s += (
+                f".wavelength = {self.wvl*1e6:.2f} micron,\n"
+                f".r0        = {self.r0*1e2:.2f} cm,\n"
+                f".seeing    = {self.seeing:.2f} arcsec,\n"
+            )
         else:
-            s += (' Von Kármán atmospheric turbulence\n')
-            s+= '.wavelength\t=%5.2fmicron,\n.r0 \t\t= %5.2fcm,\n.L0 \t\t= %5.2fm,\n.seeing \t= %.2farcsec'%(self.wvl*1e6,self.r0*1e2,self.L0,self.seeing)
+            s += "Von Kármán atmospheric turbulence\n"
+            s += (
+                f".wavelength = {self.wvl*1e6:.2f} micron,\n"
+                f".r0        = {self.r0*1e2:.2f} cm,\n"
+                f".L0        = {self.L0:.2f} m,\n"
+                f".seeing    = {self.seeing:.2f} arcsec\n"
+            )
 
-        if not np.isinf(self.meanHeight):
-            s+=('\n.h_mean \t= %5.2f m'%self.meanHeight)
+        params = [
+            (self.meanHeight, "\n.h_mean   = {:.2f} m"),
+            (self.theta0,    "\n.theta0   = {:.2f} arcsec"),
+            (self.meanWind,  "\n.v_mean   = {:.2f} m/s"),
+            (self.tau0,      "\n.tau0     = {:.2f} ms"),
+        ]
+        for value, fmt in params:
+            if not np.isinf(value):
+                s += fmt.format(value)
 
-        if not np.isinf(self.theta0):
-            s+=('\n.theta0 \t= %5.2farcsec'%self.theta0)
+        s += "\n------------------------------------------------------\n"
+        s += " Layer\t Height [m]\t Weight\t L0 [m]\t wind([m/s] [deg])\n"
+        for l in range(self.nL):
+            layer = self.layer[l]
+            s += (
+                f"{l:2d}\t {layer.height:8.2f}\t  {layer.weight:4.2f}\t {layer.L0:4.2f}\t "
+                f"({layer.wSpeed:5.2f} {layer.wDir:6.2f})\n"
+            )
+        s += "------------------------------------------------------\n"
 
-        if not np.isinf(self.meanWind):
-            s+=('\n.v_mean \t= %5.2f m/s'%self.meanWind)
-
-        if not np.isinf(self.tau0):
-            s+=('\n.tau0 \t\t= %5.2fms'%self.tau0)
-
-
-        s+=('\n------------------------------------------------------\n')
-        s+=(' Layer\t Height [m]\t Weight\t L0 [m]\t wind([m/s] [deg])\n')
-        for l in np.arange(0,self.nL):
-            s = s + '%2d\t %8.2f\t  %4.2f\t %4.2f\t (%5.2f %6.2f)\n'%(l,\
-                self.layer[l].height,
-                self.layer[l].weight,
-                self.layer[l].L0,
-                self.layer[l].wSpeed,
-                self.layer[l].wDir)
-
-        s+=('------------------------------------------------------\n')
         return s
 #%%
     # ATMOSPHERE STATISTICS
@@ -182,7 +195,7 @@ class atmosphere:
         c1 = (24*spc.gamma(6/5)/5)**(5/6)
         c2 = spc.gamma(11/6)*spc.gamma(5/6)/(2*np.pi**(8/3))
 
-        return c1*c2*(atm.L0/atm.r0)**(5/3)
+        return (c1*c2*(atm.L0/atm.r0)**(5/3)).astype(atm.dtype)
 
     def covariance(atm,rho):
         """COVARIANCE Phase covariance
@@ -206,13 +219,14 @@ class atmosphere:
                 u   = 2*np.pi*rho/atm.L0
                 cov = c1*c2*L0r0ratio*u**(5/6)*spc.kv(5/6,u)
 
-        return cov
+        return cov.astype(atm.dtype)
 
     def structureFunction(atm,rho):
         """STRUCTUREFUNCTION Phase structure function computes the phase structure function from
         the baseline rho and an atmosphere object
         """
         var = atm.variance()
+
         if np.isinf(atm.L0):
             if not np.isscalar(rho):
                 sf   = np.zeros(rho.shape)
@@ -223,7 +237,7 @@ class atmosphere:
         else:
             sf = 2*(var- atm.covariance(rho))
 
-        return sf
+        return sf.astype(atm.dtype)
 
 
     def spectrum(atm,k):
@@ -232,7 +246,7 @@ class atmosphere:
             atmosphere object
         """
         cte = (24*spc.gamma(6/5)/5)**(5/6)*(spc.gamma(11/6)**2./(2.*np.pi**(11/3)))
-        return atm.r0**(-5/3)*cte*(k**2 + 1/atm.L0**2)**(-11/6)
+        return (atm.r0**(-5/3)*cte*(k**2 + 1/atm.L0**2)**(-11/6)).astype(atm.dtype)
 
     def angularCovariance(atm,theta):
         """ ANGULARCOVARIANCE Phase angular covariance computes the
@@ -249,7 +263,7 @@ class atmosphere:
             atmSlab.r0 = atm.r0 * (atm.weights[l])**(-3.0/5.0)
             tmp     = atmSlab.covariance(atmSlab.heights*np.tan(theta))
             cov    += tmp
-        return cov
+        return cov.astype(atm.dtype)
 
     def angularStructureFunction(atm,theta):
         """ANGULARSTRUCTUREFUNCTION Phase angular structure function computes
@@ -258,7 +272,7 @@ class atmosphere:
         """
 
         if not np.isscalar(theta):
-            sf = np.zeros(theta.shape)
+            sf = np.zeros(theta.shape, dtype=atm.dtype)
         else:
             sf = 0
 
@@ -267,7 +281,7 @@ class atmosphere:
             atmSlab.r0 = atm.r0 * (atm.weights[l])**(-3.0/5.0)
             tmp     = atmSlab.covariance(atmSlab.heights*np.tan(theta))
             sf      = sf + 2*( atmSlab.variance() - tmp)
-        return sf
+        return sf.astype(atm.dtype)
 
     def temporalCovariance(atm,tau):
         '''
@@ -275,7 +289,7 @@ class atmosphere:
         phase temporal covariance from the delay tau and an
         '''
 
-        corr = np.zeros(len(tau))
+        corr = np.zeros(len(tau), dtype=atm.dtype)
         for kLayer in range(atm.nL):
             corr   += atm.covariance(atm.wSpeed[kLayer]*tau)
-        return corr
+        return corr.astype(atm.dtype)
