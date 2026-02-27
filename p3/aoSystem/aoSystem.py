@@ -381,7 +381,7 @@ class aoSystem():
         self.configLO(verbose=verbose)
         self.configLO_SC(verbose=verbose)
 
-    def configLO_SC(self, verbose=True):
+    def configLO_SC(self, verbose=False):
         #%%  SCIENCE SOURCES
         if not self.check_section_key('sources_science'):
             self.raiseMissingRequiredSec('sources_science')
@@ -417,7 +417,7 @@ class aoSystem():
         #----- class definition
         self.src = source(wvlSrc,
                           zenithSrc, azimuthSrc,
-                          tag="SCIENCE",verbose=True)
+                          tag="SCIENCE",verbose=verbose)
 
         #%% HIGH-ORDER WAVEFRONT SENSOR
         if not self.check_section_key('sensor_HO'):
@@ -790,7 +790,7 @@ class aoSystem():
             self.errorBreakdown()
 
 
-    def configLO(self, verbose=True):
+    def configLO(self, verbose=False):
 
         if not self.check_section_key('sources_LO'):
             if verbose:

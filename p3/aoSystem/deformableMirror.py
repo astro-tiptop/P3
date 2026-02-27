@@ -90,7 +90,7 @@ class deformableMirror:
             self.modes = self.setInfluenceFunction(self.resolution)
 
 
-    def setInfluenceFunction(self,resolution,ndm=0):
+    def setInfluenceFunction(self, resolution, ndm=0):
         """
             SETINFLUENCEFUNCTION    
         """
@@ -134,17 +134,17 @@ class deformableMirror:
             u0 =  np.arange(0,nIF)       
 
         u           = np.transpose([u0])- [xIF]
-        wu          = np.zeros((resolution,nIF))
+        wu          = np.zeros((resolution,nIF), dtype=self.dtype)
         index_u     = (u >= -r[len(r)-1]*self.pitch[ndm]) & (u <= r[len(r)-1]*self.pitch[ndm])
         wu[index_u] = spline(u[index_u])
 
         v           = np.transpose([u0])- [yIF]
-        wv          = np.zeros((resolution,nIF))
+        wv          = np.zeros((resolution,nIF), dtype=self.dtype)
         index_v     = (v >= -r[len(r)-1]*self.pitch[ndm]) & (v <= r[len(r)-1]*self.pitch[ndm])
         wv[index_v] = spline(v[index_v])
 
         #m_modes = sparse.lil_matrix((resolution**2,self.nValidActuator))
-        m_modes = np.zeros((resolution**2,self.nValidActuator[ndm]))
+        m_modes = np.zeros((resolution**2,self.nValidActuator[ndm]), dtype=self.dtype)
         indIF = np.arange(0,nIF**2)
         idx = self.validActuator[ndm] == False
         indIF[idx.ravel()] = []
@@ -178,12 +178,13 @@ class deformableMirror:
 
         return s
 
-   
+
 def sub2ind(array_shape, rows, cols):
     ind = rows*array_shape[1] + cols
     ind[ind < 0] = -1
     ind[ind >= array_shape[0]*array_shape[1]] = -1
     return ind
+
 
 def ind2sub(array_shape, ind):
     ind[ind < 0] = -1

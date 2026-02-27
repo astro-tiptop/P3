@@ -34,9 +34,10 @@ def fftCorrel(x,y):
 
 def fftsym(x):
     if x.ndim ==2:
+        C_I = np.complex64(1j) if x.dtype == np.float32 else np.complex128(1j)
         nx,ny            = x.shape
         if np.any(np.iscomplex(x)):
-            out              = np.zeros((nx,ny)) + complex(0,1)*np.zeros((nx,ny))
+            out              = np.zeros((nx,ny)) + C_I * np.zeros((nx,ny))
             out[0,0]         = x[0,0]
             out[0,1:ny-1]     = x[1,np.arange(ny-1,1,-1)]
             out[1:nx-1,0]     = x[np.arange(nx-1,1,-1),1]
@@ -52,6 +53,7 @@ def fftsym(x):
     elif x.ndim ==1:
         return fft.fftshift(x)
 
+
 def freq_array(nX, L=1, offset=1e-10, dtype=np.float64):
     k2D = np.mgrid[0:nX, 0:nX].astype(dtype)
     k2D[0] -= nX//2
@@ -59,6 +61,7 @@ def freq_array(nX, L=1, offset=1e-10, dtype=np.float64):
     k2D     *= np.asarray(L, dtype=dtype)
     k2D     += np.asarray(offset, dtype=dtype)
     return k2D[0],k2D[1]
+
 
 def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1,
                  dtype=np.float64):
@@ -158,14 +161,15 @@ def _rfft2_to_fft2(im_shape, rfft):
     return result
 
 
-def otf2psf(otf,psfInOnePix=False):
+def otf2psf(otf, psfInOnePix=False):
+    C_I = np.complex64(1j) if otf.dtype == np.float32 else np.complex128(1j)
     nX,nY   = otf.shape
     u1d     = fft.fftshift(fft.fftfreq(nX))
     v1d     = fft.fftshift(fft.fftfreq(nY))
     u2d,v2d = np.meshgrid(u1d,v1d)
-    
+
     if nX%2 == 0 and psfInOnePix==False:
-        fftPhasor = np.exp(1*complex(0,1)*np.pi*(u2d+v2d))
+        fftPhasor = np.exp(1*C_I * np.pi * (u2d+v2d))
     else:
         fftPhasor = 1
 
@@ -244,13 +248,14 @@ def psd2psf(psd,pixelScale):
 def psf2otf(psf):
     return fft.fft2(fft.fftshift(psf))/psf.sum()
 
-def pupil2otf(pupil,phase,overSampling):
+def pupil2otf(pupil, phase, overSampling):
     if np.all(phase == 0):
         E   = np.abs(pupil)
         E   = enlargeSupport(E,overSampling)
         otf = np.real(fft.fftshift(fftCorrel(E,E)))
     else:
-        E   = pupil*np.exp(1*complex(0,1)*phase)
+        C_I = np.complex64(1j) if phase.dtype == np.float32 else np.complex128(1j)
+        E   = pupil * np.exp(C_I * phase)
         E   = enlargeSupport(E,overSampling)
         otf = fft.fftshift(fftCorrel(E,E))
 
@@ -263,7 +268,10 @@ def pupil2psf(pupil,phase,overSampling):
 def sf2otf(sf):
     return np.exp(-0.5 * sf)
 
-def shift_array(nX, nY, fact=2*np.pi*complex(0,1), dtype=np.float64):
+def shift_array(nX, nY, fact=None, dtype=np.float64):
+    if fact == None:
+        C_I = np.complex64(1j) if dtype == np.float32 else np.complex128(1j)
+        fact = 2 * np.pi * C_I
     X, Y = np.mgrid[0:nX,0:nY].astype(dtype)
     X = (X-nX/2) * fact/nX
     Y = (Y-nY/2) * fact/nY
@@ -393,57 +401,168 @@ def telescopePsf(pupil,samp,kind='spline'):
 def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
                     x_stellar=[[1.0], [0.],[0.],[0]],
                     theta_ext=0, nPix=None, otfPixel=1):
-        """
-          Computation of the 3D PSF and the Strehl-ratio (from the OTF integral).
-          The Phase structure function must be a nPx x nPx x nSrc array
-          given in rad^2
-        """
+    """
+        Computation of the 3D PSF and the Strehl-ratio (from the OTF integral).
+        The Phase structure function must be a nPx x nPx x nSrc array
+        given in rad^2
+    """
 
-        # GETTING THE OBJECT PARAMETERS
-        F = x_stellar[0]
-        dx = x_stellar[1]
-        dy = x_stellar[2]
-        bkg = x_stellar[3]
+    # GETTING THE OBJECT PARAMETERS
+    F = x_stellar[0]
+    dx = x_stellar[1]
+    dy = x_stellar[2]
+    bkg = x_stellar[3]
 
-        # INSTANTIATING THE OUTPUTS
-        if nPix == None:
-            nPix = int(freq.nOtf /freq.kRef_)
+    # INSTANTIATING THE OUTPUTS
+    if nPix == None:
+        nPix = int(freq.nOtf /freq.kRef_)
 
-        PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
-        SR  = np.zeros((ao.src.nSrc,freq.nWvl))
+    PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
+    SR  = np.zeros((ao.src.nSrc,freq.nWvl))
 
-        # DEFINING THE RESIDUAL JITTER KERNEL
-        Kjitter = 1
-        if x_jitter is not None:
-            u_max = freq.samp/2*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
-            norm_fact = u_max *(2*np.sqrt(2*np.log(2)))
-            Djitter = norm_fact**2 * (x_jitter[0]*freq.U2_
-                                    + x_jitter[1]*freq.V2_
-                                    + 2*x_jitter[2]*freq.UV_)
-            Kjitter = np.exp(-0.5 * Djitter)
+    # DEFINING THE RESIDUAL JITTER KERNEL
+    Kjitter = 1
+    if x_jitter is not None:
+        u_max = freq.samp/2*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
+        norm_fact = u_max *(2*np.sqrt(2*np.log(2)))
+        Djitter = norm_fact**2 * (x_jitter[0]*freq.U2_
+                                + x_jitter[1]*freq.V2_
+                                + 2*x_jitter[2]*freq.UV_)
+        Kjitter = np.exp(-0.5 * Djitter)
 
-        # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
-        fftPhasor = np.ones((freq.nOtf, freq.nOtf, ao.src.nSrc), dtype=complex)
-        if np.any(dx) or np.any(dy):
-            # accounting for the binning
-            bin_fact = 1
-            if freq.kRef_ > 1:
-                bin_fact = freq.kRef_
-            # computing the phasor
+    # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
+    fftPhasor = np.ones((freq.nOtf, freq.nOtf, ao.src.nSrc), dtype=complex)
+    if np.any(dx) or np.any(dy):
+        # accounting for the binning
+        bin_fact = 1
+        if freq.kRef_ > 1:
+            bin_fact = freq.kRef_
+        # computing the phasor
+        dr = bin_fact*(freq.U_[:,:,np.newaxis]*dx + freq.V_[:,:,np.newaxis]*dy)
+        C_I = np.complex64(1j) if dr.dtype == np.float32 else np.complex128(1j)
+        fftPhasor = np.exp(-np.pi * C_I * dr)
+
+    # INSTRUMENTAL DEFECTS
+    if x_stat is not None:
+        freq.otfNCPA, _, freq.phaseMap = getStaticOTF(ao.tel, freq.nOtf,
+                                                        freq.sampRef,
+                                                        freq.wvlRef,
+                                                        xStat=x_stat)
+    # OTF MULTIPLICATION
+    otfStat = freq.otfNCPA * Kjitter * otfPixel
+    otfStat = np.repeat(otfStat[:, :, np.newaxis], ao.src.nSrc, axis=2)
+    otfTurb = np.exp(-0.5*sf)
+    otfTot = fft.fftshift(otfTurb * otfStat * fftPhasor, axes=(0, 1))
+
+    # GET THE FINAL PSF - PIXEL SCALE IS NYQUIST - FOV DIFFERENT PER WVL
+    psf_ = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
+
+    # managing the undersampling
+    psf = np.copy(psf_)
+
+    if freq.kRef_ >= 1: # binning the PSF
+        psf = np.zeros((ao.cam.fovInPix,ao.cam.fovInPix,ao.src.nSrc))
+        nC = freq.kRef_
+        for iSrc in range(ao.src.nSrc):
+            if nC > 1:
+                tmp = binning(psf_[:,:,iSrc],int(nC))
+            else:
+                tmp = psf_[:,:,iSrc]
+
+            psf[:,:,iSrc] = cropSupport(tmp,tmp.shape[0]/ao.cam.fovInPix)
+        psf_ = psf
+
+    # managing the field of view
+    if nPix < ao.cam.fovInPix:
+        psf = np.zeros((nPix,nPix,ao.src.nSrc))
+        nC  = psf_.shape[0]/nPix
+        for iSrc in range(ao.src.nSrc):
+            psf[:,:,iSrc] = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)
+
+    # SCALING
+    PSF = psf/psf.sum(axis=(0,1)) * F
+    SR = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
+
+    return PSF + bkg, SR
+
+def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
+                    x_stellar = [[1.0], [0.],[0.],[0]],
+                    theta_ext = 0, nPix=None, otfPixel=1):
+    """
+        Computation of the 4D PSF and the Strehl-ratio (from the OTF integral).
+        The Phase structure function must be a nPx x nPx x nSrc array
+        given in rad^2
+    """
+
+    C_I = np.complex64(1j) if ao.dtype == np.float32 else np.complex128(1j)
+
+    # GETTING THE OBJECT PARAMETERS
+    F = x_stellar[0]
+    dx = x_stellar[1]
+    dy = x_stellar[2]
+    bkg = x_stellar[3]
+
+    # INSTANTIATING THE OUTPUTS
+    if nPix == None:
+        nPix = int(freq.nOtf /freq.kRef_)
+
+    PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
+    SR  = np.zeros((ao.src.nSrc,freq.nWvl))
+
+    # DEFINING THE RESIDUAL JITTER KERNEL
+    Kjitter = 1
+    if np.any(x_jitter[0:2]):
+        u_max = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
+        norm_fact = np.max(u_max)**2 *(2 * np.sqrt(2*np.log(2)))**2
+        Djitter = norm_fact * (x_jitter[0]**2 * freq.U2_
+                                + x_jitter[1]**2 * freq.V2_
+                                + 2*x_jitter[2] *freq.UV_)
+        Kjitter = np.exp(-0.5 * Djitter)
+
+    # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
+    if np.any(dx!=0) or np.any(dy!=0):
+        # accounting for the binning
+        bin_fact = 1
+        if freq.kRef_ > 2:
+            bin_fact = freq.kRef_
+
+        # computing the phasor
+        if freq.nWvl > 1:
+            # instantiating the phasor
+            fftPhasor = np.zeros((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
+            for iSrc in range(ao.src.nSource):
+                for jWvl in range(freq.nWvl):
+                    # account for the binning
+                    dr = bin_fact*(dx[iSrc, jWvl]*freq.U_ + dy[iSrc, jWvl]*freq.V_)
+                    fftPhasor[:, :, iSrc, jWvl] = np.exp(-np.pi * C_I * dr)
+        else:
             dr = bin_fact*(freq.U_[:,:,np.newaxis]*dx + freq.V_[:,:,np.newaxis]*dy)
-            fftPhasor = np.exp(-np.pi*complex(0, 1)*dr)
+            fftPhasor = np.exp(-np.pi * C_I * dr)[:,:,:,np.newaxis]
+    else:
+        fftPhasor = np.ones((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
 
-        # INSTRUMENTAL DEFECTS
-        if x_stat is not None:
-            freq.otfNCPA, _, freq.phaseMap = getStaticOTF(ao.tel, freq.nOtf,
-                                                          freq.sampRef,
-                                                          freq.wvlRef,
-                                                          xStat=x_stat)
+    # LOOP ON WAVELENGTHS
+    for jWvl in range(freq.nWvl):
+
+        # UPDATE THE INSTRUMENTAL OTF
+        if freq.nWvl>1 or x_stat is not None:
+            freq.otfNCPA, _, _ =  getStaticOTF(ao.tel, freq.nOtf,
+                                                freq.samp[jWvl],
+                                                freq.wvl[jWvl],
+                                                xStat=x_stat,
+                                                theta_ext=theta_ext)
+
+        # UPDATE THE RESIDUAL JITTER
+        if freq.nyquistSampling == True and freq.nWvl > 1 and x_jitter is not None:
+            norm_fact2 = (freq.samp[jWvl]*ao.tel.D/freq.wvl[jWvl]/(3600*180*1e3/np.pi))**2
+            norm_fact2 *= (2 * np.sqrt(2*np.log(2)))**2
+            Kjitter = np.exp(-0.5 * Djitter * norm_fact2/norm_fact)
+
         # OTF MULTIPLICATION
         otfStat = freq.otfNCPA * Kjitter * otfPixel
-        otfStat = np.repeat(otfStat[:, :, np.newaxis], ao.src.nSrc, axis=2)
-        otfTurb = np.exp(-0.5*sf)
-        otfTot = fft.fftshift(otfTurb * otfStat * fftPhasor, axes=(0, 1))
+        otfStat = np.repeat(otfStat[:,:,np.newaxis],ao.src.nSrc,axis=2)
+        otfTurb = np.exp(-0.5*sf*(2*np.pi*1e-9/freq.wvl[jWvl])**2)
+        otfTot  = fft.fftshift(otfTurb * otfStat * fftPhasor[:,:,:,jWvl],axes=(0,1))
 
         # GET THE FINAL PSF - PIXEL SCALE IS NYQUIST - FOV DIFFERENT PER WVL
         psf_ = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
@@ -451,9 +570,9 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
         # managing the undersampling
         psf = np.copy(psf_)
 
-        if freq.kRef_ >= 1: # binning the PSF
+        if freq.k_[jWvl] >= 1: # binning the PSF
             psf = np.zeros((ao.cam.fovInPix,ao.cam.fovInPix,ao.src.nSrc))
-            nC = freq.kRef_
+            nC = freq.k_[jWvl]
             for iSrc in range(ao.src.nSrc):
                 if nC > 1:
                     tmp = binning(psf_[:,:,iSrc],int(nC))
@@ -471,120 +590,12 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
                 psf[:,:,iSrc] = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)
 
         # SCALING
-        PSF = psf/psf.sum(axis=(0,1)) * F
-        SR = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
+        PSF[:,:,:,jWvl] = psf/psf.sum(axis=(0,1))  * F[:,jWvl]
 
-        return PSF + bkg, SR
+        # STREHL-RATIO COMPUTATION
+        SR[:,jWvl] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
 
-def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
-                    x_stellar = [[1.0], [0.],[0.],[0]],
-                    theta_ext = 0, nPix=None, otfPixel=1):
-        """
-          Computation of the 4D PSF and the Strehl-ratio (from the OTF integral).
-          The Phase structure function must be a nPx x nPx x nSrc array
-          given in rad^2
-        """
-
-        # GETTING THE OBJECT PARAMETERS
-        F = x_stellar[0]
-        dx = x_stellar[1]
-        dy = x_stellar[2]
-        bkg = x_stellar[3]
-
-        # INSTANTIATING THE OUTPUTS
-        if nPix == None:
-            nPix = int(freq.nOtf /freq.kRef_)
-
-        PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
-        SR  = np.zeros((ao.src.nSrc,freq.nWvl))
-
-        # DEFINING THE RESIDUAL JITTER KERNEL
-        Kjitter = 1
-        if np.any(x_jitter[0:2]):
-            u_max = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
-            norm_fact = np.max(u_max)**2 *(2 * np.sqrt(2*np.log(2)))**2
-            Djitter = norm_fact * (x_jitter[0]**2 * freq.U2_
-                                   + x_jitter[1]**2 * freq.V2_
-                                   + 2*x_jitter[2] *freq.UV_)
-            Kjitter = np.exp(-0.5 * Djitter)
-
-        # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
-        if np.any(dx!=0) or np.any(dy!=0):
-            # accounting for the binning
-            bin_fact = 1
-            if freq.kRef_ > 2:
-                bin_fact = freq.kRef_
-
-            # computing the phasor
-            if freq.nWvl > 1:
-                # instantiating the phasor
-                fftPhasor = np.zeros((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
-                for iSrc in range(ao.src.nSource):
-                    for jWvl in range(freq.nWvl):
-                        # account for the binning
-                        dr = bin_fact*(dx[iSrc, jWvl]*freq.U_ + dy[iSrc, jWvl]*freq.V_)
-                        fftPhasor[:, :, iSrc, jWvl] = np.exp(-np.pi*complex(0, 1)*dr)
-            else:
-                dr = bin_fact*(freq.U_[:,:,np.newaxis]*dx + freq.V_[:,:,np.newaxis]*dy)
-                fftPhasor = np.exp(-np.pi*complex(0, 1)*dr)[:,:,:,np.newaxis]
-        else:
-            fftPhasor = np.ones((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
-
-        # LOOP ON WAVELENGTHS
-        for jWvl in range(freq.nWvl):
-
-            # UPDATE THE INSTRUMENTAL OTF
-            if freq.nWvl>1 or x_stat is not None:
-                freq.otfNCPA, _, _ =  getStaticOTF(ao.tel, freq.nOtf,
-                                                   freq.samp[jWvl],
-                                                   freq.wvl[jWvl],
-                                                   xStat=x_stat,
-                                                   theta_ext=theta_ext)
-
-            # UPDATE THE RESIDUAL JITTER
-            if freq.nyquistSampling == True and freq.nWvl > 1 and x_jitter is not None:
-                norm_fact2 = (freq.samp[jWvl]*ao.tel.D/freq.wvl[jWvl]/(3600*180*1e3/np.pi))**2
-                norm_fact2 *= (2 * np.sqrt(2*np.log(2)))**2
-                Kjitter = np.exp(-0.5 * Djitter * norm_fact2/norm_fact)
-
-            # OTF MULTIPLICATION
-            otfStat = freq.otfNCPA * Kjitter * otfPixel
-            otfStat = np.repeat(otfStat[:,:,np.newaxis],ao.src.nSrc,axis=2)
-            otfTurb = np.exp(-0.5*sf*(2*np.pi*1e-9/freq.wvl[jWvl])**2)
-            otfTot  = fft.fftshift(otfTurb * otfStat * fftPhasor[:,:,:,jWvl],axes=(0,1))
-
-            # GET THE FINAL PSF - PIXEL SCALE IS NYQUIST - FOV DIFFERENT PER WVL
-            psf_ = np.real(fft.fftshift(fft.ifftn(otfTot,axes=(0,1)),axes = (0,1)))
-
-            # managing the undersampling
-            psf = np.copy(psf_)
-
-            if freq.k_[jWvl] >= 1: # binning the PSF
-                psf = np.zeros((ao.cam.fovInPix,ao.cam.fovInPix,ao.src.nSrc))
-                nC = freq.k_[jWvl]
-                for iSrc in range(ao.src.nSrc):
-                    if nC > 1:
-                        tmp = binning(psf_[:,:,iSrc],int(nC))
-                    else:
-                        tmp = psf_[:,:,iSrc]
-
-                    psf[:,:,iSrc] = cropSupport(tmp,tmp.shape[0]/ao.cam.fovInPix)
-                psf_ = psf
-
-            # managing the field of view
-            if nPix < ao.cam.fovInPix:
-                psf = np.zeros((nPix,nPix,ao.src.nSrc))
-                nC  = psf_.shape[0]/nPix
-                for iSrc in range(ao.src.nSrc):
-                    psf[:,:,iSrc] = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)
-
-            # SCALING
-            PSF[:,:,:,jWvl] = psf/psf.sum(axis=(0,1))  * F[:,jWvl]
-
-            # STREHL-RATIO COMPUTATION
-            SR[:,jWvl] = 1e2*np.abs(otfTot).sum(axis=(0,1))/np.real(freq.otfDL.sum())
-
-        return PSF + bkg, SR
+    return PSF + bkg, SR
 
 #%%  IMAGE PROCESSING
 
@@ -651,7 +662,8 @@ def cropSupport(im,n):
     ny2     = int(ny/n[1])
 
     if np.any(np.iscomplex(im)):
-        imNew = np.zeros((nx2,ny2)) + complex(0,1)*np.zeros((nx2,ny2))
+        C_I = np.complex64(1j) if im.dtype == np.float32 else np.complex128(1j)
+        imNew = np.zeros((nx2,ny2)) + C_I * np.zeros((nx2,ny2))
     else:
         imNew = np.zeros((nx2,ny2))
 
@@ -690,6 +702,7 @@ def enlargeSupport(cube, n):
             n2 = int((n-1)*nz/2)
             return np.pad(cube,[(0,0) , (n1, n1), (n2, n2)])
 
+
 def inpolygon(xq, yq, xv, yv):
         shape = xq.shape
         xq = xq.reshape(-1)
@@ -699,8 +712,11 @@ def inpolygon(xq, yq, xv, yv):
         q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
         p = Path([(xv[i], yv[i]) for i in range(xv.shape[0])])
         return p.contains_points(q).reshape(shape)
-    
+
+ 
 def interpolateSupport(image, n_out, kind='spline'):
+
+    C_I = np.complex64(1j) if image.dtype == np.float32 else np.complex128(1j)
 
     n_x,n_y = image.shape
     # Define angular frequencies vectors
@@ -717,7 +733,7 @@ def interpolateSupport(image, n_out, kind='spline'):
         tmpReal = scnd.zoom(np.real(image),min([m_x/n_x,m_y/m_y]),order=0)
         if np.any(np.iscomplex(image)):
             tmpImag = scnd.zoom(np.imag(image),min([m_x/n_x,m_y/m_y]),order=0)
-            return tmpReal + complex(0,1)*tmpImag
+            return tmpReal + C_I*tmpImag
         else:
             return tmpReal
     else:
@@ -759,12 +775,11 @@ def interpolateSupport(image, n_out, kind='spline'):
                 fun_imag = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
 
         if np.any(np.iscomplex(image)):
-            return np.asarray(fun_real(unew,vnew) + complex(0,1)*fun_imag(unew,vnew),
+            return np.asarray(fun_real(unew,vnew) + C_I * fun_imag(unew,vnew),
                               dtype=image.dtype)
         else:
             return np.asarray(fun_real(unew,vnew),
                               dtype=image.dtype)
-
 
 
 def normalizeImage(im, normType=1, param=None):
@@ -828,6 +843,8 @@ def addNoise(im,ron,darkBg,skyBg,DIT,nDIT):
     return im + noise_det + noise_ph
 
 def centerPsf(psf,rebin,nargout=1):
+    
+    C_I         = np.complex64(1j) if psf.dtype == np.float32 else np.complex128(1j)
     flux        = psf.sum()
     npsfx,npsfy = psf.shape
     npsfx2      = npsfx*rebin
@@ -848,7 +865,7 @@ def centerPsf(psf,rebin,nargout=1):
     # Apply the Phasor
     u       = fft.fftshift(fft.fftfreq(otf_hr.shape[0]))
     u,v     = np.meshgrid(u,u)
-    fftPhasor = np.exp(-1*complex(0,1)*np.pi*(u*dy+v*dx))
+    fftPhasor = np.exp(-1*C_I*np.pi*(u*dy+v*dx))
     otf_hr    = otf_hr*fftPhasor
     # Get the PSF low-resolution
     imCor  = otf2psf(otf_hr)
@@ -1484,7 +1501,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
         im_hr = cpuArray(interpolateSupport(psf,rebin*nnp.array([Nx,Ny])))
     else:
         im_hr = cpuArray(psf)
-        
+
     ss = im_hr.shape
     sbx, sby = [[0,ss[1]],[0,ss[0]]]
 
