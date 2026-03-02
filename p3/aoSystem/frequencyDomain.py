@@ -8,7 +8,7 @@ Created on Mon Apr 19 11:34:44 2021
 
 # IMPORTING PYTHON LIBRAIRIES
 import numpy as nnp
-from . import gpuEnabled, cp, np, nnp, trapz
+from . import np, nnp, trapz
 
 from p3.aoSystem.FourierUtils import *
 from p3.aoSystem.anisoplanatismModel import anisoplanatism_structure_function
@@ -26,24 +26,29 @@ class frequencyDomain():
         return self.__pitch
     @pitch.setter
     def pitch(self,val):
-        self.__pitch = val
+        if isinstance(val, np.ndarray):
+            self.__pitch = np.asarray(val, dtype=self.dtype)
+        else:
+            self.__pitch = nnp.asarray(val, dtype=self.ndtype)
+
         # redefining the ao-corrected area
         if not self.kcExt is None and np.all(self.kcExt):
             self.kc_= self.kcExt
         else:
-            self.kc_ =  1/(2*val)
-        #self.kc_= (val-1)/(2.0*self.ao.tel.D)
-        self.kcMax_ =  np.max(self.kc_)
-        #kc2         = self.kc_**2
-        self.kc_    = np.asarray(self.kc_)
+            self.kc_ =  1/(2*self.__pitch)
+
+        self.kcMax_ = np.max(self.kc_)
+        self.kc_    = np.asarray(self.kc_, dtype=self.dtype)
         self.resAO  = int(np.max(2*self.kc_/self.PSDstep))
 
         # ---- SPATIAL FREQUENCY DOMAIN OF THE AO-CORRECTED AREA
         self.kxAO_, self.kyAO_ = freq_array(self.resAO,
                                             offset=1e-10,
-                                            L=self.PSDstep)
+                                            L=self.PSDstep,
+                                            dtype=self.dtype)
         self.k2AO_ = self.kxAO_**2 + self.kyAO_**2
-        self.pistonFilterAO_ = pistonFilter(self.ao.tel.D, np.sqrt(self.k2AO_))
+        self.pistonFilterAO_ = pistonFilter(self.ao.tel.D, np.sqrt(self.k2AO_),
+                                            dtype=self.dtype)
         self.pistonFilterAO_[self.resAO//2, self.resAO//2] = 0
 
         # ---- DEFINING MASKS
@@ -52,12 +57,15 @@ class frequencyDomain():
             self.mskIn_   = (self.k2_ < self.kcMax_**2)
             self.mskOutAO_= self.k2AO_ >= self.kcMax_**2
             self.mskInAO_ = self.k2AO_ < self.kcMax_**2
-            
         else:
-            self.mskIn_    = np.logical_and(abs(self.kx_) < self.kcMax_, abs(self.ky_) < self.kcMax_)
-            self.mskOut_   = np.logical_or(abs(self.kx_) >= self.kcMax_, abs(self.ky_) >= self.kcMax_)
-            self.mskInAO_  = np.logical_and(abs(self.kxAO_) < self.kcMax_, abs(self.kyAO_) < self.kcMax_)
-            self.mskOutAO_ = np.logical_or(abs(self.kxAO_) >= self.kcMax_, abs(self.kyAO_) >= self.kcMax_)
+            self.mskIn_    = np.logical_and(abs(self.kx_) < self.kcMax_,
+                                            abs(self.ky_) < self.kcMax_)
+            self.mskOut_   = np.logical_or(abs(self.kx_) >= self.kcMax_,
+                                           abs(self.ky_) >= self.kcMax_)
+            self.mskInAO_  = np.logical_and(abs(self.kxAO_) < self.kcMax_,
+                                            abs(self.kyAO_) < self.kcMax_)
+            self.mskOutAO_ = np.logical_or(abs(self.kxAO_) >= self.kcMax_,
+                                           abs(self.kyAO_) >= self.kcMax_)
 
         self.psdKolmo_ = 0.0229 * self.mskOut_* ((1.0 /self.ao.atm.L0**2) + self.k2_) ** (-11.0/6.0)
         self.wfe_fit_norm  = np.sqrt(trapz(trapz(self.psdKolmo_,
@@ -73,12 +81,27 @@ class frequencyDomain():
         """"""
         return min(4,max(2,int(np.ceil(self.nOtf/self.resAO/2))))
 
-    def __init__(self, aoSys, kcExt=None, nyquistSampling=False, Hfilter=1,computeFocalAnisoCov=True):
+    def __init__(self, aoSys, kcExt=None, nyquistSampling=False,
+                 Hfilter=1, computeFocalAnisoCov=True, dtype=np.float64):
+
+        self.dtype = dtype
+        if self.dtype == np.float32:
+            self.ndtype = nnp.float32
+        else:
+            self.ndtype = nnp.float64
 
         # PARSING INPUTS TO GET THE SAMPLING VALUES
         self.ao = aoSys
 
-        self.kcExt  = kcExt
+        # cast the cut-off frequency to the right type
+        if kcExt is not None:
+            if isinstance(kcExt, np.ndarray):
+                self.kcExt = np.asarray(kcExt, dtype=self.dtype)
+            else:
+                self.kcExt = nnp.asarray(kcExt, dtype=self.ndtype)
+        else:
+            self.kcExt = None
+
         self.Hfilter = Hfilter
 
         # MANAGING THE WAVELENGTH
@@ -87,9 +110,10 @@ class frequencyDomain():
         self.nWvl = self.nBin * self.nWvlCen #central wavelengths
         wvlCen_ = nnp.unique(self.ao.src.wvl)
         bw = self.ao.cam.bandwidth
-        self.wvl_ = nnp.zeros(self.nWvl)
+        self.wvl_ = nnp.zeros(self.nWvl, dtype=self.ndtype)
         for j in range(self.nWvlCen):
-            self.wvl_[j:(j+1)*self.nBin] = nnp.linspace(wvlCen_[j] - bw/2,wvlCen_[j] + bw/2,num=self.nBin)
+            self.wvl_[j:(j+1)*self.nBin] = nnp.linspace(wvlCen_[j] - bw/2,wvlCen_[j] + bw/2,
+                                                        num=self.nBin, dtype=self.ndtype)
 
         # MANAGING THE PIXEL SCALE
         t0 = time.time()
@@ -98,9 +122,9 @@ class frequencyDomain():
 
         self.nyquistSampling = nyquistSampling
 
-        self.wvl    = np.asarray(self.wvl_)
+        self.wvl    = np.asarray(self.wvl_, dtype=self.dtype)
 
-        self.wvlCen = np.asarray(wvlCen_)
+        self.wvlCen = np.asarray(wvlCen_, dtype=self.dtype)
         if self.wvl_.shape[0] > 1:
             idxWmin = nnp.argmin(self.wvl_)
         else:
@@ -111,15 +135,16 @@ class frequencyDomain():
             self.psInMas    = rad2mas*self.wvl/self.ao.tel.D/2
             self.psInMasCen = rad2mas*wvlCen_/self.ao.tel.D/2
             samp  = 2.0 * np.ones_like(self.psInMas)
-            sampCen  = 2.0 * np.ones(len(self.wvlCen))
-            sampRef  = 2.0 * np.ones(len(self.wvlCen))
+            sampCen  = 2.0 * np.ones(len(self.wvlCen), dtype=self.dtype)
+            sampRef  = 2.0 * np.ones(len(self.wvlCen), dtype=self.dtype)
 
         else:
-            self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl)
-            self.psInMasCen = self.ao.cam.psInMas * np.ones(self.nWvlCen)
+            self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl, dtype=self.dtype)
+            self.psInMasCen = self.ao.cam.psInMas * np.ones(self.nWvlCen, dtype=self.dtype)
             samp  = self.wvl* rad2mas / (self.psInMas*self.ao.tel.D)
             sampCen  = self.wvlCen * rad2mas / (self.psInMasCen*self.ao.tel.D)
-            sampRef  = np.asarray(self.wvlRef * rad2mas) / np.asarray(self.psInMas[0]*self.ao.tel.D)
+            sampRef  = np.asarray(self.wvlRef * rad2mas, dtype=self.dtype) \
+                       / np.asarray(self.psInMas[0]*self.ao.tel.D, dtype=self.dtype)
 
         self.k_      = np.ceil(2.0/samp).astype('int') # works for oversampling
         self.samp    = self.k_ * samp
@@ -132,7 +157,7 @@ class frequencyDomain():
             idxPmin = nnp.argmin(psdSteps)
         else:
             idxPmin = 0
-        self.PSDstep = np.asarray(psdSteps[idxPmin])
+        self.PSDstep = np.asarray(psdSteps[idxPmin], dtype=self.dtype)
 
         if self.ao.psdExpansion:
             self.kRef_   = int(self.k_[idxPmin]) # works for oversampling
@@ -143,30 +168,38 @@ class frequencyDomain():
         self.nOtf    = self.nPix * self.kRef_
 
         #  ---- FULL DOMAIN OF FREQUENCY
-        self.kx_,self.ky_ = freq_array(self.nOtf,offset=1e-10,L=self.PSDstep)
+        self.kx_,self.ky_ = freq_array(self.nOtf, offset=1e-10,
+                                       L=self.PSDstep, dtype=self.dtype)
         self.k2_          = self.kx_**2 + self.ky_**2
-        #piston filtering        
-        self.pistonFilter_ = pistonFilter(self.ao.tel.D,np.sqrt(self.k2_))
+        #piston filtering
+        self.pistonFilter_ = pistonFilter(self.ao.tel.D, np.sqrt(self.k2_), dtype=self.dtype)
         self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
-
 
         self.pitch  = self.ao.dms.pitch
 
-        # MANAGING THE PIXEL SCALE                           
+        # MANAGING THE PIXEL SCALE
         self.tfreq = 1000*(time.time()-t0)
 
         # DEFINING THE DOMAIN ANGULAR FREQUENCIES
         t0 = time.time()
-        self.U_, self.V_, self.U2_, self.V2_, self.UV_=  instantiateAngularFrequencies(self.nOtf, fact=2)
+        self.U_, self.V_, self.U2_, self.V2_, self.UV_= instantiateAngularFrequencies(
+                                                                            self.nOtf,
+                                                                            fact=2,
+                                                                            dtype=self.dtype)
 
         # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
-        self.otfNCPA, self.otfDL, self.phaseMap = getStaticOTF(self.ao.tel, self.nOtf, self.sampRef, self.wvlRef)
+        self.otfNCPA, self.otfDL, self.phaseMap = getStaticOTF(self.ao.tel,
+                                                               self.nOtf,
+                                                               self.sampRef,
+                                                               self.wvlRef,
+                                                               dtype=self.dtype)
         self.totf = 1000*(time.time()-t0)
 
         # ANISOPLANATISM PHASE STRUCTURE FUNCTION
         t0 = time.time()
         if (self.ao.aoMode == 'SCAO') or (self.ao.aoMode == 'SLAO'):
-            self.dphi_ani = self.anisoplanatismPhaseStructureFunction(computeFocalAnisoCov=computeFocalAnisoCov)
+            self.dphi_ani = self.anisoplanatismPhaseStructureFunction(
+                                 computeFocalAnisoCov=computeFocalAnisoCov)
         else:
             self.isAniso = False
             self.dphi_ani = None
@@ -185,17 +218,19 @@ class frequencyDomain():
         return s
 
 
-    def anisoplanatismPhaseStructureFunction(self,computeFocalAnisoCov=True):
+    def anisoplanatismPhaseStructureFunction(self,
+                                             computeFocalAnisoCov=True):
 
         # compute th Cn2 profile in m^(-5/3)
         Cn2 = self.ao.atm.weights * self.ao.atm.r0**(-5/3)
-       
+
         if computeFocalAnisoCov == False:
             self.isAniso = False
             return None
         elif self.ao.aoMode == 'SCAO':
             # NGS case : angular-anisoplanatism only              
-            if nnp.all(nnp.equal(nnp.asarray(self.ao.src.direction), nnp.asarray(self.ao.ngs.direction))):
+            if nnp.all(nnp.equal(nnp.asarray(self.ao.src.direction),
+                                 nnp.asarray(self.ao.ngs.direction))):
                 self.isAniso = False
                 return None
             else:
@@ -221,7 +256,8 @@ class frequencyDomain():
                                               self.ao.lgs, self.ao.ngs, self.nOtf,
                                               self.sampRef, self.ao.dms.nActu1D)
 
-            return ( (self.dani_focang + self.dani_tt) *Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
+            return ( (self.dani_focang + self.dani_tt) \
+                     * Cn2[np.newaxis,:,np.newaxis,np.newaxis]).sum(axis=1)
         else:
             # LTAO, GLAO or MCAO case
             self.isAniso = False

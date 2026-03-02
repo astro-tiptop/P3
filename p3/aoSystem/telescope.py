@@ -57,7 +57,7 @@ class telescope:
                  path_static_pos=None, path_apodizer=None, path_statModes=None,
                  extraErrorNm=0.0, extraErrorExp=-2, extraErrorMin=0.0, extraErrorMax=0.0,
                  extraErrorLoNm=0.0, extraErrorLoExp=-2, extraErrorLoMin=0.0, extraErrorLoMax=0.0,
-                 verbose=True):
+                 precision='double', verbose=True):
 
         # PARSING INPUTS
         self.D = D # primary mirror diameter in meters
@@ -88,11 +88,20 @@ class telescope:
                     and re.search(".fits", path) is not None
             return is_ok
 
+        if precision == 'single':
+            self.dtype = np.float32
+            self.complex_dtype = np.complex64
+        elif precision == 'double':
+            self.dtype = np.float64
+            self.complex_dtype = np.complex128
+        else:
+            raise ValueError(f"precision must be 'single' or 'double', not {precision}")
+
         def load_and_process_data(path_data):
-            data = np.asarray(fits.getdata(path_data))
+            data = np.asarray(fits.getdata(path_data), dtype=self.dtype)
             data[data!=data] = 0
             if self.pupilAngle != 0.0:
-                data = rotate(data, self.pupilAngle, reshape=False)
+                data = rotate(data, self.pupilAngle, reshape=False).astype(self.dtype)
             if data.shape[0] != resolution:
                 data = FourierUtils.interpolateSupport(data, resolution, kind='linear')
             return data
@@ -110,7 +119,7 @@ class telescope:
             Yr  = Y*nnp.cos(th) - X*nnp.sin(th)
             R   = nnp.hypot(Xr,Yr)
             P   = ((R <= self.R) * (R > self.R * self.obsRatio)).astype(int)
-            self.pupil = np.asarray(P)
+            self.pupil = np.asarray(P, dtype=self.dtype)
             self.verb = False
 
         #----- APODIZER
@@ -148,7 +157,7 @@ class telescope:
             #
             # build the phase map
             if self.opdMap_on is None:
-                self.opdMap_on = np.zeros((resolution,resolution))
+                self.opdMap_on = np.zeros((resolution,resolution), dtype=self.dtype)
             for i in range(zern_base.shape[0]):
                 self.opdMap_on += zcoef_static_on[i] * zern_base[i]
 
@@ -157,8 +166,8 @@ class telescope:
         self.opdMap_pos = None
         if check_path(path_static_off):
             if check_path(path_static_pos):
-                opdMap_off = fits.getdata(path_static_off)
-                opdMap_pos = fits.getdata(path_static_pos)
+                opdMap_off = np.asarray(fits.getdata(path_static_off), dtype=self.dtype)
+                opdMap_pos = np.asarray(fits.getdata(path_static_pos), dtype=self.dtype)
                 if opdMap_pos.shape[0] != opdMap_off[0]:
                     raise ValueError('You must provide as many positions values as maps')
                 else:
@@ -173,7 +182,8 @@ class telescope:
         self.statModes = None
         self.nModes = 0
         if check_path(path_statModes):
-            statModes = np.asarray(fits.getdata(path_statModes))
+            statModes = np.asarray(fits.getdata(path_statModes),
+                                   dtype=self.dtype)
             s1, s2, s3 = statModes.shape
             if s1 != s2: # mode on first dimension
                 tmp = np.transpose(statModes, (1, 2, 0))
@@ -181,13 +191,14 @@ class telescope:
                 tmp = statModes
 
             self.nModes = tmp.shape[-1]
-            self.statModes = np.zeros((resolution, resolution, self.nModes))
+            self.statModes = np.zeros((resolution, resolution, self.nModes),
+                                      dtype=self.dtype)
             for k in range(self.nModes):
                 mode = FourierUtils.interpolateSupport(tmp[:, :, k],
                                                        resolution,
                                                        kind='linear')
                 if pupilAngle !=0:
-                    mode = rotate(mode,pupilAngle, reshape=False)
+                    mode = rotate(mode,pupilAngle, reshape=False).astype(self.dtype)
                 self.statModes[:, :, k] = mode
 
         if self.verbose:

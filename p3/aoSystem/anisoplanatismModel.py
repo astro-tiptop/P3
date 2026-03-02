@@ -11,7 +11,7 @@ import p3.aoSystem.FourierUtils as FourierUtils
 from p3.aoSystem.zernike import zernike
 
 #%% VARIANCE
-def anisoplanatism_wfe(tel, atm, src, ngs):
+def anisoplanatism_wfe(tel, atm, src, ngs, dtype=np.float64):
     """
     Returns the anisoplanatism wavefront error.
     """
@@ -26,7 +26,7 @@ def anisoplanatism_wfe(tel, atm, src, ngs):
     # definition of the spatial frequency domain
     PSDstep = 1/(tel.D * 2)
     nOtf = tel.resolution*2
-    ky, kx = FourierUtils.freq_array(nOtf, offset=1e-10, L=PSDstep)
+    ky, kx = FourierUtils.freq_array(nOtf, offset=1e-10, L=PSDstep, dtype=dtype)
     k2 = kx**2 + ky**2
 
     # PSD for the atmospheric turbulence
@@ -182,7 +182,7 @@ def anisoplanatism_structure_function(tel, atm, src, lgs, ngs,
 
         return dani_focang, dani_ang, dani_tt
 
-def angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier", msk_in=1):
+def angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier", msk_in=1, dtype=np.float64):
     """
     Returns the nOtf x nOtf phase structure function for the angular anisoplanatism
     by following Flicker's 2008 report or the Fourier approach (Rigaut+98)
@@ -227,7 +227,7 @@ def angular_function(tel, atm, src, gs, nOtf, samp, method="Fourier", msk_in=1):
     elif method == "Fourier":
         # definition of the spatial frequency domain
         PSDstep = 1/(tel.D * samp)
-        ky, kx = FourierUtils.freq_array(nOtf, offset=1e-10, L=PSDstep)
+        ky, kx = FourierUtils.freq_array(nOtf, offset=1e-10, L=PSDstep, dtype=dtype)
         k2 = kx**2 + ky**2
         # PSD for the atmospheric turbulence
         cte = (24*spc.gamma(6/5)/5)**(5/6)*(spc.gamma(11/6)**2./(2.*np.pi**(11/3)))
