@@ -96,8 +96,8 @@ class aoSystem():
             self.my_data_map = my_yaml_dict
 
         # Precision parameter: look for 'precision' in [COMPUTATION] section
-        # Default to 'single' if not specified, and set dtype and complex_dtype accordingly
-        self.precision = 'single'
+        # Default to 'double' if not specified, and set dtype and complex_dtype accordingly
+        self.precision = 'double'
         self.dtype = None
         self.complex_dtype = None
 
