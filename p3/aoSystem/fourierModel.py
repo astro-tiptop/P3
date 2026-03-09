@@ -199,8 +199,10 @@ class fourierModel:
 
             # DEFINING THE REFRACTIVE INDEX OF THE AIR AT THE REFERENCE AND GUIDE STAR WAVELENGTH
             mathar_model = MatharAirRefraction()
-            self.n_air_wvlRef = mathar_model.get_refractive_index(self.freq.wvlRef)
-            self.n_air_gs = mathar_model.get_refractive_index(self.gs.wvl[0])
+            self.n_air_wvlRef = np.asarray(mathar_model.get_refractive_index(self.freq.wvlRef),
+                                           dtype=self.dtype)
+            self.n_air_gs = np.asarray(mathar_model.get_refractive_index(self.gs.wvl[0]),
+                                       dtype=self.dtype)
 
             # DEFINING THE MODELED ATMOSPHERE
             if (self.ao.dms.nRecLayers!=None) and \
@@ -1279,9 +1281,9 @@ class fourierModel:
         Watm = self.Wphi * self.freq.pistonFilterAO_
         psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc), dtype=self.dtype)
 
-        # Uses the pre-calculated values (adding 1 because mathar returns n-1)
-        n2 = 1.0 + self.n_air_gs
-        n1 = 1.0 + self.n_air_wvlRef
+        # Uses the pre-calculated values n-1 from Mathar
+        n2 = self.n_air_gs
+        n1 = self.n_air_wvlRef
 
         for s in range(self.ao.src.nSrc):
             psd[:,:,s] = ((n2-n1)/n2)**2 * Watm

@@ -181,6 +181,13 @@ class MatharAirRefraction:
 
         # Compute n-1 for each wavelength provided
         for idx, w in enumerate(wvl_um):
+
+            if w < 1.3:
+                # Edlen's formula is typically valid for visible wavelengths, so we use it as a fallback for shorter wavelengths.
+                sigma = 1.0 / w
+                n_minus_1[idx] = 1e-8 * (8342.54 + 2406147.0 / (130.0 - sigma**2) + 15998.0 / (38.9 - sigma**2))
+                continue
+
             # Select the appropriate band based on wavelength
             band = 'K' # Default fallback
             for b_name, b_data in self.tables.items():
