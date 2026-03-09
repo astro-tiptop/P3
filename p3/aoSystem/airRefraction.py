@@ -183,27 +183,47 @@ class MatharAirRefraction:
         for idx, w in enumerate(wvl_um):
 
             if w < 1.3:
-                # Edlen's formula is typically valid for visible wavelengths, so we use it as a fallback for shorter wavelengths.
-                sigma = 1.0 / w
-                n_minus_1[idx] = 1e-8 * (8342.54 + 2406147.0 / (130.0 - sigma**2) + 15998.0 / (38.9 - sigma**2))
-                continue
+                # ==========================================
+                # CIDDOR 1996 MODEL (Visible / Near-IR)
+                # ==========================================
+                sigma = 1.0 / w  # Wavenumber in um^-1
 
-            # Select the appropriate band based on wavelength
-            band = 'K' # Default fallback
-            for b_name, b_data in self.tables.items():
-                if b_data['range'][0] <= w <= b_data['range'][1]:
-                    band = b_name
-                    break
+                # Ciddor Eq. 1: Standard air refractivity (15 C, 101325 Pa, 450 ppm CO2, 0% humidity)
+                k0 = 238.0185
+                k1 = 5792105.0
+                k2 = 57.362
+                k3 = 167917.0
 
-            nu_ref = self.tables[band]['nu_ref']
-            coeffs = self.tables[band]['coeffs']
+                n_as_minus_1 = (k1 / (k0 - sigma**2) + k3 / (k2 - sigma**2)) * 1e-8
 
-            # Compute c_i(T, p, H) for all i from 0 to 5
-            c_i = np.dot(coeffs, state_vector)
+                # Approximate scaling for Temperature and Pressure (Edlén-like scaling)
+                T_ref_ciddor = 273.15 + 15.0
+                P_ref_ciddor = 101325.0
 
-            # Polynomial summation (Eq. 6)
-            d_nu = nu[idx] - nu_ref
-            n_minus_1[idx] = sum(c_i[i] * (d_nu ** i) for i in range(6))
+                density_factor = (P_pa / P_ref_ciddor) * (T_ref_ciddor / T_kelvin)
+                n_minus_1[idx] = n_as_minus_1 * density_factor
+
+            else:
+                # ==========================================
+                # MATHAR 2006 MODEL (Mid-IR)
+                # ==========================================
+
+                # Select the appropriate band based on wavelength
+                band = 'K' # Default fallback
+                for b_name, b_data in self.tables.items():
+                    if b_data['range'][0] <= w <= b_data['range'][1]:
+                        band = b_name
+                        break
+
+                nu_ref = self.tables[band]['nu_ref']
+                coeffs = self.tables[band]['coeffs']
+
+                # Compute c_i(T, p, H) for all i from 0 to 5
+                c_i = np.dot(coeffs, state_vector)
+
+                # Polynomial summation (Eq. 6)
+                d_nu = nu[idx] - nu_ref
+                n_minus_1[idx] = sum(c_i[i] * (d_nu ** i) for i in range(6))
 
         # Return scalar if input was scalar
         return n_minus_1 if len(n_minus_1) > 1 else n_minus_1[0]
