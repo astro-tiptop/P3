@@ -26,6 +26,7 @@ import p3.aoSystem.FourierUtils as FourierUtils
 from p3.aoSystem.aoSystem import aoSystem
 from p3.aoSystem.atmosphere import atmosphere
 from p3.aoSystem.frequencyDomain import frequencyDomain
+from p3.aoSystem.airRefraction import MatharAirRefraction
 
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
@@ -195,6 +196,11 @@ class fourierModel:
                 self.gs = self.ao.ngs
                 self.nGs = self.ao.ngs.nSrc
                 self.strechFactor = 1.0
+
+            # DEFINING THE REFRACTIVE INDEX OF THE AIR AT THE REFERENCE AND GUIDE STAR WAVELENGTH
+            mathar_model = MatharAirRefraction()
+            self.n_air_wvlRef = mathar_model.get_refractive_index(self.freq.wvlRef)
+            self.n_air_gs = mathar_model.get_refractive_index(self.gs.wvl[0])
 
             # DEFINING THE MODELED ATMOSPHERE
             if (self.ao.dms.nRecLayers!=None) and \
@@ -1244,72 +1250,40 @@ class fourierModel:
         return np.real(psd)
 
     def differentialRefractionPSD(self):
-        def refractionIndex(wvl,nargout=1):
-            ''' Refraction index -1 as a fonction of the wavelength.
-            Valid for lambda between 0.2 and 4µm with 1 atm of pressure and 15 degrees Celsius
-                Inputs : wavelength in meters
-                Outputs : n-1 and dn/dwvl
-            '''
-            c1 = 64.328
-            c2 = 29498.1
-            c3 = 146.0
-            c4 = 255.4
-            c5 = 41.0
-            wvlRef = wvl*1e6
+        tstart = time.time()
+        psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc), dtype=self.dtype)
 
-            nm1 = 1e-6 * (c1 +  c2/(c3-1.0/wvlRef**2) + c4/(c5 - 1.0/wvlRef**2) )
-            dndw= -2e-6 * (c1 +  c2/(c3-1.0/wvlRef**2)**2 + c4/(c5 - 1.0/wvlRef**2)**2 )/wvlRef**3
-            if nargout == 1:
-                return nm1
-            else:
-                return (nm1,dndw)
-
-        def refractiveAnisoplanatism(zenithAngle,wvl):
-            ''' Calculate the angular shift due to the atmospheric refraction at wvl
-            and for a zenith angle zenithAngle in rad
-            '''
-            return refractionIndex(wvl) * np.tan(zenithAngle)
-
-        def differentialRefractiveAnisoplanatism(zenithAngle,wvl_gs,wvlSrc):
-            return (refractionIndex(wvlSrc) - refractionIndex(wvl_gs)) * np.tan(zenithAngle)
-
-        tstart  = time.time()
-
-        psd= np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),
-                       dtype=self.dtype)
         if self.ao.tel.zenith_angle != 0:
-            Hs   = self.ao.atm.heights * self.strechFactor
-            Ws   = self.ao.atm.weights
+            Hs = self.ao.atm.heights * self.strechFactor
+            Ws = self.ao.atm.weights
             Watm = self.Wphi * self.freq.pistonFilterAO_
-            k    = np.sqrt(self.freq.k2AO_)
-            arg_k= np.arctan2(self.freq.kyAO_,self.freq.kxAO_)
+            k = np.sqrt(self.freq.k2AO_)
+            arg_k = np.arctan2(self.freq.kyAO_, self.freq.kxAO_)
             azimuth = self.ao.src.azimuth
 
-            theta = differentialRefractiveAnisoplanatism(
-                self.ao.tel.zenith_angle*np.pi/180,
-                self.gs.wvl[0],
-                self.freq.wvlRef
-            )
+            # Uses the pre-calculated values from Mathar (adding 1 because mathar returns n-1)
+            delta_n = self.n_air_wvlRef - self.n_air_gs
+            theta = delta_n * np.tan(self.ao.tel.zenith_angle*np.pi/180)
+
             for s in range(self.ao.src.nSrc):
                 A = 0
                 for l in range(self.ao.atm.nL):
                     A = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*k*np.tan(theta)*np.cos(arg_k-azimuth[s])))
-                psd[:,:,s] = self.freq.mskInAO_ *A*Watm
+                psd[:,:,s] = self.freq.mskInAO_ * A * Watm
 
         self.t_differentialRefractionPSD = 1000*(time.time() - tstart)
-        return  psd
+        return psd
 
     def chromatismPSD(self):
-        """ PSD of the chromatic effects"""
-        tstart  = time.time()
+        tstart = time.time()
         Watm = self.Wphi * self.freq.pistonFilterAO_
-        psd= np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),
-                      dtype=self.dtype)
-        n2 =  23.7 + 6839.4 / (130-(self.gs.wvl[0]*1.e6)**(-2)) \
-            + 45.47 / (38.9-(self.gs.wvl[0]*1.e6)**(-2))
+        psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc), dtype=self.dtype)
+
+        # Uses the pre-calculated values (adding 1 because mathar returns n-1)
+        n2 = 1.0 + self.n_air_gs
+        n1 = 1.0 + self.n_air_wvlRef
+
         for s in range(self.ao.src.nSrc):
-            n1 =  23.7 + 6839.4 / (130-(self.freq.wvlRef*1.e6)**(-2)) \
-                + 45.47 / (38.9-(self.freq.wvlRef*1.e6)**(-2))
             psd[:,:,s] = ((n2-n1)/n2)**2 * Watm
 
         self.t_chromatismPSD = 1000*(time.time() - tstart)
