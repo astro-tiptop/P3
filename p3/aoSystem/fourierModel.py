@@ -1263,7 +1263,7 @@ class fourierModel:
             arg_k = np.arctan2(self.freq.kyAO_, self.freq.kxAO_)
             azimuth = self.ao.src.azimuth
 
-            # Uses the pre-calculated values from Mathar (adding 1 because mathar returns n-1)
+            # Uses the pre-calculated values from Mathar
             delta_n = self.n_air_wvlRef - self.n_air_gs
             theta = delta_n * np.tan(self.ao.tel.zenith_angle*np.pi/180)
 
@@ -1281,7 +1281,15 @@ class fourierModel:
         Watm = self.Wphi * self.freq.pistonFilterAO_
         psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc), dtype=self.dtype)
 
-        # Uses the pre-calculated values n-1 from Mathar
+        # IMPORTANT: We use refractivity (n - 1) instead of the absolute refractive index (n).
+        # The Optical Path Difference (OPD) induced by atmospheric turbulence scales directly
+        # with (n - 1) according to the Gladstone-Dale relation.
+        # The WFS measures OPD_wfs proportional to (n_wfs - 1), and the DM corrects it.
+        # The residual chromatic error at the science wavelength is OPD_sci - OPD_wfs.
+        # Therefore, the chromatic scaling factor for the variance (PSD) is:
+        # [ ( (n_sci - 1) - (n_wfs - 1) ) / (n_wfs - 1) ]^2
+        # Note: MatharAirRefraction already returns (n - 1) values.
+
         n2 = self.n_air_gs
         n1 = self.n_air_wvlRef
 

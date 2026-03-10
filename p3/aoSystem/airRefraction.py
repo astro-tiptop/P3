@@ -1,8 +1,8 @@
 """
 Model for the Refractive Index of Humid Air in the Infrared.
 Based on:
-1. Philip E. Ciddor, "Refractive index of air: new equations for the visible and near infrared" (1996).
-   Reference: Applied Optics, Vol. 35, No. 9, pp. 1566-1573 (1996)
+1. Philip E. Ciddor, "Refractive index of air: new equations for the visible and near infrared"
+   Applied Optics, Vol. 35, No. 9, pp. 1566-1573 (1996).
 2. Richard J. Mathar, "Refractive Index of Humid Air in the Infrared: Model Fits" (2006).
    Reference: arXiv:physics/0610256v2 [physics.optics]
 
@@ -200,7 +200,7 @@ class MatharAirRefraction:
                 w3 = 0.004028
                 n_ws_minus_1 = cf * (w0 + w1 * sigma**2 + w2 * sigma**4 + w3 * sigma**6) * 1e-8
 
-                # 3. Partial Pressures of Water Vapor (P_w) and Dry Air (P_a)
+                # 3. Partial Pressures of Water Vapor (P_w) and Dry Air (P_a) see App. B, points 8-9
                 # Saturation vapor pressure (svp) and enhancement factor (f) from Ciddor App. A
                 A_svp = 1.2378847e-5
                 B_svp = -1.9121316e-2
@@ -213,6 +213,7 @@ class MatharAirRefraction:
                 gamma = 5.6e-7
                 f_enh = alpha + beta * P_pa + gamma * (T_celsius**2)
 
+                # Partial pressures
                 P_w = (H_pct / 100.0) * f_enh * svp
                 P_a = P_pa - P_w
 
@@ -234,7 +235,7 @@ class MatharAirRefraction:
                 dH = H_pct - self.H_ref
 
                 state_vector = np.array([
-                    1.0, dT_inv, dT_inv**2, dH, dH**2, dP, dP**2, 
+                    1.0, dT_inv, dT_inv**2, dH, dH**2, dP, dP**2,
                     dT_inv * dH, dT_inv * dP, dH * dP
                 ])
 
