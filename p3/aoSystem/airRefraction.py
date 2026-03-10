@@ -1,10 +1,14 @@
 """
 Model for the Refractive Index of Humid Air in the Infrared.
-Based on: Richard J. Mathar, "Refractive Index of Humid Air in the Infrared: Model Fits" (2006).
-Reference: arXiv:physics/0610256v2 [physics.optics]
+Based on:
+1. Philip E. Ciddor, "Refractive index of air: new equations for the visible and near infrared" (1996).
+   Reference: Applied Optics, Vol. 35, No. 9, pp. 1566-1573 (1996)
+2. Richard J. Mathar, "Refractive Index of Humid Air in the Infrared: Model Fits" (2006).
+   Reference: arXiv:physics/0610256v2 [physics.optics]
 
 This module computes the refractive index of air (n - 1) taking into account 
-temperature, pressure, and relative humidity for wavelengths between 1.3 and 28 um.
+temperature, pressure, and relative humidity. It uses the Ciddor (1996) model 
+for wavelengths < 1.3 um and the Mathar (2006) model for wavelengths >= 1.3 um.
 """
 
 import numpy as np
@@ -158,25 +162,6 @@ class MatharAirRefraction:
 
         T_kelvin = T_celsius + 273.15
 
-        # Relative atmospheric state variables (Eq. 7 parameters)
-        dT_inv = (1.0 / T_kelvin) - (1.0 / self.T_ref)
-        dP = P_pa - self.p_ref
-        dH = H_pct - self.H_ref
-
-        # State vector used for the dot product with the coefficient matrix
-        state_vector = np.array([
-            1.0,
-            dT_inv,
-            dT_inv**2,
-            dH,
-            dH**2,
-            dP,
-            dP**2,
-            dT_inv * dH,
-            dT_inv * dP,
-            dH * dP
-        ])
-
         n_minus_1 = np.zeros_like(nu)
 
         # Compute n-1 for each wavelength provided
@@ -186,27 +171,72 @@ class MatharAirRefraction:
                 # ==========================================
                 # CIDDOR 1996 MODEL (Visible / Near-IR)
                 # ==========================================
+                # Note on Approximation: This implementation uses the ideal gas approximation
+                # (compressibility fact. Z = 1) to maximize computation speed during AO simulations.
+                # As stated in Ciddor 1996, Section 7, omitting Z terms introduces an error of
+                # less than 5x10^-8 in the refractive index for standard atmospheric conditions
+                # (0-60 C, 80-120 kPa, 0-100% RH), which is negligible.
+
                 sigma = 1.0 / w  # Wavenumber in um^-1
 
-                # Ciddor Eq. 1: Standard air refractivity (15 C, 101325 Pa, 450 ppm CO2, 0% humidity)
+                # 1. Eq 1 & 2: Standard Dry Air Refractivity
+                # Standard conditions: T_axs = 15 C (288.15 K), P_axs = 101325.0 Pa, CO2 = 450 ppm
                 k0 = 238.0185
                 k1 = 5792105.0
                 k2 = 57.362
                 k3 = 167917.0
-
                 n_as_minus_1 = (k1 / (k0 - sigma**2) + k3 / (k2 - sigma**2)) * 1e-8
 
-                # Approximate scaling for Temperature and Pressure (Edlén-like scaling)
-                T_ref_ciddor = 273.15 + 15.0
-                P_ref_ciddor = 101325.0
+                # Assuming standard 450 ppm CO2, the correction term is 0.
+                # Therefore n_axs_minus_1 = n_as_minus_1
+                n_axs_minus_1 = n_as_minus_1
 
-                density_factor = (P_pa / P_ref_ciddor) * (T_ref_ciddor / T_kelvin)
-                n_minus_1[idx] = n_as_minus_1 * density_factor
+                # 2. Eq 3: Standard Water Vapor Refractivity
+                # Standard conditions: T_ws = 20 C (293.15 K), P_ws = 1333.0 Pa
+                cf = 1.022
+                w0 = 295.235
+                w1 = 2.6422
+                w2 = -0.032380
+                w3 = 0.004028
+                n_ws_minus_1 = cf * (w0 + w1 * sigma**2 + w2 * sigma**4 + w3 * sigma**6) * 1e-8
+
+                # 3. Partial Pressures of Water Vapor (P_w) and Dry Air (P_a)
+                # Saturation vapor pressure (svp) and enhancement factor (f) from Ciddor App. A
+                A_svp = 1.2378847e-5
+                B_svp = -1.9121316e-2
+                C_svp = 33.93711047
+                D_svp = -6.3431645e3
+                svp = np.exp(A_svp * T_kelvin**2 + B_svp * T_kelvin + C_svp + D_svp / T_kelvin)
+
+                alpha = 1.00062
+                beta = 3.14e-8
+                gamma = 5.6e-7
+                f_enh = alpha + beta * P_pa + gamma * (T_celsius**2)
+
+                P_w = (H_pct / 100.0) * f_enh * svp
+                P_a = P_pa - P_w
+
+                # 4. Density ratios (using ideal gas approximation, Z=1)
+                rho_a_ratio = (P_a / 101325.0) * (288.15 / T_kelvin)
+                rho_w_ratio = (P_w / 1333.0) * (293.15 / T_kelvin)
+
+                # 5. Eq 5: Total phase refractivity
+                n_minus_1[idx] = rho_a_ratio * n_axs_minus_1 + rho_w_ratio * n_ws_minus_1
 
             else:
                 # ==========================================
                 # MATHAR 2006 MODEL (Mid-IR)
                 # ==========================================
+
+                # Relative atmospheric state variables (Eq. 7 parameters)
+                dT_inv = (1.0 / T_kelvin) - (1.0 / self.T_ref)
+                dP = P_pa - self.p_ref
+                dH = H_pct - self.H_ref
+
+                state_vector = np.array([
+                    1.0, dT_inv, dT_inv**2, dH, dH**2, dP, dP**2, 
+                    dT_inv * dH, dT_inv * dP, dH * dP
+                ])
 
                 # Select the appropriate band based on wavelength
                 band = 'K' # Default fallback
