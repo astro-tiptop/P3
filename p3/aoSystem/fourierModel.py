@@ -1581,7 +1581,18 @@ class fourierModel:
 
         # from Sasiela 93
         x = 0.5*self.ao.tel.D*2*np.pi*np.sqrt(self.freq.k2_)
-        coeff_tot = 1 - (2*spc.j1(x)/(x))**2 - (4*besselj__n(2,x)/(x))**2
+
+        # Origin protection (x -> 0) compatible with Numpy and Cupy
+        x_safe = np.where(x < 1e-6, 1.0, x)
+
+        j1_term = 2 * spc.j1(x_safe) / x_safe
+        j2_term = 4 * besselj__n(2, x_safe) / x_safe
+
+        # Replace values at the origin with exact analytical limits
+        j1_term = np.where(x < 1e-6, 1.0, j1_term)
+        j2_term = np.where(x < 1e-6, 0.0, j2_term)
+
+        coeff_tot = 1 - j1_term**2 - j2_term**2
 
         #fig, ax1 = plt.subplots(1,1)
         #from matplotlib import colors
@@ -1600,7 +1611,16 @@ class fourierModel:
 
         # from Sasiela 93
         x = 0.5*self.ao.tel.D*2*np.pi*np.sqrt(self.freq.k2_)
-        coeff_tot = 1 - 3*(2*besselj__n(3,x)/(x))**2
+
+        # Origin protection (x -> 0) compatible with Numpy and Cupy
+        x_safe = np.where(x < 1e-6, 1.0, x)
+
+        j3_term = 2 * besselj__n(3, x_safe) / x_safe
+
+        # Analytical limit for x -> 0 is 0.
+        j3_term = np.where(x < 1e-6, 0.0, j3_term)
+
+        coeff_tot = 1 - 3 * j3_term**2
 
         #fig, ax1 = plt.subplots(1,1)
         #from matplotlib import colors
@@ -1610,7 +1630,6 @@ class fourierModel:
         self.t_focusFilter = 1000*(time.time() - tstart)
 
         return np.real(coeff_tot)
-
 
 #%% AO ERROR BREAKDOWN
     def errorBreakDown(self,verbose=True):
