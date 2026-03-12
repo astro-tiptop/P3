@@ -25,11 +25,6 @@ from p3.aoSystem.spiders import spiders
 from p3.aoSystem.frequencyDomain import frequencyDomain
 from p3.aoSystem.fourierModel import fourierModel
 from p3.psfFitting.psfFitting import psfFitting
-from p3.telemetry.telemetryKeck import telemetryKeck
-from p3.telemetry.systemDiagnosis import systemDiagnosis
-from p3.telemetry.configFile import configFile
-from p3.psfr.psfR import psfR
-import p3.psfr.psfrUtils as psfrUtils
 
 HAS_MAOPPY = importlib.util.find_spec('maoppy') is not None
 MAOPPY_SKIP_REASON = "" if HAS_MAOPPY else "maoppy not installed"
@@ -154,6 +149,21 @@ class TestPSFReconstruction(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        try:
+            from p3.telemetry.telemetryKeck import telemetryKeck
+            from p3.telemetry.systemDiagnosis import systemDiagnosis
+            from p3.telemetry.configFile import configFile
+            from p3.psfr.psfR import psfR
+            import p3.psfr.psfrUtils as psfrUtils
+        except ImportError as e:
+            raise unittest.SkipTest(f"Telemetry dependencies not available: {e}")
+
+        cls.telemetryKeck = telemetryKeck
+        cls.systemDiagnosis = systemDiagnosis
+        cls.configFile = configFile
+        cls.psfR = psfR
+        cls.psfrUtils = psfrUtils
+
         cls.path_p3 = _p3_path()
         cls.path_root = cls.path_p3 + '/'
         cls.path_img = cls.path_p3 + '/aoSystem/data/20130801_n0004.fits'
@@ -165,16 +175,16 @@ class TestPSFReconstruction(unittest.TestCase):
         path_sav = cls.path_root + cls.filename
         if not os.path.isfile(path_sav):
             try:
-                psfrUtils.get_data_file(cls.path_root, cls.filename)
+                cls.psfrUtils.get_data_file(cls.path_root, cls.filename)
             except Exception as e:
                 raise unittest.SkipTest(
                     f"Telemetry file not available and download failed: {e}"
                 )
 
-        cls.trs = telemetryKeck(path_sav, cls.path_img, cls.path_calib,
-                                path_save=cls.path_root, nLayer=1)
-        cls.sd = systemDiagnosis(cls.trs)
-        configFile(cls.sd)
+        cls.trs = cls.telemetryKeck(path_sav, cls.path_img, cls.path_calib,
+                                    path_save=cls.path_root, nLayer=1)
+        cls.sd = cls.systemDiagnosis(cls.trs)
+        cls.configFile(cls.sd)
 
     def tearDown(self):
         plt.close('all')
@@ -189,17 +199,17 @@ class TestPSFReconstruction(unittest.TestCase):
 
     def test_config_file(self):
         """configFile runs without errors."""
-        cfg = configFile(self.sd)
+        cfg = self.configFile(self.sd)
         self.assertIsNotNone(cfg)
 
     def test_psfr_instantiation(self):
         """psfR instantiates without errors."""
-        psfr = psfR(self.sd.trs)
+        psfr = self.psfR(self.sd.trs)
         self.assertIsNotNone(psfr)
 
     def test_psf_reconstruction_fitting(self):
         """PSF reconstruction + psfFitting runs without errors."""
-        psfr = psfR(self.sd.trs)
+        psfr = self.psfR(self.sd.trs)
         r0 = psfr.ao.atm.r0
         x0 = [r0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
         fixed = (True,) * 3 + (False,) * 4
@@ -210,7 +220,7 @@ class TestPSFReconstruction(unittest.TestCase):
 
     def test_prime_fitting(self):
         """PRIME fitting (r0 + optical gain) runs without errors."""
-        psfr = psfR(self.sd.trs)
+        psfr = self.psfR(self.sd.trs)
         n_modes = psfr.ao.tel.nModes
         x0 = [0.7, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0] + [0] * n_modes
         fixed = (False,) * 2 + (True,) + (False,) * 4 + (True,) * n_modes
