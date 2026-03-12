@@ -4,11 +4,13 @@
 Unit tests for sensor.NoiseVariance method
 """
 
+import os
 import unittest
 from p3.aoSystem import np
 from p3.aoSystem.sensor import sensor
 from p3.aoSystem.fourierModel import fourierModel
 import pathlib
+
 
 class TestNoiseVariance(unittest.TestCase):
     """Test cases for the NoiseVariance method of the sensor class"""
@@ -681,8 +683,8 @@ class TestNoiseVariance(unittest.TestCase):
         test_dir = pathlib.Path(__file__).parent.absolute()
 
         ini_files = [
-            str(test_dir / 'scao_test_wvl1100nm.ini'),
-            str(test_dir / 'scao_test_wvl2200nm.ini')
+            os.path.join(test_dir, 'scao_test_wvl1100nm.ini'),
+            os.path.join(test_dir, 'scao_test_wvl2200nm.ini')
         ]
 
         wfeN_from_psd = []
@@ -725,4 +727,49 @@ class TestNoiseVariance(unittest.TestCase):
                 f"Got {wfeN_from_psd[0]:.2f} nm at {wavelengths[0]*1e9:.0f}nm and "
                 f"{wfeN_from_psd[1]:.2f} nm at {wavelengths[1]*1e9:.0f}nm "
                 f"(relative difference: {rel_diff*100:.2f}%)"
+        )
+
+    def test_photon_noise_physical_scaling(self):
+        """
+        Physical test: In the pure photon noise limit (RON=0), doubling the flux (mag - 0.75)
+        should halve the noise variance.
+        """
+        test_dir = pathlib.Path(__file__).parent.absolute()
+        ini_file = os.path.join(test_dir, 'scao_test_wvl1100nm.ini')
+        fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False)
+
+        # Force the pure photon noise limit
+        fao.ao.cam.ron = 0.0
+        fao.ao.cam.dark = 0.0
+
+        # Case 1: 1000 photons
+        fao.ao.wfs.detector[0].nph = 1000  # arbitrary photon flux
+        wvl_gs = fao.gs.wvl[0]
+        fao.ao.wfs.processing.noiseVar = fao.ao.wfs.computeNoiseVarianceAtWavelength(
+            wvl_science=fao.freq.wvlRef,
+            wvl_wfs=wvl_gs,
+            r0_at_500nm=fao.ao.atm.r0,
+        )
+        var_mag10 = np.sum(fao.noisePSD())
+
+        # Case 2: Double the flux
+        fao.ao.wfs.detector[0].nph = 2000  # double the photon flux
+        wvl_gs = fao.gs.wvl[0]
+        fao.ao.wfs.processing.noiseVar = fao.ao.wfs.computeNoiseVarianceAtWavelength(
+            wvl_science=fao.freq.wvlRef,
+            wvl_wfs=wvl_gs,
+            r0_at_500nm=fao.ao.atm.r0,
+        )
+        var_double_flux = np.sum(fao.noisePSD())
+
+        # The variance should be exactly half
+        ratio = var_mag10 / var_double_flux
+
+        print(f"\nPhoton noise variance at 1000 ph: {var_mag10:.6e}")
+        print(f"Photon noise variance at 2000 ph: {var_double_flux:.6e}")
+        print(f"Variance ratio (1000ph / 2000ph): {ratio:.2f}")
+
+        self.assertAlmostEqual(
+            ratio, 2.0, places=1,
+            msg=f"The variance did not halve when doubling the photons! Ratio: {ratio}"
         )
