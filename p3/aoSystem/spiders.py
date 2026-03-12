@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from distutils.spawn import find_executable
+from shutil import which
 from scipy.ndimage import label
 
 import p3.aoSystem.FourierUtils as FourierUtils
@@ -19,7 +19,7 @@ import p3.aoSystem.FourierUtils as FourierUtils
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
 
-if find_executable('tex'): 
+if which('tex'):
     usetex = True
 else:
     usetex = False
