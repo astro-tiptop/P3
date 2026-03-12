@@ -20,7 +20,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 import time
-from distutils.spawn import find_executable
+from shutil import which
 
 import p3.aoSystem.FourierUtils as FourierUtils
 from p3.aoSystem.aoSystem import aoSystem
@@ -31,7 +31,7 @@ from p3.aoSystem.airRefraction import MatharAirRefraction
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
 
-if find_executable('tex'):
+if which('tex'):
     usetex = True
 else:
     usetex = False

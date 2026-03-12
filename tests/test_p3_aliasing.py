@@ -61,6 +61,24 @@ class TestAliasingChunking(unittest.TestCase):
         print(f"MAVIS aliasing PSD max: {np.max(psd_chunked):.6e}")
         print(f"MAVIS nL: {fao.ao.atm.nL}")
 
+    def test_psd_sanity_bounds(self):
+        """
+        Verifies that the aliasing PSD is physically valid:
+        no NaN, no Inf, and strictly non-negative.
+        """
+        test_dir = pathlib.Path(__file__).parent.absolute()
+        ini_file = os.path.join(test_dir, 'scao_test_wvl1100nm.ini')
+        fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False)
+        fao.controller()
+        psd_alias = fao.aliasingPSD()
+
+        self.assertFalse(np.isnan(psd_alias).any(), "Aliasing PSD contains NaN!")
+        self.assertFalse(np.isinf(psd_alias).any(), "Aliasing PSD contains Inf!")
+
+        # Due to tiny float rounding errors, we tolerate a small negative epsilon
+        min_val = np.min(psd_alias)
+        self.assertGreaterEqual(min_val, -1e-15,
+                                f"Aliasing PSD contains negative energy: {min_val}")
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
