@@ -6,17 +6,24 @@ Created on Wed Jun 17 01:17:43 2020
 """
 
 # Libraries
-import numpy as nnp
-from . import gpuEnabled, np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray
 from . import gpuEnabled, np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray
 
-import matplotlib.pyplot as plt
-from astropy.modeling import models, fitting
 import matplotlib as mpl
-import scipy.ndimage as scnd
+import matplotlib.pyplot as plt
+from astropy.modeling import fitting, models
 from matplotlib.path import Path
-from scipy.interpolate import interp1d, CubicSpline
 from scipy import ndimage
+from scipy.interpolate import CubicSpline, interp1d
+
+
+def _complex_dtype_for(value):
+    dtype_like = value
+    if hasattr(value, "dtype") and not isinstance(value, type):
+        dtype_like = value.dtype
+    dtype = nnp.dtype(dtype_like)
+    if dtype in (nnp.dtype(nnp.float32), nnp.dtype(nnp.complex64)):
+        return np.complex64
+    return np.complex128
 
 #%%  FOURIER TOOLS
 
@@ -27,30 +34,26 @@ def fftCorrel(x,y):
     nPts = x.shape
 
     if len(nPts) == 1:
-        out =  fft.ifft(fft.fft(x)*np.conj(fft.fft(y)))/nPts
+        out = fft.ifft(fft.fft(x) * np.conj(fft.fft(y))) / nPts[0]
     elif len(nPts) == 2:
-        out =  fft.ifft2(fft.fft2(x)*np.conj(fft.fft2(y)))/(nPts[0]*nPts[1])
+        out = fft.ifft2(fft.fft2(x) * np.conj(fft.fft2(y))) / (nPts[0] * nPts[1])
+    else:
+        raise ValueError("fftCorrel only supports 1D or 2D arrays")
     return out
 
 def fftsym(x):
-    if x.ndim ==2:
-        C_I = np.complex64(1j) if x.dtype == np.float32 else np.complex128(1j)
-        nx,ny            = x.shape
-        if np.any(np.iscomplex(x)):
-            out              = np.zeros((nx,ny)) + C_I * np.zeros((nx,ny))
-            out[0,0]         = x[0,0]
-            out[0,1:ny-1]     = x[1,np.arange(ny-1,1,-1)]
-            out[1:nx-1,0]     = x[np.arange(nx-1,1,-1),1]
-            out[1:nx-1,1:ny-1] = x[np.arange(nx-1,1,-1),np.arange(ny-1,1,-1)]
+    if x.ndim == 2:
+        nx, ny = x.shape
+        if nnp.iscomplexobj(cpuArray(x)):
+            out = np.zeros((nx, ny), dtype=_complex_dtype_for(x))
         else:
-            out              = np.zeros((nx,ny))
-            out[0,0]         = x[0,0]
-            out[0,1:ny-1]     = x[1,np.arange(ny-1,1,-1)]
-            out[1:nx-1,0]     = x[np.arange(nx-1,1,-1),1]
-            out[1:nx-1,1:ny-1] = x[np.arange(nx-1,1,-1),np.arange(ny-1,1,-1)]
-
+            out = np.zeros((nx, ny), dtype=x.dtype)
+        out[0, 0] = x[0, 0]
+        out[0, 1:ny-1] = x[1, np.arange(ny-1, 1, -1)]
+        out[1:nx-1, 0] = x[np.arange(nx-1, 1, -1), 1]
+        out[1:nx-1, 1:ny-1] = x[np.arange(nx-1, 1, -1), np.arange(ny-1, 1, -1)]
         return out
-    elif x.ndim ==1:
+    elif x.ndim == 1:
         return fft.fftshift(x)
 
 
@@ -63,7 +66,7 @@ def freq_array(nX, L=1, offset=1e-10, dtype=np.float64):
     return k2D[0],k2D[1]
 
 
-def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1,
+def getStaticOTF(tel, nOtf, samp, wvl, xStat=None, theta_ext=0, spatialFilter=1,
                  dtype=np.float64):
     """
     Returns the instrumental OTF including the static aberration and the
@@ -72,19 +75,18 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1,
     # DEFINING THE RESOLUTION/PUPIL
     nPup = tel.pupil.shape[0]
 
-    complex_dtype = np.complex128 if dtype == np.float64 else np.complex64
-
     # ADDING STATIC MAP
-    phaseStat = np.zeros((nPup,nPup), dtype=dtype)
-    if not tel.opdMap_on is None and nnp.any(tel.opdMap_on):
+    phaseStat = np.zeros((nPup, nPup), dtype=dtype)
+    if tel.opdMap_on is not None and nnp.any(tel.opdMap_on):
+        opd_map = tel.opdMap_on
         if theta_ext:
-            tel.opdMap_on = scnd.rotate(tel.opdMap_on,theta_ext,reshape=False)
-        phaseStat = ((2*np.pi*1e-9/wvl) * tel.opdMap_on).astype(dtype)
+            opd_map = scnd.rotate(opd_map, theta_ext, reshape=False)
+        phaseStat = ((2 * np.pi * 1e-9 / wvl) * opd_map).astype(dtype)
 
     # ADDING USER-SPECIFIED STATIC MODES
     phaseMap = 0
-    xStat = np.asarray(xStat, dtype=dtype)
-    if not tel.statModes is None and nnp.any(tel.statModes):
+    xStat = np.asarray([] if xStat is None else xStat, dtype=dtype)
+    if tel.statModes is not None and nnp.any(tel.statModes):
         if tel.statModes.shape[2]==xStat.size:
             phaseMap = (2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)).astype(dtype)
             phaseStat += phaseMap
@@ -96,7 +98,7 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=[], theta_ext=0, spatialFilter=1,
 
     # INSTRUMENTAL OTF
     otfStat = np.real(pupil2otf(tel.pupil * tel.apodizer, phaseStat, samp))
-    if not otfStat is None and nnp.any(otfStat.shape!=nOtf):
+    if otfStat is not None and nnp.any(otfStat.shape != nOtf):
         otfStat = interpolateSupport(otfStat,nOtf)
     otfStat /= otfStat.max()
 
@@ -123,13 +125,13 @@ def instantiateAngularFrequencies(nOtf, fact=2, dtype=np.float64):
     return U_, V_, U2_, V2_, UV_
 
 def mcDonald(x):
-        out = 3/5 * np.ones_like(x)
-        idx  = x!=0
-        if np.any(idx==False):
-            out[idx] = x[idx] ** (5/6) * spc.kv(5/6,x[idx])/(2**(5/6) * spc.gamma(11/6))
-        else:
-            out = x ** (5/6) * spc.kv(5/6,x)/(2**(5/6) * spc.gamma(11/6))
-        return out
+    out = 3 / 5 * np.ones_like(x)
+    idx = x != 0
+    if not np.all(idx):
+        out[idx] = x[idx] ** (5/6) * spc.kv(5/6, x[idx]) / (2**(5/6) * spc.gamma(11/6))
+    else:
+        out = x ** (5/6) * spc.kv(5/6, x) / (2**(5/6) * spc.gamma(11/6))
+    return out
 
 def Ialpha(x, y):
     return mcDonald(np.hypot(x, y))
@@ -162,7 +164,7 @@ def _rfft2_to_fft2(im_shape, rfft):
 
 
 def otf2psf(otf, psfInOnePix=False):
-    C_I = np.complex64(1j) if otf.dtype == np.float32 else np.complex128(1j)
+    C_I = _complex_dtype_for(otf)(1j)
     nX,nY   = otf.shape
     u1d     = fft.fftshift(fft.fftfreq(nX))
     v1d     = fft.fftshift(fft.fftfreq(nY))
@@ -200,14 +202,15 @@ def otfShannon2psf(otf,nqSmpl,fovInPixel):
     return psf
 
 def pistonFilter(D, f, fm=0, fn=0, dtype=np.float64):
-    f[np.where(np.equal(f,0))] = 1e-10
-    if len(f.shape) ==1:
-        Fx,Fy = np.meshgrid(f, f, dtype=dtype)
-        FX    = Fx -fm
-        FY    = Fy -fn
-        F     = np.pi*D*np.hypot(FX,FY)
+    f = np.asarray(f, dtype=dtype).copy()
+    f[np.where(np.equal(f, 0))] = 1e-10
+    if len(f.shape) == 1:
+        Fx, Fy = np.meshgrid(f, f)
+        FX = Fx - fm
+        FY = Fy - fn
+        F = np.pi * D * np.hypot(FX, FY)
     else:
-        F     = np.pi*D*f
+        F = np.pi * D * f
     R         = sombrero(1, F, dtype=dtype)
     pFilter   =  1 - 4 * R**2
     pFilter[np.where(pFilter<0)] = 0
@@ -233,10 +236,12 @@ def phase_to_structure_function(phi, pupil, samp, threshold=1e-5):
 def psd2cov(psd,pixelScale):
     nPts = np.array(psd.shape)
     psd  = fft.fftshift(psd)
-    if len(nPts) ==1:
-        out = fft.fft(psd)*pixelScale**2
-    elif len(nPts) ==2:
-        out = fft.fft2(psd)*pixelScale**2
+    if len(nPts) == 1:
+        out = fft.fft(psd) * pixelScale**2
+    elif len(nPts) == 2:
+        out = fft.fft2(psd) * pixelScale**2
+    else:
+        raise ValueError("psd2cov only supports 1D or 2D PSD arrays")
     return out
 
 def psd2otf(psd,pixelScale):
@@ -254,7 +259,7 @@ def pupil2otf(pupil, phase, overSampling):
         E   = enlargeSupport(E,overSampling)
         otf = np.real(fft.fftshift(fftCorrel(E,E)))
     else:
-        C_I = np.complex64(1j) if phase.dtype == np.float32 else np.complex128(1j)
+        C_I = _complex_dtype_for(phase)(1j)
         E   = pupil * np.exp(C_I * phase)
         E   = enlargeSupport(E,overSampling)
         otf = fft.fftshift(fftCorrel(E,E))
@@ -269,9 +274,8 @@ def sf2otf(sf):
     return np.exp(-0.5 * sf)
 
 def shift_array(nX, nY, fact=None, dtype=np.float64):
-    if fact == None:
-        C_I = np.complex64(1j) if dtype == np.float32 else np.complex128(1j)
-        fact = 2 * np.pi * C_I
+    if fact is None:
+        fact = 2 * np.pi * _complex_dtype_for(dtype)(1j)
     X, Y = np.mgrid[0:nX,0:nY].astype(dtype)
     X = (X-nX/2) * fact/nX
     Y = (Y-nY/2) * fact/nY
@@ -279,18 +283,18 @@ def shift_array(nX, nY, fact=None, dtype=np.float64):
 
 def sombrero(n, x, dtype=np.float64):
     x = np.asarray(x, dtype=dtype)
-    if n==0:
-        return spc.jv(0,x)/x
-    else:
-        if n>1:
-            out = np.zeros(x.shape, dtype=dtype)
-        else:
-            out = 0.5*np.ones(x.shape, dtype=dtype)
+    idx = x != 0
 
-        out = np.zeros_like(x, dtype=dtype)
-        idx = x!=0
-        out[idx] = spc.j1(x[idx])/x[idx]
+    if n == 0:
+        out = np.ones_like(x, dtype=dtype)
+        out[idx] = spc.j0(x[idx]) / x[idx]
         return out
+
+    out = np.zeros_like(x, dtype=dtype)
+    if n == 1:
+        out[~idx] = 0.5
+    out[idx] = spc.j1(x[idx]) / x[idx]
+    return out
 
 
 def sort_params_from_labels(psfModelInst, x0):
@@ -398,14 +402,16 @@ def telescopePsf(pupil,samp,kind='spline'):
         otf = interpolateSupport(telescopeOtf(pupil,2),nSize//samp,kind=kind)
         return interpolateSupport(otf2psf(otf),nSize,kind=kind)
 
-def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
-                    x_stellar=[[1.0], [0.],[0.],[0]],
-                    theta_ext=0, nPix=None, otfPixel=1):
+def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=None, x_stat=None,
+                    x_stellar=None, theta_ext=0, nPix=None, otfPixel=1):
     """
         Computation of the 3D PSF and the Strehl-ratio (from the OTF integral).
         The Phase structure function must be a nPx x nPx x nSrc array
         given in rad^2
     """
+
+    if x_stellar is None:
+        x_stellar = [[1.0], [0.], [0.], [0]]
 
     # GETTING THE OBJECT PARAMETERS
     F = x_stellar[0]
@@ -414,11 +420,13 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
     bkg = x_stellar[3]
 
     # INSTANTIATING THE OUTPUTS
-    if nPix == None:
-        nPix = int(freq.nOtf /freq.kRef_)
+    if nPix is None:
+        nPix = int(freq.nOtf / freq.kRef_)
 
-    PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
-    SR  = np.zeros((ao.src.nSrc,freq.nWvl))
+    real_dtype = ao.dtype
+    complex_dtype = _complex_dtype_for(real_dtype)
+    PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl), dtype=real_dtype)
+    SR  = np.zeros((ao.src.nSrc,freq.nWvl), dtype=real_dtype)
 
     # DEFINING THE RESIDUAL JITTER KERNEL
     Kjitter = 1
@@ -431,7 +439,7 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
         Kjitter = np.exp(-0.5 * Djitter)
 
     # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
-    fftPhasor = np.ones((freq.nOtf, freq.nOtf, ao.src.nSrc), dtype=complex)
+    fftPhasor = np.ones((freq.nOtf, freq.nOtf, ao.src.nSrc), dtype=complex_dtype)
     if np.any(dx) or np.any(dy):
         # accounting for the binning
         bin_fact = 1
@@ -439,8 +447,7 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
             bin_fact = freq.kRef_
         # computing the phasor
         dr = bin_fact*(freq.U_[:,:,np.newaxis]*dx + freq.V_[:,:,np.newaxis]*dy)
-        C_I = np.complex64(1j) if dr.dtype == np.float32 else np.complex128(1j)
-        fftPhasor = np.exp(-np.pi * C_I * dr)
+        fftPhasor = np.exp(-np.pi * complex_dtype(1j) * dr)
 
     # INSTRUMENTAL DEFECTS
     if x_stat is not None:
@@ -461,7 +468,7 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
     psf = np.copy(psf_)
 
     if freq.kRef_ >= 1: # binning the PSF
-        psf = np.zeros((ao.cam.fovInPix,ao.cam.fovInPix,ao.src.nSrc))
+        psf = np.zeros((ao.cam.fovInPix, ao.cam.fovInPix, ao.src.nSrc), dtype=real_dtype)
         nC = freq.kRef_
         for iSrc in range(ao.src.nSrc):
             if nC > 1:
@@ -474,7 +481,7 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
 
     # managing the field of view
     if nPix < ao.cam.fovInPix:
-        psf = np.zeros((nPix,nPix,ao.src.nSrc))
+        psf = np.zeros((nPix, nPix, ao.src.nSrc), dtype=real_dtype)
         nC  = psf_.shape[0]/nPix
         for iSrc in range(ao.src.nSrc):
             psf[:,:,iSrc] = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)
@@ -486,15 +493,18 @@ def sf_3D_to_psf_3D(sf, freq, ao, x_jitter=[0, 0, 0], x_stat=None,
     return PSF + bkg, SR
 
 def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
-                    x_stellar = [[1.0], [0.],[0.],[0]],
-                    theta_ext = 0, nPix=None, otfPixel=1):
+                    x_stellar=None, theta_ext=0, nPix=None, otfPixel=1):
     """
         Computation of the 4D PSF and the Strehl-ratio (from the OTF integral).
         The Phase structure function must be a nPx x nPx x nSrc array
         given in rad^2
     """
 
-    C_I = np.complex64(1j) if ao.dtype == np.float32 else np.complex128(1j)
+    if x_stellar is None:
+        x_stellar = [[1.0], [0.], [0.], [0]]
+
+    complex_dtype = _complex_dtype_for(ao.dtype)
+    C_I = complex_dtype(1j)
 
     # GETTING THE OBJECT PARAMETERS
     F = x_stellar[0]
@@ -503,15 +513,15 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
     bkg = x_stellar[3]
 
     # INSTANTIATING THE OUTPUTS
-    if nPix == None:
-        nPix = int(freq.nOtf /freq.kRef_)
+    if nPix is None:
+        nPix = int(freq.nOtf / freq.kRef_)
 
-    PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl))
-    SR  = np.zeros((ao.src.nSrc,freq.nWvl))
+    PSF = np.zeros((nPix,nPix,ao.src.nSrc,freq.nWvl), dtype=ao.dtype)
+    SR  = np.zeros((ao.src.nSrc,freq.nWvl), dtype=ao.dtype)
 
     # DEFINING THE RESIDUAL JITTER KERNEL
     Kjitter = 1
-    if np.any(x_jitter[0:2]):
+    if x_jitter is not None and np.any(x_jitter[0:2]):
         u_max = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
         norm_fact = np.max(u_max)**2 *(2 * np.sqrt(2*np.log(2)))**2
         Djitter = norm_fact * (x_jitter[0]**2 * freq.U2_
@@ -529,8 +539,8 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
         # computing the phasor
         if freq.nWvl > 1:
             # instantiating the phasor
-            fftPhasor = np.zeros((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
-            for iSrc in range(ao.src.nSource):
+            fftPhasor = np.zeros((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl), dtype=complex_dtype)
+            for iSrc in range(ao.src.nSrc):
                 for jWvl in range(freq.nWvl):
                     # account for the binning
                     dr = bin_fact*(dx[iSrc, jWvl]*freq.U_ + dy[iSrc, jWvl]*freq.V_)
@@ -539,7 +549,7 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
             dr = bin_fact*(freq.U_[:,:,np.newaxis]*dx + freq.V_[:,:,np.newaxis]*dy)
             fftPhasor = np.exp(-np.pi * C_I * dr)[:,:,:,np.newaxis]
     else:
-        fftPhasor = np.ones((freq.nOtf,freq.nOtf,ao.src.nSrc,freq.nWvl),dtype=complex)
+        fftPhasor = np.ones((freq.nOtf, freq.nOtf, ao.src.nSrc, freq.nWvl), dtype=complex_dtype)
 
     # LOOP ON WAVELENGTHS
     for jWvl in range(freq.nWvl):
@@ -553,7 +563,7 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
                                                 theta_ext=theta_ext)
 
         # UPDATE THE RESIDUAL JITTER
-        if freq.nyquistSampling == True and freq.nWvl > 1 and x_jitter is not None:
+        if freq.nyquistSampling and freq.nWvl > 1 and x_jitter is not None:
             norm_fact2 = (freq.samp[jWvl]*ao.tel.D/freq.wvl[jWvl]/(3600*180*1e3/np.pi))**2
             norm_fact2 *= (2 * np.sqrt(2*np.log(2)))**2
             Kjitter = np.exp(-0.5 * Djitter * norm_fact2/norm_fact)
@@ -571,7 +581,7 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
         psf = np.copy(psf_)
 
         if freq.k_[jWvl] >= 1: # binning the PSF
-            psf = np.zeros((ao.cam.fovInPix,ao.cam.fovInPix,ao.src.nSrc))
+            psf = np.zeros((ao.cam.fovInPix, ao.cam.fovInPix, ao.src.nSrc), dtype=ao.dtype)
             nC = freq.k_[jWvl]
             for iSrc in range(ao.src.nSrc):
                 if nC > 1:
@@ -584,7 +594,7 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
 
         # managing the field of view
         if nPix < ao.cam.fovInPix:
-            psf = np.zeros((nPix,nPix,ao.src.nSrc))
+            psf = np.zeros((nPix, nPix, ao.src.nSrc), dtype=ao.dtype)
             nC  = psf_.shape[0]/nPix
             for iSrc in range(ao.src.nSrc):
                 psf[:,:,iSrc] = cropSupport(np.squeeze(psf_[:,:,iSrc]),nC)
@@ -647,78 +657,68 @@ def create_wavelength_vector(ao, dtype=np.float64):
     nwvl = n_bin * n_cen
     wvl = np.zeros(nwvl, dtype=dtype)
     for j in range(n_cen):
-        wvl[j:(j+1)*n_bin] = np.linspace(w_min[j], w_max[j], num=n_bin,
-                                         dtype=dtype)
+        start = j * n_bin
+        stop = (j + 1) * n_bin
+        wvl[start:stop] = np.linspace(w_min[j], w_max[j], num=n_bin,
+                                      dtype=dtype)
 
     return wvl, nwvl
 
 def cropSupport(im,n):
-    nx,ny = im.shape
+    nx, ny = im.shape
 
-    if np.isscalar(n) == 1:
-        n = np.array([n,n])
+    if np.isscalar(n):
+        n = np.array([n, n], dtype=float)
 
-    nx2     = int(nx/n[0])
-    ny2     = int(ny/n[1])
+    nx2 = int(nx / n[0])
+    ny2 = int(ny / n[1])
 
-    if np.any(np.iscomplex(im)):
-        C_I = np.complex64(1j) if im.dtype == np.float32 else np.complex128(1j)
-        imNew = np.zeros((nx2,ny2)) + C_I * np.zeros((nx2,ny2))
-    else:
-        imNew = np.zeros((nx2,ny2))
+    xi = int(0.5 * (nx - nx2))
+    yi = int(0.5 * (ny - ny2))
+    xf = xi + nx2
+    yf = yi + ny2
 
-    if nx2%2 ==0:
-        xi = int(0.5*(nx-nx2))
-        xf = int(0.5*(nx + nx2))
-    else:
-        xi = int(0.5*(nx-nx2))
-        xf = int(0.5*(nx+nx2))
-
-    if ny2%2 ==0:
-        yi = int(0.5*(ny-ny2))
-        yf = int(0.5*(ny + ny2))
-    else:
-        yi = int(0.5*(ny-ny2))
-        yf = int(0.5*(ny+ny2))
-
-    imNew     = im[xi:xf,yi:yf]
-
-    return imNew
+    return im[xi:xf, yi:yf]
 
 
 def enlargeSupport(cube, n):
 
-    if np.ndim(cube)==2:
-        nx,ny = cube.shape
-        return np.pad(cube, [int((n-1)*nx/2), int((n-1)*ny/2)])
-    elif np.ndim(cube)==3:
+    if np.ndim(cube) == 2:
+        nx, ny = cube.shape
+        pad_x = int((n - 1) * nx / 2)
+        pad_y = int((n - 1) * ny / 2)
+        return np.pad(cube, ((pad_x, pad_x), (pad_y, pad_y)))
+    elif np.ndim(cube) == 3:
         nx, ny, nz = cube.shape
-        if nx==ny:
-            n1 = int((n-1)*nx/2)
-            n2 = int((n-1)*ny/2)
-            return np.pad(cube, [(n1, n1), (n2, n2), (0,0)])
-        elif ny==nz:
-            n1 = int((n-1)*ny/2)
-            n2 = int((n-1)*nz/2)
-            return np.pad(cube,[(0,0) , (n1, n1), (n2, n2)])
+        if nx == ny:
+            pad_x = int((n - 1) * nx / 2)
+            pad_y = int((n - 1) * ny / 2)
+            return np.pad(cube, ((pad_x, pad_x), (pad_y, pad_y), (0, 0)))
+        elif ny == nz:
+            pad_y = int((n - 1) * ny / 2)
+            pad_z = int((n - 1) * nz / 2)
+            return np.pad(cube, ((0, 0), (pad_y, pad_y), (pad_z, pad_z)))
+
+    raise ValueError("enlargeSupport only supports 2D arrays and 3D cubes")
 
 
 def inpolygon(xq, yq, xv, yv):
-        shape = xq.shape
-        xq = xq.reshape(-1)
-        yq = yq.reshape(-1)
-        xv = xv.reshape(-1)
-        yv = yv.reshape(-1)
-        q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
-        p = Path([(xv[i], yv[i]) for i in range(xv.shape[0])])
-        return p.contains_points(q).reshape(shape)
+    shape = xq.shape
+    xq = xq.reshape(-1)
+    yq = yq.reshape(-1)
+    xv = xv.reshape(-1)
+    yv = yv.reshape(-1)
+    q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
+    p = Path([(xv[i], yv[i]) for i in range(xv.shape[0])])
+    return p.contains_points(q).reshape(shape)
 
  
 def interpolateSupport(image, n_out, kind='spline'):
 
-    C_I = np.complex64(1j) if image.dtype == np.float32 else np.complex128(1j)
+    C_I = _complex_dtype_for(image)(1j)
+    is_complex = nnp.iscomplexobj(cpuArray(image))
 
-    n_x,n_y = image.shape
+    n_x, n_y = image.shape
     # Define angular frequencies vectors
     if nnp.isscalar(n_out):
         m_x = m_y = int(n_out)
@@ -726,60 +726,58 @@ def interpolateSupport(image, n_out, kind='spline'):
         m_x = int(n_out[0])
         m_y = int(n_out[1])
 
-    if n_x==m_x and n_y==m_y:
+    if n_x == m_x and n_y == m_y:
         return image
 
-    if kind=="nearest":
-        tmpReal = scnd.zoom(np.real(image),min([m_x/n_x,m_y/m_y]),order=0)
-        if np.any(np.iscomplex(image)):
-            tmpImag = scnd.zoom(np.imag(image),min([m_x/n_x,m_y/m_y]),order=0)
-            return tmpReal + C_I*tmpImag
-        else:
-            return tmpReal
+    if kind == "nearest":
+        zoom_factors = (m_x / n_x, m_y / n_y)
+        tmpReal = scnd.zoom(np.real(image), zoom_factors, order=0)
+        if is_complex:
+            tmpImag = scnd.zoom(np.imag(image), zoom_factors, order=0)
+            return np.asarray(tmpReal + C_I * tmpImag, dtype=image.dtype)
+        return np.asarray(tmpReal, dtype=image.dtype)
+
+    # Initial frequencies grid
+    if n_x%2 == 0:
+        uinit = nnp.linspace(-n_x/2, n_x/2-1, n_x) * 2 / n_x
     else:
-        # Initial frequencies grid
-        if n_x%2 == 0:
-            uinit = nnp.linspace(-n_x/2,n_x/2-1,n_x)*2/n_x
-        else:
-            uinit = nnp.linspace(-nnp.floor(n_x/2),nnp.floor(n_x/2),n_x)*2/n_x
-        if n_y%2 == 0:
-            vinit = nnp.linspace(-n_y/2,n_y/2-1,n_y)*2/n_y
-        else:
-            vinit = nnp.linspace(-nnp.floor(n_y/2),nnp.floor(n_y/2),n_y)*2/n_y
+        uinit = nnp.linspace(-nnp.floor(n_x/2), nnp.floor(n_x/2), n_x) * 2 / n_x
+    if n_y%2 == 0:
+        vinit = nnp.linspace(-n_y/2, n_y/2-1, n_y) * 2 / n_y
+    else:
+        vinit = nnp.linspace(-nnp.floor(n_y/2), nnp.floor(n_y/2), n_y) * 2 / n_y
 
-        # Interpolated frequencies grid
-        if m_x%2 == 0:
-            unew = nnp.linspace(-m_x/2,m_x/2-1,m_x)*2/m_x
-        else:
-            unew = nnp.linspace(-nnp.floor(m_x/2),nnp.floor(m_x/2),m_x)*2/m_x
-        if m_y%2 == 0:
-            vnew = nnp.linspace(-m_y/2,m_y/2-1,m_y)*2/m_y
-        else:
-            vnew = nnp.linspace(-nnp.floor(m_y/2),nnp.floor(m_y/2),m_y)*2/m_y
+    # Interpolated frequencies grid
+    if m_x%2 == 0:
+        unew = nnp.linspace(-m_x/2, m_x/2-1, m_x) * 2 / m_x
+    else:
+        unew = nnp.linspace(-nnp.floor(m_x/2), nnp.floor(m_x/2), m_x) * 2 / m_x
+    if m_y%2 == 0:
+        vnew = nnp.linspace(-m_y/2, m_y/2-1, m_y) * 2 / m_y
+    else:
+        vnew = nnp.linspace(-nnp.floor(m_y/2), nnp.floor(m_y/2), m_y) * 2 / m_y
 
-        # Interpolation
+    # Interpolation
+    fun_imag = None
+    if kind == "spline":
+        # Surprisingly v and u vectors must be shifted when using
+        # RectBivariateSpline. See: https://github.com/scipy/scipy/issues/3164
+        xin = np.real(image)
+        fun_real = RectBivariateSpline(vinit, uinit, cpuArray(xin))
+        if is_complex:
+            xin = np.imag(image)
+            fun_imag = RectBivariateSpline(vinit, uinit, cpuArray(xin))
+    else:
+        xin = np.real(image)
+        fun_real = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
+        if is_complex:
+            xin = np.imag(image)
+            fun_imag = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
 
-        if kind=="spline":
-            # Surprinsingly v and u vectors must be shifted when using
-            # RectBivariateSpline. See:https://github.com/scipy/scipy/issues/3164
-            xin = np.real(image)
-            fun_real = RectBivariateSpline(vinit, uinit, cpuArray(xin))
-            if nnp.any(np.iscomplex(image)):
-                xin = np.imag(image)
-                fun_imag = RectBivariateSpline(vinit, uinit, cpuArray(xin))
-        else:
-            xin = np.real(image)
-            fun_real = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
-            if nnp.any(np.iscomplex(image)):
-                xin = np.imag(image)
-                fun_imag = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
-
-        if np.any(np.iscomplex(image)):
-            return np.asarray(fun_real(unew,vnew) + C_I * fun_imag(unew,vnew),
-                              dtype=image.dtype)
-        else:
-            return np.asarray(fun_real(unew,vnew),
-                              dtype=image.dtype)
+    if is_complex:
+        return np.asarray(fun_real(unew, vnew) + C_I * fun_imag(unew, vnew),
+                          dtype=image.dtype)
+    return np.asarray(fun_real(unew, vnew), dtype=image.dtype)
 
 
 def normalizeImage(im, normType=1, param=None):
@@ -794,43 +792,45 @@ def normalizeImage(im, normType=1, param=None):
         If param is provided, the functions does unormalize
     '''
 
-    if param == None:
-        "NORMALIZATION"
+    if param is None:
         if normType == 0:
             param = 1
-            im_n  = im
+            im_n = im
         elif normType == 1:
             param = im.sum()
-            im_n  = np.copy(im)/param
+            im_n = np.copy(im) / param
         elif normType == 2:
-            param = [im.min(),im.max()]
-            im_n  = (np.copy(im)-param[0])/(param[1] - param[2])
+            param = [im.min(), im.max()]
+            scale = param[1] - param[0]
+            if nnp.all(cpuArray(scale) == 0):
+                im_n = np.zeros_like(im)
+            else:
+                im_n = (np.copy(im) - param[0]) / scale
         elif normType == 3:
             param = abs(getFlux(im))
-            im_n  = np.copy(im)/param
+            im_n = np.copy(im) / param
         elif normType == 4:
             param = np.clip(im, 0, None).sum()
-            im_n  = np.copy(im)/param
+            im_n = np.copy(im) / param
         else:
             param = normType
-            im_n  = np.copy(im)/normType
+            im_n = np.copy(im) / normType
 
         return im_n, param
+
+    if normType == 0:
+        return im
+    elif normType == 1:
+        return np.copy(im) * param
+    elif normType == 2:
+        scale = param[1] - param[0]
+        return np.copy(im) * scale + param[0]
+    elif normType == 3:
+        return np.copy(im) * param
+    elif normType == 4:
+        return np.copy(im) * param
     else:
-        "UNORMALIZATION"
-        if normType == 0:
-            return im
-        elif normType == 1:
-            return np.copy(im) * param
-        elif normType == 2:
-            param = [im.min(),im.max()]
-            return np.copy(im)*(param[1] - param[2]) + param[0]
-        elif normType == 3:
-            return np.copy(im) * param
-        elif normType == 4:
-            return np.copy(im) * param
-        else:
-            return np.copy(im) * param
+        return np.copy(im) * param
 
 #%%  IMAGE PROCESSING TOOLS
 
@@ -844,7 +844,7 @@ def addNoise(im,ron,darkBg,skyBg,DIT,nDIT):
 
 def centerPsf(psf,rebin,nargout=1):
     
-    C_I         = np.complex64(1j) if psf.dtype == np.float32 else np.complex128(1j)
+    C_I         = _complex_dtype_for(psf)(1j)
     flux        = psf.sum()
     npsfx,npsfy = psf.shape
     npsfx2      = npsfx*rebin

@@ -6,14 +6,6 @@ Created on Tue Sep  1 16:31:39 2020
 @author: omartin
 """
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Aug 16 15:00:44 2018
-
-@author: omartin
-"""
-
 import numpy as nnp
 from . import gpuEnabled, np, nnp, fft, spc, cpuArray, trapz
 import matplotlib as mpl
@@ -291,7 +283,7 @@ class fourierModel:
             self.applyTiltFilter = self.TiltFilterP
 
             # COMPUTE THE PSD
-            if self.normalizePSD == True:
+            if self.normalizePSD:
                 wfe = self.ao.rtc.holoop['wfe']
             else:
                 wfe = None
@@ -306,8 +298,7 @@ class fourierModel:
                 )
 
                 # GETTING METRICS
-                if self.getFWHM == True or self.getEnsquaredEnergy==True \
-                  or self.getEncircledEnergy==True:
+                if self.getFWHM or self.getEnsquaredEnergy or self.getEncircledEnergy:
                     self.getPsfMetrics(getEnsquaredEnergy=self.getEnsquaredEnergy, \
                         getEncircledEnergy=self.getEncircledEnergy,getFWHM=self.getFWHM)
 
@@ -857,7 +848,7 @@ class fourierModel:
                     self.psdMcaoWFsensCone = None
 
             # NORMALIZATION
-            if wfe != None:
+            if wfe is not None:
                 psd *= (dk * rad2nm)**2
                 psd *= wfe**2/psd.sum()
 
@@ -879,8 +870,8 @@ class fourierModel:
                     self.psdVib = None
 
             # Tilt filter
-            if self.applyTiltFilter == True:
-                tiltFilter = self.TiltFilter()           
+            if self.applyTiltFilter:
+                tiltFilter = self.TiltFilter()
                 for i in range(self.ao.src.nSrc):
                     psd[:,:,i] *= tiltFilter
 
@@ -956,7 +947,7 @@ class fourierModel:
         weights = self.ao.atm.weights
         w = 2 * i * np.pi * d
 
-        if hasattr(self, 'Rx') == False:
+        if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
         Rx = self.Rx * w
         Ry = self.Ry * w
@@ -1111,7 +1102,7 @@ class fourierModel:
         tstart = time.time()
         psd = np.zeros((self.freq.resAO,self.freq.resAO),
                        dtype=self.dtype)
-        if hasattr(self, 'Rx') == False:
+        if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
 
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
@@ -1699,7 +1690,7 @@ class fourierModel:
                 self.psdAni = None
 
             # Print
-            if verbose == True:
+            if verbose:
                 print('\n_____ ERROR BREAKDOWN  ON-AXIS_____')
                 print('------------------------------------------')
                 idCenter = self.ao.src.zenith.argmin()
@@ -1792,15 +1783,15 @@ class fourierModel:
                                    dtype=self.dtype)
         for n in range(self.ao.src.nSrc):
             for j in range(self.freq.nWvl):
-                if getFWHM == True:
+                if getFWHM:
                     self.FWHM[:,n,j]  = FourierUtils.getFWHM(self.PSF[:,:,n,j],
                                                              self.freq.psInMas[j],
                                                              rebin=1,
                                                              method='contour',
                                                              nargout=2)
-                if getEnsquaredEnergy == True:
+                if getEnsquaredEnergy:
                     self.EnsqE[:,n,j] = 1e2*FourierUtils.getEnsquaredEnergy(self.PSF[:,:,n,j])
-                if getEncircledEnergy == True:
+                if getEncircledEnergy:
                     self.EncE[:,n,j]  = 1e2*FourierUtils.getEncircledEnergy(self.PSF[:,:,n,j])
 
         self.t_getPsfMetrics = 1000*(time.time() - tstart)
@@ -2008,7 +1999,7 @@ class fourierModel:
                         P = self.PSF[:,:,nmin,0]
                     plt.imshow(np.log10(np.abs(P)))
 
-                if displayContour == True and np.any(self.SR) and self.SR.size > 1:
+                if displayContour and np.any(self.SR) and self.SR.size > 1:
                     self.displayPsfMetricsContours(eeRadiusInMas=eeRadiusInMas)
                 else:
                     # STREHL-RATIO
@@ -2144,7 +2135,7 @@ class fourierModel:
         if self.t_initAO > 0:
             print(f"{'AO system model initialization:':<45} {self.t_initAO:>8.1f} ms")
 
-        if self.ao.error == False:
+        if not self.ao.error:
             print("\n--- Initialization ---")
 
             if self.t_initFreq > 0:
