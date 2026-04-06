@@ -6,6 +6,7 @@ Created on Sat Apr 17 14:19:06 2021
 @author: omartin
 """
 import numpy as np
+from . import cpuArray
 
 class processing:
     """
@@ -31,11 +32,13 @@ class processing:
             s += '.Window radius : %d pixels\n'%(self.settings[0])
             s += '.Threshold : %.2f e-\n'%(self.settings[1])
             s += '.New value : %.2f e-\n'%(self.settings[2])
-            
-        if np.any(self.noiseVar == [None]):
+
+        noise_var = cpuArray(self.noiseVar)
+        noise_arr = np.asarray(noise_var, dtype=object)
+        if noise_arr.size == 1 and noise_arr.reshape(-1)[0] is None:
             s += '.Mean noise variance [rd^2] : %.f'%(0)
         else:
-            s += '.Mean noise variance [rd^2] : %.f'%(np.mean(self.noiseVar))
+            s += '.Mean noise variance [rd^2] : %.f'%(float(np.mean(np.asarray(noise_var, dtype=float))))
         
         return s
         

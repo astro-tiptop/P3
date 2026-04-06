@@ -74,42 +74,48 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=None, theta_ext=0, spatialFilter=1,
     """
     # DEFINING THE RESOLUTION/PUPIL
     nPup = tel.pupil.shape[0]
+    pupil = np.asarray(tel.pupil, dtype=dtype)
+    apodizer = np.asarray(tel.apodizer, dtype=dtype)
 
     # ADDING STATIC MAP
     phaseStat = np.zeros((nPup, nPup), dtype=dtype)
-    if tel.opdMap_on is not None and nnp.any(tel.opdMap_on):
-        opd_map = tel.opdMap_on
+    if tel.opdMap_on is not None and nnp.any(cpuArray(tel.opdMap_on)):
+        opd_map = np.asarray(tel.opdMap_on, dtype=dtype)
         if theta_ext:
-            opd_map = scnd.rotate(opd_map, theta_ext, reshape=False)
+            if isinstance(tel.opdMap_on, nnp.ndarray):
+                opd_map = np.asarray(ndimage.rotate(cpuArray(opd_map), theta_ext, reshape=False), dtype=dtype)
+            else:
+                opd_map = scnd.rotate(opd_map, theta_ext, reshape=False)
         phaseStat = ((2 * np.pi * 1e-9 / wvl) * opd_map).astype(dtype)
 
     # ADDING USER-SPECIFIED STATIC MODES
     phaseMap = 0
     xStat = np.asarray([] if xStat is None else xStat, dtype=dtype)
-    if tel.statModes is not None and nnp.any(tel.statModes):
-        if tel.statModes.shape[2]==xStat.size:
-            phaseMap = (2*np.pi*1e-9/wvl * np.sum(tel.statModes*xStat,axis=2)).astype(dtype)
+    if tel.statModes is not None and nnp.any(cpuArray(tel.statModes)):
+        stat_modes = np.asarray(tel.statModes, dtype=dtype)
+        if stat_modes.shape[2] == xStat.size:
+            phaseMap = (2 * np.pi * 1e-9 / wvl * np.sum(stat_modes * xStat, axis=2)).astype(dtype)
             phaseStat += phaseMap
 
     # FILTERING
     if not nnp.isscalar(spatialFilter):
         spatialFilter = np.asarray(spatialFilter, dtype=dtype)
-        phaseStat = (np.dot(spatialFilter,phaseStat.reshape(-1))).reshape((nPup,nPup))
+        phaseStat = (np.dot(spatialFilter, phaseStat.reshape(-1))).reshape((nPup, nPup))
 
     # INSTRUMENTAL OTF
-    otfStat = np.real(pupil2otf(tel.pupil * tel.apodizer, phaseStat, samp))
+    otfStat = np.real(pupil2otf(pupil * apodizer, phaseStat, samp))
     if otfStat is not None and nnp.any(otfStat.shape != nOtf):
-        otfStat = interpolateSupport(otfStat,nOtf)
+        otfStat = interpolateSupport(otfStat, nOtf)
     otfStat /= otfStat.max()
 
     # DIFFRACTION-LIMITED OTF
-    if nnp.all(phaseStat == 0):
+    if np.all(phaseStat == 0):
         otfDL = np.real(otfStat)
     else:
-        otfDL = np.real(pupil2otf(tel.pupil * tel.apodizer, 0*phaseStat, samp))
-        if nnp.any(otfDL.shape !=nOtf):
+        otfDL = np.real(pupil2otf(pupil * apodizer, 0 * phaseStat, samp))
+        if nnp.any(otfDL.shape != nOtf):
             otfDL = interpolateSupport(otfDL, nOtf)
-            otfDL/= otfDL.max()
+            otfDL /= otfDL.max()
 
     otfStat = otfStat.astype(dtype)
     otfDL = otfDL.astype(dtype)
@@ -506,11 +512,16 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
     complex_dtype = _complex_dtype_for(ao.dtype)
     C_I = complex_dtype(1j)
 
+    # Normalize optional inputs early so that downstream `np.any`, arithmetic,
+    # and broadcasting stay valid with both NumPy and CuPy backends.
+    if x_jitter is not None:
+        x_jitter = np.asarray(x_jitter, dtype=ao.dtype).reshape(-1)
+
     # GETTING THE OBJECT PARAMETERS
-    F = x_stellar[0]
-    dx = x_stellar[1]
-    dy = x_stellar[2]
-    bkg = x_stellar[3]
+    F = np.asarray(x_stellar[0], dtype=ao.dtype)
+    dx = np.asarray(x_stellar[1], dtype=ao.dtype)
+    dy = np.asarray(x_stellar[2], dtype=ao.dtype)
+    bkg = np.asarray(x_stellar[3], dtype=ao.dtype)
 
     # INSTANTIATING THE OUTPUTS
     if nPix is None:
@@ -521,7 +532,7 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
 
     # DEFINING THE RESIDUAL JITTER KERNEL
     Kjitter = 1
-    if x_jitter is not None and np.any(x_jitter[0:2]):
+    if x_jitter is not None and np.any(x_jitter[0:2] != 0):
         u_max = freq.samp*ao.tel.D/freq.wvl/(3600*180*1e3/np.pi)
         norm_fact = np.max(u_max)**2 *(2 * np.sqrt(2*np.log(2)))**2
         Djitter = norm_fact * (x_jitter[0]**2 * freq.U2_
@@ -530,7 +541,7 @@ def sf_3D_to_psf_4D(sf, freq, ao, x_jitter=None, x_stat=None,
         Kjitter = np.exp(-0.5 * Djitter)
 
     # DEFINE THE FFT PHASOR AND MULTIPLY TO THE TELESCOPE OTF
-    if np.any(dx!=0) or np.any(dy!=0):
+    if np.any(dx != 0) or np.any(dy != 0):
         # accounting for the binning
         bin_fact = 1
         if freq.kRef_ > 2:
@@ -792,45 +803,49 @@ def normalizeImage(im, normType=1, param=None):
         If param is provided, the functions does unormalize
     '''
 
+    xp = nnp if isinstance(im, nnp.ndarray) else np
+    im_arr = xp.asarray(im)
+
     if param is None:
         if normType == 0:
             param = 1
-            im_n = im
+            im_n = im_arr
         elif normType == 1:
-            param = im.sum()
-            im_n = np.copy(im) / param
+            param = im_arr.sum()
+            im_n = xp.copy(im_arr) / param
         elif normType == 2:
-            param = [im.min(), im.max()]
+            param = [float(nnp.asarray(cpuArray(im_arr.min())).reshape(-1)[0]),
+                     float(nnp.asarray(cpuArray(im_arr.max())).reshape(-1)[0])]
             scale = param[1] - param[0]
-            if nnp.all(cpuArray(scale) == 0):
-                im_n = np.zeros_like(im)
+            if scale == 0:
+                im_n = xp.zeros_like(im_arr)
             else:
-                im_n = (np.copy(im) - param[0]) / scale
+                im_n = (xp.copy(im_arr) - param[0]) / scale
         elif normType == 3:
-            param = abs(getFlux(im))
-            im_n = np.copy(im) / param
+            param = abs(getFlux(im_arr))
+            im_n = xp.copy(im_arr) / param
         elif normType == 4:
-            param = np.clip(im, 0, None).sum()
-            im_n = np.copy(im) / param
+            param = xp.clip(im_arr, 0, None).sum()
+            im_n = xp.copy(im_arr) / param
         else:
             param = normType
-            im_n = np.copy(im) / normType
+            im_n = xp.copy(im_arr) / normType
 
         return im_n, param
 
     if normType == 0:
-        return im
+        return im_arr
     elif normType == 1:
-        return np.copy(im) * param
+        return xp.copy(im_arr) * param
     elif normType == 2:
         scale = param[1] - param[0]
-        return np.copy(im) * scale + param[0]
+        return xp.copy(im_arr) * scale + param[0]
     elif normType == 3:
-        return np.copy(im) * param
+        return xp.copy(im_arr) * param
     elif normType == 4:
-        return np.copy(im) * param
+        return xp.copy(im_arr) * param
     else:
-        return np.copy(im) * param
+        return xp.copy(im_arr) * param
 
 #%%  IMAGE PROCESSING TOOLS
 
@@ -1015,15 +1030,16 @@ def createDeadPixFrame(badPixelMap):
 #%% PSF METRICS
 def getEnsquaredEnergy(psf):
 
-    S     = psf.sum()
-    nY,nX = psf.shape
-    y0,x0 = np.unravel_index(psf.argmax(), psf.shape)
-    nEE   = min([nY-y0,nX-x0])
+    psf_cpu = nnp.asarray(cpuArray(psf))
+    S = psf_cpu.sum()
+    nY, nX = psf_cpu.shape
+    y0, x0 = nnp.unravel_index(psf_cpu.argmax(), psf_cpu.shape)
+    nEE = int(min(nY - y0, nX - x0))
 
-    EE = np.zeros(nEE+1)
-    for n in range(nEE+1):
-        EE[n] = psf[y0 - n:y0+n+1,x0-n:x0+n+1].sum()
-    return EE/S
+    EE = nnp.zeros(nEE + 1, dtype=psf_cpu.dtype)
+    for n in range(nEE + 1):
+        EE[n] = psf_cpu[y0 - n:y0 + n + 1, x0 - n:x0 + n + 1].sum()
+    return EE / S
 
 def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):
     
@@ -1490,6 +1506,8 @@ def find_contour_points(image, level):
 
 def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_guess=2):
             
+    pixelScale = float(nnp.asarray(cpuArray(pixelScale)).reshape(-1)[0])
+
     # Gaussian and Moffat fitting are not really efficient on
     # anisoplanatic PSF. Prefer the coutour function in such a
     # case. The cutting method is not compliant to PSF not oriented

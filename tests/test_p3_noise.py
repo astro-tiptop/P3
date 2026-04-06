@@ -6,7 +6,8 @@ Unit tests for sensor.NoiseVariance method
 
 import os
 import unittest
-from p3.aoSystem import np
+import numpy as nnp
+from p3.aoSystem import np, cpuArray
 from p3.aoSystem.sensor import sensor
 from p3.aoSystem.fourierModel import fourierModel
 import pathlib
@@ -14,6 +15,10 @@ import pathlib
 
 class TestNoiseVariance(unittest.TestCase):
     """Test cases for the NoiseVariance method of the sensor class"""
+
+    @staticmethod
+    def _cpu_scalar(value):
+        return float(nnp.asarray(cpuArray(value)).reshape(-1)[0])
 
     def setUp(self):
         """Set up test fixtures"""
@@ -37,7 +42,7 @@ class TestNoiseVariance(unittest.TestCase):
 
         var_noise = wfs.NoiseVariance(self.r0, self.wvl)
 
-        self.assertIsInstance(var_noise, np.ndarray)
+        self.assertIsInstance(cpuArray(var_noise), nnp.ndarray)
         self.assertEqual(len(var_noise), 1)
         self.assertGreater(var_noise[0], 0)
         self.assertLess(var_noise[0], 10)  # reasonable upper bound
@@ -58,7 +63,7 @@ class TestNoiseVariance(unittest.TestCase):
 
         var_noise = wfs.NoiseVariance(self.r0, self.wvl)
 
-        self.assertIsInstance(var_noise, np.ndarray)
+        self.assertIsInstance(cpuArray(var_noise), nnp.ndarray)
         self.assertEqual(len(var_noise), 1)
         self.assertGreater(var_noise[0], 0)
 
@@ -78,7 +83,7 @@ class TestNoiseVariance(unittest.TestCase):
 
         var_noise = wfs.NoiseVariance(self.r0, self.wvl)
 
-        self.assertIsInstance(var_noise, np.ndarray)
+        self.assertIsInstance(cpuArray(var_noise), nnp.ndarray)
         self.assertEqual(len(var_noise), 1)
         self.assertGreater(var_noise[0], 0)
 
@@ -97,7 +102,7 @@ class TestNoiseVariance(unittest.TestCase):
 
         var_noise = wfs.NoiseVariance(self.r0, self.wvl)
 
-        self.assertIsInstance(var_noise, np.ndarray)
+        self.assertIsInstance(cpuArray(var_noise), nnp.ndarray)
         self.assertEqual(len(var_noise), 1)
         self.assertGreater(var_noise[0], 0)
 
@@ -115,7 +120,7 @@ class TestNoiseVariance(unittest.TestCase):
 
         var_noise = wfs.NoiseVariance(self.r0, self.wvl)
 
-        self.assertIsInstance(var_noise, np.ndarray)
+        self.assertIsInstance(cpuArray(var_noise), nnp.ndarray)
         self.assertEqual(len(var_noise), 1)
         self.assertGreater(var_noise[0], 0)
 
@@ -134,9 +139,9 @@ class TestNoiseVariance(unittest.TestCase):
 
         var_noise = wfs.NoiseVariance(self.r0, self.wvl)
 
-        self.assertIsInstance(var_noise, np.ndarray)
+        self.assertIsInstance(cpuArray(var_noise), nnp.ndarray)
         self.assertEqual(len(var_noise), 2)
-        self.assertTrue(np.all(var_noise > 0))
+        self.assertTrue(nnp.all(nnp.asarray(cpuArray(var_noise)) > 0))
 
     def test_high_photon_flux(self):
         """Test NoiseVariance with high photon flux (low noise)"""
@@ -451,7 +456,7 @@ class TestNoiseVariance(unittest.TestCase):
                 r0_at_500nm=r0_at_500nm
             )
             rad2nm = wvl_sci * 1e9 / (2 * np.pi)
-            noise_values.append(np.sqrt(noise_var[0]) * rad2nm)
+            noise_values.append(nnp.sqrt(self._cpu_scalar(noise_var[0])) * rad2nm)
 
         # The noise in nm should be constant across science wavelengths
         for i in range(1, len(noise_values)):
@@ -479,7 +484,7 @@ class TestNoiseVariance(unittest.TestCase):
             # Noise is calculated with r0 at wvl_wfs
             r0_wfs = 0.20 * (wvl_wfs / 500e-9)**(6/5)
             var_noise = wfs.NoiseVariance(r0_wfs, wvl_wfs)
-            noise_values.append(var_noise[0])
+            noise_values.append(self._cpu_scalar(var_noise[0]))
 
         # Values should be different
         # (though they might be similar due to r0 scaling)
