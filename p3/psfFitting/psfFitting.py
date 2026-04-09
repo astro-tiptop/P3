@@ -10,6 +10,7 @@ Created on Wed Feb 17 10:33:19 2021
 import numpy as np
 from scipy.optimize import least_squares
 import p3.aoSystem.FourierUtils as FourierUtils
+from p3.aoSystem import cpuArray
 from p3.psfFitting.confidenceInterval import confidence_interval
 from p3.psfFitting.imageModel import imageModel
 
@@ -96,11 +97,11 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
             if (self.iter%3)==0 and (method=='lm' or verbose == 0 or verbose == 1): print("-",end="")
             self.iter += 1
             # image model
-            im_est = imageModel(psfModelInst(mini2input(y),nPix=im_norm.shape[0]),
-                                spatialStacking=spatialStacking,spectralStacking=spectralStacking,
-                                saturation=psfModelInst.ao.cam.saturation/param)
+            im_est = cpuArray(imageModel(psfModelInst(mini2input(y),nPix=im_norm.shape[0]),
+                                         spatialStacking=spatialStacking,spectralStacking=spectralStacking,
+                                         saturation=psfModelInst.ao.cam.saturation/param))
 
-            im_res = im_norm - im_est
+            im_res = cpuArray(im_norm) - im_est
             df_term = sqW * im_res
             if alpha_positivity is not None:
                 #im_in = medfilt2d(im_res)
@@ -170,15 +171,15 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
     tmp = imageModel(psfModelInst(result.x,nPix=nPix),
                      spatialStacking=spatialStacking,spectralStacking=spectralStacking,
                      saturation=psfModelInst.ao.cam.saturation/param)
-    result.im_fit = FourierUtils.normalizeImage(tmp, param=param,normType=normType)
-    result.im_dif = result.im_sky - result.im_fit
+    result.im_fit = cpuArray(FourierUtils.normalizeImage(tmp, param=param,normType=normType))
+    result.im_dif = cpuArray(result.im_sky) - result.im_fit
     # psf
     xpsf = np.copy(result.x)
     n_src = psfModelInst.ao.src.nSrc
     id_flux = psfModelInst.n_param_atm + psfModelInst.n_param_dphi + 3
     xpsf[id_flux] = 1.0 # flux=1
     xpsf[id_flux+1:id_flux+3*n_src+1] = 0.0 # dx,dy,bkcg=0
-    result.psf = np.squeeze(psfModelInst(xpsf, nPix=nPix))
+    result.psf = np.squeeze(cpuArray(psfModelInst(xpsf, nPix=nPix)))
     result = evaluateFittingQuality(result,psfModelInst)
 
     # static map

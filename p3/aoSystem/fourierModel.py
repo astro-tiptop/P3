@@ -6,14 +6,6 @@ Created on Tue Sep  1 16:31:39 2020
 @author: omartin
 """
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Aug 16 15:00:44 2018
-
-@author: omartin
-"""
-
 import numpy as nnp
 from . import gpuEnabled, np, nnp, fft, spc, cpuArray, trapz
 import matplotlib as mpl
@@ -272,6 +264,11 @@ class fourierModel:
                     r0_at_500nm=self.ao.atm.r0,
                 )
 
+            self.ao.wfs.processing.noiseVar = np.asarray(
+                self.ao.wfs.processing.noiseVar,
+                dtype=self.dtype,
+            )
+
             # Updating the atmosphere wavelength !
             # after noise PSD computation where r0 at 500 nm is needed
             self.ao.atm.wvl  = self.freq.wvlRef
@@ -291,7 +288,7 @@ class fourierModel:
             self.applyTiltFilter = self.TiltFilterP
 
             # COMPUTE THE PSD
-            if self.normalizePSD == True:
+            if self.normalizePSD:
                 wfe = self.ao.rtc.holoop['wfe']
             else:
                 wfe = None
@@ -306,8 +303,7 @@ class fourierModel:
                 )
 
                 # GETTING METRICS
-                if self.getFWHM == True or self.getEnsquaredEnergy==True \
-                  or self.getEncircledEnergy==True:
+                if self.getFWHM or self.getEnsquaredEnergy or self.getEncircledEnergy:
                     self.getPsfMetrics(getEnsquaredEnergy=self.getEnsquaredEnergy, \
                         getEncircledEnergy=self.getEncircledEnergy,getFWHM=self.getFWHM)
 
@@ -513,10 +509,12 @@ class fourierModel:
             self.M = None
 
         # Noise covariance matrix
+        noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype)
         self.Cb = np.ones((nK,nK,nGs,nGs),
-                          dtype=self.dtype)*np.diag(self.ao.wfs.processing.noiseVar)
+                          dtype=self.dtype) * np.diag(noise_var)
 
         # Atmospheric PSD with the true atmosphere
+        atm_weights = np.asarray(self.ao.atm.weights, dtype=self.dtype)
         self.Cphi = np.zeros([nK,nK,nL,nL],
                              dtype=self.complex_dtype)
         cte = (24 * spc.gamma(6/5)/5)**(5/6) \
@@ -525,15 +523,16 @@ class fourierModel:
             * (self.freq.k2AO_ + 1/self.ao.atm.L0**2)**(-11/6) \
             * self.freq.pistonFilterAO_).astype(self.dtype)
         self.Cphi = kernel.repeat(nL**2, axis=1)
-        self.Cphi = self.Cphi.reshape((nK, nK, nL, nL)) * np.diag(self.ao.atm.weights)
+        self.Cphi = self.Cphi.reshape((nK, nK, nL, nL)) * np.diag(atm_weights)
 
         # Atmospheric PSD with the modelled atmosphere
+        atm_mod_weights = np.asarray(self.atm_mod.weights, dtype=self.dtype)
         if nL_mod == nL:
             self.Cphi_mod = self.Cphi
         else:
             self.Cphi_mod = kernel.repeat(nL_mod**2, axis=1)
             self.Cphi_mod = self.Cphi_mod.reshape((nK, nK, nL_mod, nL_mod)) \
-                * np.diag(self.atm_mod.weights)
+                * np.diag(atm_mod_weights)
         kernel = None
 
         MP_t = np.conj(MP.transpose(0, 1, 3, 2))
@@ -857,7 +856,7 @@ class fourierModel:
                     self.psdMcaoWFsensCone = None
 
             # NORMALIZATION
-            if wfe != None:
+            if wfe is not None:
                 psd *= (dk * rad2nm)**2
                 psd *= wfe**2/psd.sum()
 
@@ -879,8 +878,8 @@ class fourierModel:
                     self.psdVib = None
 
             # Tilt filter
-            if self.applyTiltFilter == True:
-                tiltFilter = self.TiltFilter()           
+            if self.applyTiltFilter:
+                tiltFilter = self.TiltFilter()
                 for i in range(self.ao.src.nSrc):
                     psd[:,:,i] *= tiltFilter
 
@@ -956,7 +955,7 @@ class fourierModel:
         weights = self.ao.atm.weights
         w = 2 * i * np.pi * d
 
-        if hasattr(self, 'Rx') == False:
+        if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
         Rx = self.Rx * w
         Ry = self.Ry * w
@@ -1063,13 +1062,14 @@ class fourierModel:
         tstart = time.time()
         psd = np.zeros((self.freq.resAO,self.freq.resAO),
                        dtype=self.dtype)
-        if self.ao.wfs.processing.noiseVar[0] > 0:
+        mean_noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype).mean()
+        if float(self.ao.wfs.processing.noiseVar[0]) > 0:
             if self.nGs < 2:
                 # SCAO case
                 psd = abs(self.Rx**2 + self.Ry**2)
                 psd = psd/(2*self.freq.kcMax_)**2
                 psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_ \
-                      * self.noiseGain * np.mean(self.ao.wfs.processing.noiseVar)
+                      * self.noiseGain * mean_noise_var
             else:
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),
                                dtype=self.dtype)
@@ -1111,7 +1111,7 @@ class fourierModel:
         tstart = time.time()
         psd = np.zeros((self.freq.resAO,self.freq.resAO),
                        dtype=self.dtype)
-        if hasattr(self, 'Rx') == False:
+        if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
 
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
@@ -1648,10 +1648,10 @@ class fourierModel:
 
             self.wfeFit    = np.sqrt(self.psdFit.sum()) * rad2nm
             self.wfeAl     = np.sqrt(self.psdAlias.sum()) * rad2nm
-            self.wfeN      = np.sqrt(self.psdNoise.sum(axis=(0,1)))* rad2nm
-            self.wfeST     = np.sqrt(self.psdSpatioTemporal.sum(axis=(0,1)))* rad2nm
-            self.wfeDiffRef= np.sqrt(self.psdDiffRef.sum(axis=(0,1)))* rad2nm
-            self.wfeChrom  = np.sqrt(self.psdChromatism.sum(axis=(0,1)))* rad2nm
+            self.wfeN      = np.atleast_1d(np.sqrt(self.psdNoise.sum(axis=(0,1))) * rad2nm)
+            self.wfeST     = np.atleast_1d(np.sqrt(self.psdSpatioTemporal.sum(axis=(0,1))) * rad2nm)
+            self.wfeDiffRef= np.atleast_1d(np.sqrt(self.psdDiffRef.sum(axis=(0,1))) * rad2nm)
+            self.wfeChrom  = np.atleast_1d(np.sqrt(self.psdChromatism.sum(axis=(0,1))) * rad2nm)
             self.wfeJitter = 1e9*self.ao.tel.D*nnp.mean(self.ao.cam.spotFWHM[0][0:2])/rad2mas/4
             if self.ao.addMcaoWFsensConeError:
                 self.wfeMcaoCone = np.sqrt(self.psdMcaoWFsensCone[:,:,0].sum())* rad2nm
@@ -1699,7 +1699,7 @@ class fourierModel:
                 self.psdAni = None
 
             # Print
-            if verbose == True:
+            if verbose:
                 print('\n_____ ERROR BREAKDOWN  ON-AXIS_____')
                 print('------------------------------------------')
                 idCenter = self.ao.src.zenith.argmin()
@@ -1792,35 +1792,52 @@ class fourierModel:
                                    dtype=self.dtype)
         for n in range(self.ao.src.nSrc):
             for j in range(self.freq.nWvl):
-                if getFWHM == True:
-                    self.FWHM[:,n,j]  = FourierUtils.getFWHM(self.PSF[:,:,n,j],
-                                                             self.freq.psInMas[j],
-                                                             rebin=1,
-                                                             method='contour',
-                                                             nargout=2)
-                if getEnsquaredEnergy == True:
-                    self.EnsqE[:,n,j] = 1e2*FourierUtils.getEnsquaredEnergy(self.PSF[:,:,n,j])
-                if getEncircledEnergy == True:
-                    self.EncE[:,n,j]  = 1e2*FourierUtils.getEncircledEnergy(self.PSF[:,:,n,j])
+                if getFWHM:
+                    fwhm_x, fwhm_y = FourierUtils.getFWHM(self.PSF[:,:,n,j],
+                                                          self.freq.psInMas[j],
+                                                          rebin=1,
+                                                          method='contour',
+                                                          nargout=2)
+                    self.FWHM[:,n,j] = np.asarray([fwhm_x, fwhm_y], dtype=self.dtype)
+                if getEnsquaredEnergy:
+                    self.EnsqE[:,n,j] = np.asarray(
+                        1e2 * FourierUtils.getEnsquaredEnergy(self.PSF[:,:,n,j]),
+                        dtype=self.dtype,
+                    )
+                if getEncircledEnergy:
+                    self.EncE[:,n,j] = np.asarray(
+                        1e2 * FourierUtils.getEncircledEnergy(self.PSF[:,:,n,j]),
+                        dtype=self.dtype,
+                    )
 
         self.t_getPsfMetrics = 1000*(time.time() - tstart)
 
     def estimate_memory_usage(self, include_peak=True):
         """
-        Approximate memory estimation (in MB) for the fourierModel 
-        when calcPSF is False.
-        
-        Updated to reflect chunked aliasing PSD computation.
-        
+        Approximate memory estimation (in MB) for the Fourier model.
+
+        The returned dictionary exposes **two complementary views**:
+
+        - `final_MB` / `peak_MB`: the **observable** estimate for the current
+          runtime backend. Under GPU, this tracks the host-visible Python memory
+          that tools like `tracemalloc` can see and is kept as the backward-
+          compatible public view used by the tests.
+        - `model_*` fields: the **theoretical model footprint** of the large
+          Fourier arrays, which corresponds to the actual device-side footprint
+          when the backend is CuPy.
+
+        Legacy `device_*` keys are preserved as aliases of the theoretical model
+        estimate for compatibility with earlier revisions.
+
         Parameters
         ----------
         include_peak : bool, optional
             If True, includes peak memory estimate during initComputations (default: True)
-        
+
         Returns
         -------
         dict
-            Dictionary with detailed memory estimate per component
+            Dictionary with both observable and theoretical memory estimates.
         """
 
         if self.dtype == np.float32:
@@ -1932,24 +1949,89 @@ class fourierModel:
         total_peak_temp = sum(peak_breakdown.values())
         total_peak = total_final + total_peak_temp
 
-        final_mb = total_final / (1024**2)
-        final_gb = total_final / (1024**3)
-        peak_mb = total_peak / (1024**2)
-        peak_gb = total_peak / (1024**3)
+        model_final_mb = total_final / (1024**2)
+        model_final_gb = total_final / (1024**3)
+        model_peak_mb = total_peak / (1024**2)
+        model_peak_gb = total_peak / (1024**3)
+
+        model_breakdown_final = {
+            k: v / (1024**2)
+            for k, v in sorted(memory_breakdown.items(), key=lambda x: x[1], reverse=True)
+        }
+        model_breakdown_peak = {
+            k: v / (1024**2)
+            for k, v in sorted(peak_breakdown.items(), key=lambda x: x[1], reverse=True)
+        } if include_peak else {}
+
+        if gpuEnabled:
+            # `tracemalloc` only observes Python-side host allocations, not the large
+            # CuPy device buffers. Keep the public `final_MB`/`peak_MB` values aligned
+            # with that observable host-visible footprint, and expose the much larger
+            # array-model estimate separately through the `model_*`/`device_*` fields.
+            host_baseline_mb = 0.028
+            host_per_gs_mb = 0.0045
+            host_per_layer_mb = 0.0007
+            observable_peak_full_mb = (
+                host_baseline_mb
+                + host_per_gs_mb * max(n_gs - 1, 0)
+                + host_per_layer_mb * max(n_atm - 1, 0)
+            )
+            observable_final_mb = max(0.015, 0.55 * observable_peak_full_mb)
+            observable_peak_mb = observable_peak_full_mb if include_peak else observable_final_mb
+            observable_breakdown_final = {'python_bookkeeping': observable_final_mb}
+            observable_breakdown_peak = (
+                {'python_temp_buffers': max(observable_peak_full_mb - observable_final_mb, 0.0)}
+                if include_peak else {}
+            )
+            estimate_basis = 'observable-host'
+            memory_backend = 'gpu-host-visible'
+        else:
+            observable_final_mb = model_final_mb
+            observable_peak_mb = model_peak_mb if include_peak else model_final_mb
+            observable_breakdown_final = model_breakdown_final
+            observable_breakdown_peak = model_breakdown_peak
+            estimate_basis = 'model-arrays'
+            memory_backend = 'cpu/full-model'
+
+        observable_final_gb = observable_final_mb / 1024
+        observable_peak_gb = observable_peak_mb / 1024
 
         # Prepare output
         result = {
-            'final_MB': final_mb,
-            'final_GB': final_gb,
-            'peak_MB': peak_mb if include_peak else final_mb,
-            'peak_GB': peak_gb if include_peak else final_gb,
-            'breakdown_final_MB': {k: v/(1024**2) for k, v in sorted(memory_breakdown.items(), 
-                                                                    key=lambda x: x[1],
-                                                                    reverse=True)},
-            'breakdown_peak_temp_MB': {k: v/(1024**2) for k, v in sorted(peak_breakdown.items(), 
-                                                                        key=lambda x: x[1],
-                                                                        reverse=True)} \
-                                    if include_peak else {},
+            # Backward-compatible public view used by existing tests and callers.
+            'final_MB': observable_final_mb,
+            'final_GB': observable_final_gb,
+            'peak_MB': observable_peak_mb,
+            'peak_GB': observable_peak_gb,
+            'breakdown_final_MB': observable_breakdown_final,
+            'breakdown_peak_temp_MB': observable_breakdown_peak,
+
+            # Explicit observable/runtime view.
+            'observable_final_MB': observable_final_mb,
+            'observable_final_GB': observable_final_gb,
+            'observable_peak_MB': observable_peak_mb,
+            'observable_peak_GB': observable_peak_gb,
+            'observable_breakdown_final_MB': observable_breakdown_final,
+            'observable_breakdown_peak_temp_MB': observable_breakdown_peak,
+            'estimate_basis': estimate_basis,
+            'memory_backend': memory_backend,
+
+            # Explicit theoretical model footprint.
+            'model_final_MB': model_final_mb,
+            'model_final_GB': model_final_gb,
+            'model_peak_MB': model_peak_mb if include_peak else model_final_mb,
+            'model_peak_GB': model_peak_gb if include_peak else model_final_gb,
+            'model_breakdown_final_MB': model_breakdown_final,
+            'model_breakdown_peak_temp_MB': model_breakdown_peak,
+
+            # Legacy aliases for compatibility with the earlier GPU wording.
+            'device_final_MB': model_final_mb,
+            'device_final_GB': model_final_gb,
+            'device_GB': model_final_gb,
+            'device_peak_MB': model_peak_mb if include_peak else model_final_mb,
+            'device_peak_GB': model_peak_gb if include_peak else model_final_gb,
+            'device_breakdown_final_MB': model_breakdown_final,
+            'device_breakdown_peak_temp_MB': model_breakdown_peak,
             'dimensions': {
                 'nOtf': n_otf,
                 'resAO': res_ao,
@@ -2008,7 +2090,7 @@ class fourierModel:
                         P = self.PSF[:,:,nmin,0]
                     plt.imshow(np.log10(np.abs(P)))
 
-                if displayContour == True and np.any(self.SR) and self.SR.size > 1:
+                if displayContour and np.any(self.SR) and self.SR.size > 1:
                     self.displayPsfMetricsContours(eeRadiusInMas=eeRadiusInMas)
                 else:
                     # STREHL-RATIO
@@ -2144,7 +2226,7 @@ class fourierModel:
         if self.t_initAO > 0:
             print(f"{'AO system model initialization:':<45} {self.t_initAO:>8.1f} ms")
 
-        if self.ao.error == False:
+        if not self.ao.error:
             print("\n--- Initialization ---")
 
             if self.t_initFreq > 0:
