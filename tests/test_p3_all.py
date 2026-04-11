@@ -81,9 +81,9 @@ class TestFourierModelFitting(unittest.TestCase):
 
         try:
             ao = aoSystem(temp_name, path_root=self.path_p3, verbose=False)
-            wvl_min = float(np.min(np.atleast_1d(ao.wvlGs)))
+            wvl_min = float(np.min(np.atleast_1d(ao.src.wvl)))
             pitch_min = float(np.min(np.atleast_1d(ao.dms.pitch)))
-            expected_fov = int(np.ceil(rad2mas * wvl_min / (pitch_min * ao.cam.psInMas)))
+            expected_fov = int(np.ceil(rad2mas * wvl_min / (pitch_min * ao.cam.psInMas))) * 2
             self.assertEqual(ao.cam.fovInPix, expected_fov)
         finally:
             if os.path.exists(temp_name):

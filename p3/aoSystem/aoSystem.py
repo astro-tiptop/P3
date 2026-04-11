@@ -61,15 +61,16 @@ class aoSystem():
         except Exception:
             return value
 
-    def _compute_science_field_of_view(self, ho_wavelength, pixel_scale, dm_pitchs):
+    def _compute_science_field_of_view(self, science_wavelength, pixel_scale, dm_pitchs):
         rad2mas = 180 * 3600 * 1e3 / np.pi
-        wvl_min = float(np.min(np.atleast_1d(ho_wavelength)))
+        wvl_min = float(np.min(np.atleast_1d(science_wavelength)))
         pitch_min = float(np.min(np.atleast_1d(dm_pitchs)))
         pix_scale = float(np.min(np.atleast_1d(pixel_scale)))
-        fov = int(np.ceil(rad2mas * wvl_min / (pitch_min * pix_scale)))
+        corrected_area_pix = rad2mas * wvl_min / (pitch_min * pix_scale)
+        fov = int(np.ceil(corrected_area_pix)) * 2
         return max(fov, 2)
 
-    def get_science_field_of_view(self, pixel_scale, dm_pitchs):
+    def get_science_field_of_view(self, science_wavelength, pixel_scale, dm_pitchs):
         if not self.check_config_key('sensor_science', 'FieldOfView'):
             self.raiseMissingRequiredOpt('sensor_science', 'FieldOfView')
 
@@ -84,7 +85,7 @@ class aoSystem():
             )
 
         if np.isclose(fov_value, -1.0):
-            return self._compute_science_field_of_view(self.wvlGs, pixel_scale, dm_pitchs)
+            return self._compute_science_field_of_view(science_wavelength, pixel_scale, dm_pitchs)
         if fov_value > 0:
             return int(np.ceil(fov_value))
 
@@ -744,7 +745,7 @@ class aoSystem():
         else:
             self.raiseMissingRequiredOpt('sensor_science', 'PixelScale')
 
-        fov = self.get_science_field_of_view(psInMas, DmPitchs)
+        fov = self.get_science_field_of_view(wvlSrc, psInMas, DmPitchs)
         if self.psdExpansion and len(wvlSrc) > 1:
             fov = int(fov * np.ceil(np.max(wvlSrc) / np.min(wvlSrc)))
         self.my_data_map['sensor_science']['FieldOfView'] = fov
