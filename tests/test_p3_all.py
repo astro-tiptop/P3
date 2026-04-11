@@ -66,28 +66,50 @@ class TestFourierModelFitting(unittest.TestCase):
         self.assertIsNotNone(fao)
 
     def test_science_field_of_view_auto_from_minus_one(self):
-        """aoSystem auto-computes science FieldOfView when the config value is `-1`."""
+        """aoSystem auto-computes science FieldOfView with both AO-area and seeing-floor constraints."""
         template_ini = os.path.join(self.path_p3, 'dummy.ini')
         rad2mas = 180 * 3600 * 1e3 / np.pi
 
-        config = ConfigParser()
-        config.optionxform = str
-        config.read(template_ini)
-        config.set('sensor_science', 'FieldOfView', '-1')
+        cases = [
+            ('ao_area_dominates', {}),
+            (
+                'seeing_floor_dominates',
+                {
+                    ('sensor_science', 'PixelScale'): '100.0',
+                    ('DM', 'DmPitchs'): '[1.0]',
+                    ('telescope', 'ZenithAngle'): '60.0',
+                },
+            ),
+        ]
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as temp_file:
-            config.write(temp_file)
-            temp_name = temp_file.name
+        for case_name, updates in cases:
+            with self.subTest(case=case_name):
+                config = ConfigParser()
+                config.optionxform = str
+                config.read(template_ini)
+                config.set('sensor_science', 'FieldOfView', '-1')
 
-        try:
-            ao = aoSystem(temp_name, path_root=self.path_p3, verbose=False)
-            wvl_min = float(np.min(np.atleast_1d(ao.src.wvl)))
-            pitch_min = float(np.min(np.atleast_1d(ao.dms.pitch)))
-            expected_fov = int(np.ceil(rad2mas * wvl_min / (pitch_min * ao.cam.psInMas))) * 2
-            self.assertEqual(ao.cam.fovInPix, expected_fov)
-        finally:
-            if os.path.exists(temp_name):
-                os.remove(temp_name)
+                for (section, key), value in updates.items():
+                    config.set(section, key, value)
+
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as temp_file:
+                    config.write(temp_file)
+                    temp_name = temp_file.name
+
+                try:
+                    ao = aoSystem(temp_name, path_root=self.path_p3, verbose=False)
+                    wvl_min = float(np.min(np.atleast_1d(ao.src.wvl)))
+                    pitch_min = float(np.min(np.atleast_1d(ao.dms.pitch)))
+                    corrected_area_pix = rad2mas * wvl_min / (pitch_min * ao.cam.psInMas)
+                    seeing_arcsec = 0.976 * ao.atm.wvl / ao.atm.r0 * 3600 * 180 / np.pi
+                    seeing_floor_pix = 1.1 * seeing_arcsec * 1e3 / ao.cam.psInMas
+                    expected_fov = int(np.ceil(max(corrected_area_pix, seeing_floor_pix / 2.0))) * 2
+
+                    self.assertEqual(ao.cam.fovInPix, expected_fov)
+                    self.assertGreaterEqual(ao.cam.fovInPix, int(np.ceil(seeing_floor_pix)))
+                finally:
+                    if os.path.exists(temp_name):
+                        os.remove(temp_name)
 
     def test_fourier_fitting(self):
         """psfFitting with fourierModel runs without errors."""

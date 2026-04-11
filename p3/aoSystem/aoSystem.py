@@ -66,8 +66,18 @@ class aoSystem():
         wvl_min = float(np.min(np.atleast_1d(science_wavelength)))
         pitch_min = float(np.min(np.atleast_1d(dm_pitchs)))
         pix_scale = float(np.min(np.atleast_1d(pixel_scale)))
+
         corrected_area_pix = rad2mas * wvl_min / (pitch_min * pix_scale)
-        fov = int(np.ceil(corrected_area_pix)) * 2
+
+        if self.check_config_key('atmosphere', 'Seeing'):
+            seeing_zenith_arcsec = float(self.get_config_value('atmosphere', 'Seeing'))
+            seeing_arcsec = seeing_zenith_arcsec * self.tel.airmass**(3.0 / 5.0)
+        else:
+            seeing_arcsec = 0.976 * self.atm.wvl / self.atm.r0 * 3600 * 180 / np.pi
+
+        seeing_floor_pix = 1.1 * seeing_arcsec * 1e3 / pix_scale
+        min_half_width_pix = max(corrected_area_pix, seeing_floor_pix / 2.0)
+        fov = int(np.ceil(min_half_width_pix)) * 2
         return max(fov, 2)
 
     def get_science_field_of_view(self, science_wavelength, pixel_scale, dm_pitchs):
