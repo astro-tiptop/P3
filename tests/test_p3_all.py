@@ -9,7 +9,9 @@ Display is disabled (matplotlib Agg backend).
 import unittest
 import os
 import pathlib
+import tempfile
 import importlib.util
+from configparser import ConfigParser
 
 import matplotlib
 matplotlib.use('Agg')
@@ -62,6 +64,30 @@ class TestFourierModelFitting(unittest.TestCase):
         fao = fourierModel(self.path_ini, path_root=self.path_p3,
                            calcPSF=False, verbose=False, display=False)
         self.assertIsNotNone(fao)
+
+    def test_science_field_of_view_auto_from_minus_one(self):
+        """aoSystem auto-computes science FieldOfView when the config value is `-1`."""
+        template_ini = os.path.join(self.path_p3, 'dummy.ini')
+        rad2mas = 180 * 3600 * 1e3 / np.pi
+
+        config = ConfigParser()
+        config.optionxform = str
+        config.read(template_ini)
+        config.set('sensor_science', 'FieldOfView', '-1')
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as temp_file:
+            config.write(temp_file)
+            temp_name = temp_file.name
+
+        try:
+            ao = aoSystem(temp_name, path_root=self.path_p3, verbose=False)
+            wvl_min = float(np.min(np.atleast_1d(ao.wvlGs)))
+            pitch_min = float(np.min(np.atleast_1d(ao.dms.pitch)))
+            expected_fov = int(np.ceil(rad2mas * wvl_min / (pitch_min * ao.cam.psInMas)))
+            self.assertEqual(ao.cam.fovInPix, expected_fov)
+        finally:
+            if os.path.exists(temp_name):
+                os.remove(temp_name)
 
     def test_fourier_fitting(self):
         """psfFitting with fourierModel runs without errors."""
