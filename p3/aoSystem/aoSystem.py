@@ -75,7 +75,7 @@ class aoSystem():
         else:
             seeing_arcsec = 0.976 * self.atm.wvl / self.atm.r0 * 3600 * 180 / np.pi
 
-        seeing_floor_pix = 1.1 * seeing_arcsec * 1e3 / pix_scale
+        seeing_floor_pix = 2.0 * seeing_arcsec * 1e3 / pix_scale
         min_half_width_pix = max(corrected_area_pix, seeing_floor_pix / 2.0)
         fov = int(np.ceil(min_half_width_pix)) * 2
         return max(fov, 2)
