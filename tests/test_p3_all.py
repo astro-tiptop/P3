@@ -102,7 +102,7 @@ class TestFourierModelFitting(unittest.TestCase):
                     pitch_min = float(np.min(np.atleast_1d(ao.dms.pitch)))
                     corrected_area_pix = rad2mas * wvl_min / (pitch_min * ao.cam.psInMas)
                     seeing_arcsec = 0.976 * ao.atm.wvl / ao.atm.r0 * 3600 * 180 / np.pi
-                    seeing_floor_pix = 1.1 * seeing_arcsec * 1e3 / ao.cam.psInMas
+                    seeing_floor_pix = 2.0 * seeing_arcsec * 1e3 / ao.cam.psInMas
                     expected_fov = int(np.ceil(max(corrected_area_pix, seeing_floor_pix / 2.0))) * 2
 
                     self.assertEqual(ao.cam.fovInPix, expected_fov)
