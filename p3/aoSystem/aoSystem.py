@@ -51,6 +51,59 @@ class aoSystem():
     def get_config_value(self, primary, secondary):
         return self.my_data_map[primary][secondary]
 
+    def _parse_config_value(self, value):
+        if not isinstance(value, str):
+            return value
+
+        value = value.strip()
+        try:
+            return eval(value)
+        except Exception:
+            return value
+
+    def _compute_science_field_of_view(self, science_wavelength, pixel_scale, dm_pitchs):
+        rad2mas = 180 * 3600 * 1e3 / np.pi
+        wvl_min = float(np.min(np.atleast_1d(science_wavelength)))
+        pitch_min = float(np.min(np.atleast_1d(dm_pitchs)))
+        pix_scale = float(np.min(np.atleast_1d(pixel_scale)))
+
+        corrected_area_pix = rad2mas * wvl_min / (pitch_min * pix_scale)
+
+        if self.check_config_key('atmosphere', 'Seeing'):
+            seeing_zenith_arcsec = float(self.get_config_value('atmosphere', 'Seeing'))
+            seeing_arcsec = seeing_zenith_arcsec * self.tel.airmass**(3.0 / 5.0)
+        else:
+            seeing_arcsec = 0.976 * self.atm.wvl / self.atm.r0 * 3600 * 180 / np.pi
+
+        seeing_floor_pix = 2.0 * seeing_arcsec * 1e3 / pix_scale
+        min_half_width_pix = max(corrected_area_pix, seeing_floor_pix / 2.0)
+        fov = int(np.ceil(min_half_width_pix)) * 2
+        return max(fov, 2)
+
+    def get_science_field_of_view(self, science_wavelength, pixel_scale, dm_pitchs):
+        if not self.check_config_key('sensor_science', 'FieldOfView'):
+            self.raiseMissingRequiredOpt('sensor_science', 'FieldOfView')
+
+        raw_fov = self.get_config_value('sensor_science', 'FieldOfView')
+
+        try:
+            fov_value = float(raw_fov)
+        except (TypeError, ValueError):
+            raise ValueError(
+                "'FieldOfView' in section 'sensor_science' must be a positive number "
+                "or -1 to trigger automatic computation"
+            )
+
+        if np.isclose(fov_value, -1.0):
+            return self._compute_science_field_of_view(science_wavelength, pixel_scale, dm_pitchs)
+        if fov_value > 0:
+            return int(np.ceil(fov_value))
+
+        raise ValueError(
+            "'FieldOfView' in section 'sensor_science' must be a positive number "
+            "or -1 to trigger automatic computation"
+        )
+
     def resolve_path(self, path_value):
         """Use enhanced path resolution with TIPTOP support"""
         from p3.aoSystem import resolve_config_path, PATH_TIPTOP, detect_tiptop_path
@@ -89,7 +142,7 @@ class aoSystem():
             for section in config.sections():
                 self.my_data_map[section] = {}
                 for name,value in config.items(section):
-                    self.my_data_map[section].update({name:eval(value)})
+                    self.my_data_map[section].update({name:self._parse_config_value(value)})
         elif path_config[-4:]=='.yml':
             with open(path_config) as f:
                 my_yaml_dict = yaml.safe_load(f)
@@ -702,12 +755,10 @@ class aoSystem():
         else:
             self.raiseMissingRequiredOpt('sensor_science', 'PixelScale')
 
-        if self.check_config_key('sensor_science','FieldOfView'):
-            fov = self.get_config_value('sensor_science','FieldOfView')
-            if self.psdExpansion and len(wvlSrc) > 1:
-                fov = int(fov * np.ceil(max(wvlSrc)/min(wvlSrc)))
-        else:
-            self.raiseMissingRequiredOpt('sensor_science', 'FieldOfView')
+        fov = self.get_science_field_of_view(wvlSrc, psInMas, DmPitchs)
+        if self.psdExpansion and len(wvlSrc) > 1:
+            fov = int(fov * np.ceil(np.max(wvlSrc) / np.min(wvlSrc)))
+        self.my_data_map['sensor_science']['FieldOfView'] = fov
 
         if self.check_config_key('sensor_science','Binning'):
             Binning = self.get_config_value('sensor_science','Binning')
