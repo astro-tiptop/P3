@@ -174,6 +174,18 @@ class fourierModel:
                     computeFocalAnisoCov=self.computeFocalAnisoCov,
                     dtype=self.dtype
                 )
+
+            # Fail fast: user PSF FoV (in pixels) must be large enough to host
+            # the AO-corrected support built by frequencyDomain.
+            if self.freq.nOtf < self.freq.resAO:
+                min_fov_pix = int(np.ceil(self.freq.resAO / max(1, self.freq.kRef_)))
+                raise ValueError(
+                    "Invalid PSF size configuration after frequencyDomain init: "
+                    f"fovInPix={self.ao.cam.fovInPix}, kRef={self.freq.kRef_}, "
+                    f"nOtf={self.freq.nOtf}, resAO={self.freq.resAO}. "
+                    "The selected PSF size is smaller than the AO support. "
+                    f"Use fovInPix >= {min_fov_pix} (equivalently nOtf >= resAO)."
+                )
             self.t_initFreq = 1000*(time.time() - tstart)
 
             # DEFINING THE GUIDE STAR AND THE STRECHING FACTOR
@@ -252,8 +264,12 @@ class fourierModel:
                 rr = np.max(2.0 * kc[:, None] / vv[None, :], axis=1)
             # FoV check: ensure the worst case across all DMs
             if np.max(rr) > self.freq.nOtf:
-                raise ValueError('Error : the PSF field of view is too small'
-                                 ' to simulate the AO correction area\n')
+                raise ValueError(
+                    "PSF field of view is too small to simulate the AO correction area: "
+                    f"max_required={float(np.max(rr)):.3f}, nOtf={self.freq.nOtf}, "
+                    f"resAO={self.freq.resAO}, fovInPix={self.ao.cam.fovInPix}, "
+                    f"kRef={self.freq.kRef_}."
+                )
 
             # DEFINING THE NOISE PSD
             if self.ao.wfs.processing.noiseVar == [None]:
