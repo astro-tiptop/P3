@@ -10,6 +10,7 @@ from . import gpuEnabled, np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import warnings
 from astropy.modeling import fitting, models
 from matplotlib.path import Path
 from scipy import ndimage
@@ -210,12 +211,19 @@ def otfShannon2psf(otf,nqSmpl,fovInPixel):
 def pistonFilter(D, f, fm=0, fn=0, dtype=np.float64):
     f = np.asarray(f, dtype=dtype).copy()
     f[np.where(np.equal(f, 0))] = 1e-10
-    if len(f.shape) == 1:
+    if f.ndim == 1:
         Fx, Fy = np.meshgrid(f, f)
         FX = Fx - fm
         FY = Fy - fn
         F = np.pi * D * np.hypot(FX, FY)
     else:
+        if fm != 0 or fn != 0:
+            warnings.warn(
+                "fm and fn shifts are ignored when f is a multidimensional array. "
+                "The input f is assumed to be a pre-shifted radial magnitude.",
+                UserWarning,
+                stacklevel=2,
+            )
         F = np.pi * D * f
     R         = sombrero(1, F, dtype=dtype)
     pFilter   =  1 - 4 * R**2

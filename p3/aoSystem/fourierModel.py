@@ -1348,14 +1348,14 @@ class fourierModel:
                 fx = Beta[0]*self.freq.kxAO_
                 fy = Beta[1]*self.freq.kyAO_
                 freq_t = (
-                    wDir_x[:, None, None] * self.freq.kxAO_[None, :, :]
-                    + wDir_y[:, None, None] * self.freq.kyAO_[None, :, :]
+                    wDir_x[None, None, None, :] * self.freq.kxAO_[:, :, None, None]
+                    + wDir_y[None, None, None, :] * self.freq.kyAO_[:, :, None, None]
                 )
                 delta_h = (
-                    Hs[:, None, None] * (fx + fy)[None, :, :]
-                    - deltaT * wSpeed[:, None, None] * freq_t
+                    Hs[None, None, None, :] * (fx + fy)[:, :, None, None]
+                    - deltaT * wSpeed[None, None, None, :] * freq_t
                 )
-                PbetaL = np.exp(two_pi_i * delta_h).transpose(1, 2, 0)[:, :, None, :]
+                PbetaL = np.exp(two_pi_i * delta_h)
 
                 proj = PbetaL - np.matmul(self.PbetaDM[s], self.Walpha)
                 proj_t = np.conj(proj.transpose(0, 1, 3, 2))
