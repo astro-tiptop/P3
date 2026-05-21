@@ -507,53 +507,47 @@ class fourierModel:
         d = [self.ao.wfs.optics[j].dsub for j in range(nGs)]   #sub-aperture size
 
         # WFS operator and projection matrices
-        M = np.zeros([nK, nK, nGs, nGs],
-                     dtype=self.complex_dtype)
+        M_diag = np.zeros([nK, nK, nGs],
+                          dtype=self.complex_dtype)
         P = np.zeros([nK, nK, nGs, nL_mod],
                      dtype=self.complex_dtype)
         for j in range(nGs):
-            M[:, :, j, j] = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_)\
-                            * np.sinc(d[j]*self.freq.kyAO_)
+            M_diag[:, :, j] = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_)\
+                              * np.sinc(d[j]*self.freq.kyAO_)
             for n in range(nL_mod):
                 P[:, :, j, n] = np.exp(i*2*np.pi*h_mod[n]\
                                         *(self.freq.kxAO_*self.gs.direction[0, j]
                                         + self.freq.kyAO_*self.gs.direction[1, j]))
-        self.M = M
-        MP = np.matmul(self.M,P)
+        MP = M_diag[:, :, :, None] * P
         P = None
-        if self.reduce_memory:
-            self.M = None
+        M_diag = None
 
         # Noise covariance matrix
         noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype)
         self.Cb = np.ones((nK,nK,nGs,nGs),
                           dtype=self.dtype) * np.diag(noise_var)
 
-        # Atmospheric PSD with the true atmosphere
+        # Atmospheric PSD is diagonal across statistically independent layers.
         atm_weights = np.asarray(self.ao.atm.weights, dtype=self.dtype)
-        self.Cphi = np.zeros([nK,nK,nL,nL],
-                             dtype=self.complex_dtype)
         cte = (24 * spc.gamma(6/5)/5)**(5/6) \
                * (spc.gamma(11/6)**2. / (2.*np.pi**(11/3))).astype(self.dtype)
         kernel = (self.ao.atm.r0**(-5/3) * cte \
             * (self.freq.k2AO_ + 1/self.ao.atm.L0**2)**(-11/6) \
             * self.freq.pistonFilterAO_).astype(self.dtype)
-        self.Cphi = kernel.repeat(nL**2, axis=1)
-        self.Cphi = self.Cphi.reshape((nK, nK, nL, nL)) * np.diag(atm_weights)
+        self.Cphi = kernel[:, :, None] * atm_weights[None, None, :]
 
         # Atmospheric PSD with the modelled atmosphere
         atm_mod_weights = np.asarray(self.atm_mod.weights, dtype=self.dtype)
         if nL_mod == nL:
             self.Cphi_mod = self.Cphi
         else:
-            self.Cphi_mod = kernel.repeat(nL_mod**2, axis=1)
-            self.Cphi_mod = self.Cphi_mod.reshape((nK, nK, nL_mod, nL_mod)) \
-                * np.diag(atm_mod_weights)
+            self.Cphi_mod = kernel[:, :, None] * atm_mod_weights[None, None, :]
         kernel = None
 
         MP_t = np.conj(MP.transpose(0, 1, 3, 2))
-        to_inv  = np.matmul(np.matmul(MP, self.Cphi_mod), MP_t) + self.Cb
-        rhs = np.matmul(self.Cphi_mod, MP_t)
+        MP_Cphi = MP * self.Cphi_mod[:, :, None, :]
+        to_inv  = np.matmul(MP_Cphi, MP_t) + self.Cb
+        rhs = self.Cphi_mod[:, :, :, None] * MP_t
 
         # Try using solve (faster), fallback to pinv if fails
         try:
@@ -1359,7 +1353,7 @@ class fourierModel:
 
                 proj = PbetaL - np.matmul(self.PbetaDM[s], self.Walpha)
                 proj_t = np.conj(proj.transpose(0, 1, 3, 2))
-                tmp = np.matmul(proj,np.matmul(self.Cphi, proj_t)).real
+                tmp = np.matmul(proj, self.Cphi[:, :, :, None] * proj_t).real
                 psd[:, :, s] = self.freq.mskInAO_ * tmp[:, :, 0, 0]*self.freq.pistonFilterAO_
         if self.reduce_memory:
             self.Walpha = None
@@ -2026,7 +2020,7 @@ class fourierModel:
                 memory_breakdown['Walpha'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
                 memory_breakdown['PbetaDM'] = res_ao * res_ao * n_src * n_dm * dtype_size * 2
                 memory_breakdown['Cb'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
-                memory_breakdown['Cphi'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
+                memory_breakdown['Cphi'] = res_ao * res_ao * n_atm * dtype_size
 
         # Partial PSDs (if getErrorBreakDown or not reduce_memory)
         if self.getErrorBreakDown or not self.reduce_memory:

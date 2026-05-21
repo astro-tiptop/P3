@@ -74,7 +74,10 @@ def _spatiotemporal_reference(fao):
 
             proj = PbetaL - nnp.matmul(pbeta_dm, walpha)
             proj_t = nnp.conj(proj.transpose(0, 1, 3, 2))
-            tmp = nnp.matmul(proj, nnp.matmul(cphi, proj_t)).real
+            if cphi.ndim == 4:
+                tmp = nnp.matmul(proj, nnp.matmul(cphi, proj_t)).real
+            else:
+                tmp = nnp.matmul(proj, cphi[:, :, :, None] * proj_t).real
             psd[:, :, s] = msk * tmp[:, :, 0, 0] * piston
 
     return psd
