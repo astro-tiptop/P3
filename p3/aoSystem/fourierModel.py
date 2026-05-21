@@ -1152,84 +1152,13 @@ class fourierModel:
 
         return np.reshape(psd_vec, self.Rx.shape)
 
-    def _aliasing_psd_limited_tiptorch_like(
-        self,
-        n_times_limit,
-        shift_batch=8,
-        layer_chunk=5,
-        use_precompute=True,
-        mem_cap_mb=512,
-    ):
-        """
-        TipTorch-like limited path: precompute shift terms and sum atmospheric layers
-        in one vectorized pass with a memory-aware fallback to streaming.
-        """
-        d, T, td, vx, vy, weights, Rx, Ry, tf_flat, kxAO, kyAO, m_flat, n_flat = self._aliasing_common()
-        if use_precompute:
-            terms = self._get_aliasing_shift_terms(
-                d, Rx, Ry, tf_flat, kxAO, kyAO, m_flat, n_flat, n_times_limit=n_times_limit
-            )
-            km = terms['km']
-            kn = terms['kn']
-            PR = terms['PR']
-            W_mn = terms['W_mn']
-            Q = terms['Q']
-        else:
-            keep = (np.abs(m_flat) <= n_times_limit) & (np.abs(n_flat) <= n_times_limit)
-            m_sel = m_flat[keep]
-            n_sel = n_flat[keep]
-            km = kxAO[None, :] - m_sel[:, None] / d
-            kn = kyAO[None, :] - n_sel[:, None] / d
-            PR = FourierUtils.pistonFilter(self.ao.tel.D, np.hypot(km, kn), dtype=self.dtype)
-            W_mn = (km**2 + kn**2 + 1 / self.ao.atm.L0**2) ** (-11 / 6)
-            Q = (Rx[None, :] * km + Ry[None, :] * kn) * (np.sinc(d * km) * np.sinc(d * kn))
-
-        n_layers = int(self.ao.atm.nL)
-        n_shift = int(km.shape[0])
-        n_k = int(kxAO.size)
-        if n_shift == 0 or n_k == 0:
-            return np.zeros(self.Rx.shape, dtype=self.dtype)
-
-        # Conservative estimate for temporary allocations in the vectorized block.
-        float_bytes = np.dtype(self.dtype).itemsize
-        cplx_bytes = np.dtype(self.complex_dtype).itemsize
-        # Two sinc terms + one phase term + one complex accumulation tensor.
-        est_bytes = n_layers * n_shift * n_k * (2 * float_bytes + cplx_bytes + cplx_bytes)
-        est_mb = est_bytes / (1024 * 1024)
-
-        if est_mb > mem_cap_mb:
-            return self._aliasing_psd_streaming(
-                shift_batch=shift_batch,
-                layer_chunk=layer_chunk,
-                n_times_limit=n_times_limit,
-                use_precompute=use_precompute,
-            )
-
-        two_pi_i = 2 * self.complex_dtype(1j) * np.pi
-        vx_bc = vx[:, None, None]
-        vy_bc = vy[:, None, None]
-        w_bc = weights[:, None, None]
-
-        avr = (
-            w_bc
-            * np.sinc(km[None, :, :] * vx_bc * T)
-            * np.sinc(kn[None, :, :] * vy_bc * T)
-            * np.exp(two_pi_i * (km[None, :, :] * vx_bc + kn[None, :, :] * vy_bc) * td)
-            * tf_flat[None, None, :]
-        ).sum(axis=0)
-
-        psd_vec = np.sum(PR * W_mn * np.abs(Q * avr) ** 2, axis=0)
-        return np.reshape(psd_vec, self.Rx.shape)
-
-    def aliasingPSD(self, method=None, shift_batch=8, layer_chunk=5, n_times_limit=None, use_precompute=True, limited_mode='streaming', limited_mem_cap_mb=512):
+    def aliasingPSD(self, method=None, shift_batch=8, layer_chunk=5, n_times_limit=None, use_precompute=True):
         """
         Aliasing error power spectrum density.
         Supported methods:
-            - default: 'chunked' on GPU, 'streaming' on CPU
+            - default: 'chunked'
             - 'chunked': dense vectorized baseline across all shifts
-            - 'limited': comb truncation with selectable backend:
-                * limited_mode='streaming' (default, stable memory profile)
-                * limited_mode='tiptorch' (experimental vectorized layers)
+            - 'limited': comb truncation with streaming backend
         """
         tstart = time.time()
 
@@ -1241,21 +1170,12 @@ class fourierModel:
         elif method == 'limited':
             if n_times_limit is None:
                 n_times_limit = max(1, int(self.freq.nTimes // 2))
-            if limited_mode == 'streaming':
-                psd = self._aliasing_psd_streaming(
-                    shift_batch=shift_batch,
-                    layer_chunk=layer_chunk,
-                    n_times_limit=n_times_limit,
-                    use_precompute=use_precompute,
-                )
-            else:
-                psd = self._aliasing_psd_limited_tiptorch_like(
-                    n_times_limit=n_times_limit,
-                    shift_batch=shift_batch,
-                    layer_chunk=layer_chunk,
-                    use_precompute=use_precompute,
-                    mem_cap_mb=limited_mem_cap_mb,
-                )
+            psd = self._aliasing_psd_streaming(
+                shift_batch=shift_batch,
+                layer_chunk=layer_chunk,
+                n_times_limit=n_times_limit,
+                use_precompute=use_precompute,
+            )
         else:
             psd = self._aliasing_psd_streaming(
                 shift_batch=shift_batch,

@@ -48,8 +48,6 @@ def main():
     parser.add_argument('--n-times-limit', type=int, default=2)
     parser.add_argument('--compare-reference', action='store_true', help='Compute rel error vs chunked baseline once.')
     parser.add_argument('--no-precompute', action='store_true', help='Disable persistent aliasing precompute cache.')
-    parser.add_argument('--limited-mode', choices=['tiptorch', 'streaming'], default='streaming')
-    parser.add_argument('--limited-mem-cap-mb', type=int, default=512)
     args = parser.parse_args()
 
     root = p3_root()
@@ -76,8 +74,6 @@ def main():
         }
         if args.method == 'limited':
             kwargs['n_times_limit'] = args.n_times_limit
-            kwargs['limited_mode'] = args.limited_mode
-            kwargs['limited_mem_cap_mb'] = args.limited_mem_cap_mb
         _ = model.aliasingPSD(**kwargs)
 
     rel_err = None
@@ -90,8 +86,6 @@ def main():
                 layer_chunk=args.layer_chunk,
                 n_times_limit=args.n_times_limit if args.method == 'limited' else None,
                 use_precompute=use_precompute,
-                limited_mode=args.limited_mode,
-                limited_mem_cap_mb=args.limited_mem_cap_mb,
             )
         )
         rel_err = np.linalg.norm(test - ref) / max(np.linalg.norm(ref), 1e-30)
@@ -110,8 +104,6 @@ def main():
         }
         if args.method == 'limited':
             kwargs['n_times_limit'] = args.n_times_limit
-            kwargs['limited_mode'] = args.limited_mode
-            kwargs['limited_mem_cap_mb'] = args.limited_mem_cap_mb
         _ = model.aliasingPSD(**kwargs)
         t_samples.append((time.perf_counter() - t0) * 1000.0)
         cpu_peaks.append(cpu_peak_mb())
@@ -124,8 +116,6 @@ def main():
     print(f'  use_precompute: {use_precompute}')
     if args.method == 'limited':
         print(f'  n_times_limit: {args.n_times_limit}')
-        print(f'  limited_mode: {args.limited_mode}')
-        print(f'  limited_mem_cap_mb: {args.limited_mem_cap_mb}')
     print(f'  samples_ms: {[round(x, 3) for x in t_samples]}')
     print(f'  avg_ms: {statistics.mean(t_samples):.3f}')
     print(f'  med_ms: {statistics.median(t_samples):.3f}')
