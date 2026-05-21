@@ -2083,7 +2083,11 @@ class fourierModel:
 
         # Compute totals
         total_final = sum(memory_breakdown.values())
-        total_peak_temp = sum(peak_breakdown.values())
+        # Temporary buffers come from different stages and mostly do not coexist.
+        # Peak estimate should be driven by the dominant stage, with a partial
+        # overlap factor to account for short-lived co-allocations around stage transitions.
+        peak_temp_dominant = max(peak_breakdown.values()) if peak_breakdown else 0
+        total_peak_temp = 0.45 * peak_temp_dominant
         total_peak = total_final + total_peak_temp
 
         model_final_mb = total_final / (1024**2)
