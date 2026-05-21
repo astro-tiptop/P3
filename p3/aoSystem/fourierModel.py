@@ -504,34 +504,27 @@ class fourierModel:
         nL_mod = len(h_mod)
         nGs = self.nGs
         i = np.complex64(1j)
-        d = [self.ao.wfs.optics[j].dsub for j in range(nGs)]   #sub-aperture size
+        d = [self.ao.wfs.optics[j].dsub for j in range(nGs)]
 
-        # WFS operator and projection matrices
-        M_diag = np.zeros([nK, nK, nGs],
-                          dtype=self.complex_dtype)
-        P = np.zeros([nK, nK, nGs, nL_mod],
-                     dtype=self.complex_dtype)
+        # 1. WFS operator and projection matrices
+        # Calculate MP directly via broadcasting, avoiding the dense M matrix allocation
+        MP = np.zeros([nK, nK, nGs, nL_mod], dtype=self.complex_dtype)
         for j in range(nGs):
-            M_diag[:, :, j] = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_)\
-                              * np.sinc(d[j]*self.freq.kyAO_)
+            M_diag_j = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_) * np.sinc(d[j]*self.freq.kyAO_)
             for n in range(nL_mod):
-                P[:, :, j, n] = np.exp(i*2*np.pi*h_mod[n]\
-                                        *(self.freq.kxAO_*self.gs.direction[0, j]
-                                        + self.freq.kyAO_*self.gs.direction[1, j]))
-        MP = M_diag[:, :, :, None] * P
-        P = None
-        M_diag = None
+                P_jn = np.exp(i*2*np.pi*h_mod[n]*(self.freq.kxAO_*self.gs.direction[0, j] \
+                     + self.freq.kyAO_*self.gs.direction[1, j]))
+                MP[:, :, j, n] = M_diag_j * P_jn
 
-        # Atmospheric PSD is diagonal across statistically independent layers.
+        # 2. Atmospheric PSD (Diagonal with respect to the layers)
         atm_weights = np.asarray(self.ao.atm.weights, dtype=self.dtype)
-        cte = (24 * spc.gamma(6/5)/5)**(5/6) \
-               * (spc.gamma(11/6)**2. / (2.*np.pi**(11/3))).astype(self.dtype)
-        kernel = (self.ao.atm.r0**(-5/3) * cte \
-            * (self.freq.k2AO_ + 1/self.ao.atm.L0**2)**(-11/6) \
-            * self.freq.pistonFilterAO_).astype(self.dtype)
+        cte = (24 * spc.gamma(6/5)/5)**(5/6) * (spc.gamma(11/6)**2. / (2.*np.pi**(11/3))).astype(self.dtype)
+        kernel = (self.ao.atm.r0**(-5/3) * cte * (self.freq.k2AO_ + 1/self.ao.atm.L0**2)**(-11/6) \
+               * self.freq.pistonFilterAO_).astype(self.dtype)
+        
+        # Save ONLY the 3D diagonal (nK, nK, nL) instead of allocating a full (nK, nK, nL, nL) tensor
         self.Cphi = kernel[:, :, None] * atm_weights[None, None, :]
 
-        # Atmospheric PSD with the modelled atmosphere
         atm_mod_weights = np.asarray(self.atm_mod.weights, dtype=self.dtype)
         if nL_mod == nL:
             self.Cphi_mod = self.Cphi
@@ -539,21 +532,24 @@ class fourierModel:
             self.Cphi_mod = kernel[:, :, None] * atm_mod_weights[None, None, :]
         kernel = None
 
-        MP_t = np.conj(MP.transpose(0, 1, 3, 2))
+        # 3. Covariance Matrices
+        # np.ascontiguousarray strictly prevents CuPy crashes on strided matmuls
+        MP_t = np.ascontiguousarray(np.conj(MP.transpose(0, 1, 3, 2)))
         
-        # to_inv created as MP^H * Cphi_mod * MP + Cb, where Cb is the noise covariance matrix
-        to_inv = np.matmul(np.matmul(MP, self.Cphi_mod), MP_t)
-
-        # Directly add noise variance to the diagonal of the system matrix (equivalent to adding Cb)
+        # MP @ Cphi_mod @ MP_t
+        MP_Cphi = MP * self.Cphi_mod[:, :, None, :]
+        to_inv  = np.matmul(MP_Cphi, MP_t)
+        
+        # Direct addition of noise on the diagonal (completely eliminates self.Cb allocation)
         noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.complex_dtype)
         idx = np.arange(nGs)
         to_inv[:, :, idx, idx] += noise_var
-        
+
+        # rhs = Cphi_mod @ MP_t
         rhs = self.Cphi_mod[:, :, :, None] * MP_t
 
-        # Try using solve (faster), fallback to pinv if fails
+        # 4. Inversion
         try:
-            # Standard solve
             if self.verbose:
                 print("Tomography: Using standard solve")
             Wtomo = np.linalg.solve(
@@ -561,7 +557,6 @@ class fourierModel:
                 rhs.astype(np.complex64).transpose(0, 1, 3, 2)
             ).transpose(0, 1, 3, 2)
         except np.linalg.LinAlgError as e:
-            # Fallback: Use pinv for singular/ill-conditioned matrices
             if self.verbose:
                 print(f"Tomography: Standard solve failed ({e}), using pinv")
             inv = np.linalg.pinv(to_inv.astype(np.complex64),
@@ -569,7 +564,8 @@ class fourierModel:
             Wtomo = np.matmul(rhs, inv)
 
         to_inv = None
-
+        
+        self.t_tomo = 1000*(time.time() - tstart)
         return Wtomo
 
     def optimalProjector(self):
@@ -1181,7 +1177,7 @@ class fourierModel:
 
         self.t_aliasingPSD = 1000 * (time.time() - tstart)
         return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3) * 0.0229
-
+    
     def noisePSD(self):
         """Noise error power spectrum density
         """
@@ -1197,6 +1193,7 @@ class fourierModel:
                 psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_ \
                       * self.noiseGain * mean_noise_var
             else:
+                # Tomographic case
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),
                                dtype=self.dtype)
                 # - Noise gain is considered to be that produced by
@@ -1206,15 +1203,14 @@ class fourierModel:
                 noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype)
                 
                 for j in range(self.ao.src.nSrc):
-                    PW = np.matmul(self.PbetaDM[j], self.W) # Shape: (nK, nK, 1, nGs)
-                    # Cb is diagonal. PW @ Cb @ PW^T reduces to the sum of the weighted squared moduli
-                    # PW[:, :, 0, :] extracts the weights for each guide star (nK, nK, nGs)
-                    tmp = np.sum(np.abs(PW[:, :, 0, :])**2 * noise_var, axis=-1)
+                    PW = np.matmul(self.PbetaDM[j], self.W)
                     
+                    # Since Cb was strictly diagonal across GS, PW @ Cb @ PW^T 
+                    # mathematically simplifies to the weighted sum of squared moduli
+                    tmp = np.sum(np.abs(PW[:, :, 0, :])**2 * noise_var, axis=-1)
                     psd[:,:,j] = self.freq.mskInAO_ * tmp * self.freq.pistonFilterAO_ * noise_gain
 
         self.t_noisePSD = 1000*(time.time() - tstart)
-        # NOTE: the noise variance is the same for all WFS
         return psd
 
     def reconstructionPSD(self):
@@ -1340,10 +1336,14 @@ class fourierModel:
                     psd[:, :, s] = self.freq.mskInAO_ * \
                         (1 + abs(F)**2*self.h2 - 2*np.real(F*self.h1*A)) * Watm
             else:
-                # tomographic case
+                # Tomographic case
                 Beta = [self.ao.src.direction[0,s],self.ao.src.direction[1,s]]
                 fx = Beta[0]*self.freq.kxAO_
                 fy = Beta[1]*self.freq.kyAO_
+                
+                # Native construction with shape (nK, nK, 1, nH) to avoid .transpose()
+                # wDir_x is (nH,) -> [None, None, None, :]
+                # self.freq.kxAO_ is (nK, nK) -> [:, :, None, None]
                 freq_t = (
                     wDir_x[None, None, None, :] * self.freq.kxAO_[:, :, None, None]
                     + wDir_y[None, None, None, :] * self.freq.kyAO_[:, :, None, None]
@@ -1352,12 +1352,15 @@ class fourierModel:
                     Hs[None, None, None, :] * (fx + fy)[:, :, None, None]
                     - deltaT * wSpeed[None, None, None, :] * freq_t
                 )
+                
                 PbetaL = np.exp(two_pi_i * delta_h)
 
                 proj = PbetaL - np.matmul(self.PbetaDM[s], self.Walpha)
-                proj_t = np.conj(proj.transpose(0, 1, 3, 2))
-                tmp = np.matmul(proj, self.Cphi[:, :, :, None] * proj_t).real
-                psd[:, :, s] = self.freq.mskInAO_ * tmp[:, :, 0, 0]*self.freq.pistonFilterAO_
+                
+                # Cphi is now a 3D diagonal array (nK, nK, nL).
+                # proj @ Cphi @ proj_T massively simplifies to element-wise broadcasting:
+                tmp = np.sum(np.abs(proj[:, :, 0, :])**2 * self.Cphi, axis=-1)
+                psd[:, :, s] = self.freq.mskInAO_ * tmp * self.freq.pistonFilterAO_
         if self.reduce_memory:
             self.Walpha = None
         self.t_spatioTemporalPSD = 1000*(time.time() - tstart)
@@ -1369,20 +1372,19 @@ class fourierModel:
         tstart  = time.time()
         psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),
                        dtype=self.dtype)
-        Hs = self.ao.atm.heights * self.strechFactor
-        Ws = self.ao.atm.weights
+
+        Hs = np.asarray(self.ao.atm.heights * self.strechFactor, dtype=self.dtype)
+        Ws = np.asarray(self.ao.atm.weights, dtype=self.dtype)
         Watm = self.Wphi * self.freq.pistonFilterAO_
 
         for s in range(self.ao.src.nSrc):
             th  = self.ao.src.direction[:,s] - self.gs.direction[:,0]
-            if any(th):
+            if np.any(np.asarray(th)):
                 phase = self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]
-                # Vectorized sum over layers: 2*Ws*(1 - cos(2*pi*Hs*phase)) is (nL, nK, nK),
-                # sum over axis=0 gives (nK, nK)
-                A = np.sum(2 * Ws[:, None, None] \
-                    * (1 - np.cos(2*np.pi*Hs[:, None, None] * phase[None, :, :])), axis=0)
+                # Vectorized sum over layers natively on GPU
+                A = np.sum(2 * Ws[:, None, None] * (1 - np.cos(2*np.pi*Hs[:, None, None] * phase[None, :, :])), axis=0)
                 psd[:,:,s] = self.freq.mskInAO_ * A * Watm
-
+                
         self.t_anisoplanatismPSD = 1000*(time.time() - tstart)
         return np.real(psd)
 
@@ -1391,12 +1393,13 @@ class fourierModel:
         psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc), dtype=self.dtype)
 
         if self.ao.tel.zenith_angle != 0:
-            Hs = self.ao.atm.heights * self.strechFactor
-            Ws = self.ao.atm.weights
+            Hs = np.asarray(self.ao.atm.heights * self.strechFactor, dtype=self.dtype)
+            Ws = np.asarray(self.ao.atm.weights, dtype=self.dtype)
+
             Watm = self.Wphi * self.freq.pistonFilterAO_
             k = np.sqrt(self.freq.k2AO_)
             arg_k = np.arctan2(self.freq.kyAO_, self.freq.kxAO_)
-            azimuth = self.ao.src.azimuth
+            azimuth = np.asarray(self.ao.src.azimuth, dtype=self.dtype)
 
             # Uses the pre-calculated values from Mathar
             delta_n = self.n_air_wvlRef - self.n_air_gs
@@ -1404,10 +1407,8 @@ class fourierModel:
 
             for s in range(self.ao.src.nSrc):
                 phase = k * np.tan(theta) * np.cos(arg_k - azimuth[s])
-                # Vectorized sum over layers: 2*Ws*(1 - cos(2*pi*Hs*phase)) is (nL, nK, nK),
-                # sum over axis=0 gives (nK, nK)
-                A = np.sum(2 * Ws[:, None, None] \
-                    * (1 - np.cos(2*np.pi*Hs[:, None, None] * phase[None, :, :])), axis=0)
+                # Vectorized sum over layers natively on GPU
+                A = np.sum(2 * Ws[:, None, None] * (1 - np.cos(2*np.pi*Hs[:, None, None] * phase[None, :, :])), axis=0)
                 psd[:,:,s] = self.freq.mskInAO_ * A * Watm
 
         self.t_differentialRefractionPSD = 1000*(time.time() - tstart)
