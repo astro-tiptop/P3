@@ -8,7 +8,7 @@ import unittest
 import numpy as nnp
 
 import p3.aoSystem as aoSystemMain
-from p3.aoSystem import cpuArray
+from p3.aoSystem import asnumpy
 from p3.aoSystem.fourierModel import fourierModel
 
 
@@ -19,51 +19,63 @@ def _p3_path():
 def _spatiotemporal_reference(fao):
     """Reference implementation matching the pre-refactor loop structure."""
     nK = fao.freq.resAO
-    psd = nnp.zeros((nK, nK, fao.ao.src.nSrc), dtype=fao.dtype)
+    real_dtype = nnp.dtype(fao.dtype)
+    complex_dtype = nnp.dtype(fao.complex_dtype)
+    psd = nnp.zeros((nK, nK, fao.ao.src.nSrc), dtype=real_dtype)
     i = fao.complex_dtype(1j)
     nH = fao.ao.atm.nL
-    Hs = fao.ao.atm.heights * fao.strechFactor
-    Ws = fao.ao.atm.weights
+    Hs = asnumpy(fao.ao.atm.heights) * asnumpy(fao.strechFactor)
+    Ws = asnumpy(fao.ao.atm.weights)
     deltaT = fao.ao.rtc.holoop['delay'] / fao.ao.rtc.holoop['rate']
-    wDir_x = nnp.cos(fao.ao.atm.wDir * nnp.pi / 180)
-    wDir_y = nnp.sin(fao.ao.atm.wDir * nnp.pi / 180)
-    Watm = fao.Wphi * fao.freq.pistonFilterAO_
-    F = fao.Rx * fao.SxAv + fao.Ry * fao.SyAv
-
+    wDir = asnumpy(fao.ao.atm.wDir)
+    wSpeed = asnumpy(fao.ao.atm.wSpeed)
+    wDir_x = nnp.cos(wDir * nnp.pi / 180)
+    wDir_y = nnp.sin(wDir * nnp.pi / 180)
+    Watm = asnumpy(fao.Wphi * fao.freq.pistonFilterAO_)
+    F = asnumpy(fao.Rx * fao.SxAv + fao.Ry * fao.SyAv)
+    kx = asnumpy(fao.freq.kxAO_)
+    ky = asnumpy(fao.freq.kyAO_)
+    msk = asnumpy(fao.freq.mskInAO_)
+    piston = asnumpy(fao.freq.pistonFilterAO_)
+    h1 = asnumpy(fao.h1)
+    h2 = asnumpy(fao.h2)
     for s in range(fao.ao.src.nSrc):
         if fao.nGs < 2:
-            th = fao.ao.src.direction[:, s] - fao.gs.direction[:, 0]
+            th = asnumpy(fao.ao.src.direction[:, s] - fao.gs.direction[:, 0])
             if nnp.any(nnp.asarray(th)):
-                A = nnp.zeros((nK, nK), dtype=fao.complex_dtype)
+                A = nnp.zeros((nK, nK), dtype=complex_dtype)
                 for l in range(fao.ao.atm.nL):
                     A = A + Ws[l] * nnp.exp(
-                        2 * i * nnp.pi * Hs[l] * (fao.freq.kxAO_ * th[1] + fao.freq.kyAO_ * th[0])
+                        2 * i * nnp.pi * Hs[l] * (kx * th[1] + ky * th[0])
                     )
             else:
-                A = nnp.ones((fao.freq.resAO, fao.freq.resAO), dtype=fao.complex_dtype)
+                A = nnp.ones((fao.freq.resAO, fao.freq.resAO), dtype=complex_dtype)
 
             if fao.ao.rtc.holoop['gain'] == 0:
                 psd[:, :, s] = abs(1 - F) ** 2 * Watm
             else:
                 psd[:, :, s] = (
-                    fao.freq.mskInAO_
-                    * (1 + abs(F) ** 2 * fao.h2 - 2 * nnp.real(F * fao.h1 * A))
+                    msk
+                    * (1 + abs(F) ** 2 * h2 - 2 * nnp.real(F * h1 * A))
                     * Watm
                 )
         else:
-            beta = [fao.ao.src.direction[0, s], fao.ao.src.direction[1, s]]
-            PbetaL = nnp.zeros([nK, nK, 1, nH], dtype=fao.complex_dtype)
-            fx = beta[0] * fao.freq.kxAO_
-            fy = beta[1] * fao.freq.kyAO_
+            pbeta_dm = asnumpy(fao.PbetaDM[s])
+            walpha = asnumpy(fao.Walpha)
+            cphi = asnumpy(fao.Cphi)
+            beta = asnumpy(fao.ao.src.direction[:, s])
+            PbetaL = nnp.zeros([nK, nK, 1, nH], dtype=complex_dtype)
+            fx = beta[0] * kx
+            fy = beta[1] * ky
             for j in range(nH):
-                freq_t = wDir_x[j] * fao.freq.kxAO_ + wDir_y[j] * fao.freq.kyAO_
-                delta_h = Hs[j] * (fx + fy) - deltaT * fao.ao.atm.wSpeed[j] * freq_t
+                freq_t = wDir_x[j] * kx + wDir_y[j] * ky
+                delta_h = Hs[j] * (fx + fy) - deltaT * wSpeed[j] * freq_t
                 PbetaL[:, :, 0, j] = nnp.exp(i * 2 * nnp.pi * delta_h)
 
-            proj = PbetaL - nnp.matmul(fao.PbetaDM[s], fao.Walpha)
+            proj = PbetaL - nnp.matmul(pbeta_dm, walpha)
             proj_t = nnp.conj(proj.transpose(0, 1, 3, 2))
-            tmp = nnp.matmul(proj, nnp.matmul(fao.Cphi, proj_t)).real
-            psd[:, :, s] = fao.freq.mskInAO_ * tmp[:, :, 0, 0] * fao.freq.pistonFilterAO_
+            tmp = nnp.matmul(proj, nnp.matmul(cphi, proj_t)).real
+            psd[:, :, s] = msk * tmp[:, :, 0, 0] * piston
 
     return psd
 
@@ -86,8 +98,8 @@ class TestSpatioTemporalPSD(unittest.TestCase):
         )
 
     def _assert_close(self, a, b, rtol=1e-7, atol=1e-9):
-        aa = nnp.asarray(cpuArray(a), dtype=nnp.float64)
-        bb = nnp.asarray(cpuArray(b), dtype=nnp.float64)
+        aa = nnp.asarray(asnumpy(a), dtype=nnp.float64)
+        bb = nnp.asarray(asnumpy(b), dtype=nnp.float64)
         self.assertEqual(aa.shape, bb.shape)
         self.assertTrue(nnp.all(nnp.isfinite(aa)))
         self.assertTrue(nnp.all(nnp.isfinite(bb)))

@@ -1221,17 +1221,20 @@ class fourierModel:
         psd_vec = np.sum(PR * W_mn * np.abs(Q * avr) ** 2, axis=0)
         return np.reshape(psd_vec, self.Rx.shape)
 
-    def aliasingPSD(self, method='streaming', shift_batch=8, layer_chunk=5, n_times_limit=None, use_precompute=True, limited_mode='streaming', limited_mem_cap_mb=512):
+    def aliasingPSD(self, method=None, shift_batch=8, layer_chunk=5, n_times_limit=None, use_precompute=True, limited_mode='streaming', limited_mem_cap_mb=512):
         """
         Aliasing error power spectrum density.
         Supported methods:
-            - 'streaming': exact comb summation in shift batches (default)
+            - default: 'chunked' on GPU, 'streaming' on CPU
             - 'chunked': dense vectorized baseline across all shifts
             - 'limited': comb truncation with selectable backend:
                 * limited_mode='streaming' (default, stable memory profile)
                 * limited_mode='tiptorch' (experimental vectorized layers)
         """
         tstart = time.time()
+
+        if method is None:
+            method = 'chunked'
 
         if method == 'chunked':
             psd = self._aliasing_psd_chunked(layer_chunk=layer_chunk)
@@ -1390,11 +1393,12 @@ class fourierModel:
                        dtype=self.dtype)
         i = self.complex_dtype(1j)
         nH = self.ao.atm.nL
-        Hs = self.ao.atm.heights * self.strechFactor
-        Ws = self.ao.atm.weights
+        Hs = np.asarray(self.ao.atm.heights) * np.asarray(self.strechFactor)
+        Ws = np.asarray(self.ao.atm.weights)
         deltaT = self.ao.rtc.holoop['delay']/self.ao.rtc.holoop['rate']
-        wDir_x = nnp.cos(self.ao.atm.wDir*np.pi/180)
-        wDir_y = nnp.sin(self.ao.atm.wDir*np.pi/180)
+        wDir_x = np.cos(np.asarray(self.ao.atm.wDir) * np.pi / 180)
+        wDir_y = np.sin(np.asarray(self.ao.atm.wDir) * np.pi / 180)
+        wSpeed = np.asarray(self.ao.atm.wSpeed)
         Watm = self.Wphi * self.freq.pistonFilterAO_
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
         two_pi_i = 2 * i * np.pi
@@ -1429,7 +1433,7 @@ class fourierModel:
                 )
                 delta_h = (
                     Hs[:, None, None] * (fx + fy)[None, :, :]
-                    - deltaT * self.ao.atm.wSpeed[:, None, None] * freq_t
+                    - deltaT * wSpeed[:, None, None] * freq_t
                 )
                 PbetaL = np.exp(two_pi_i * delta_h).transpose(1, 2, 0)[:, :, None, :]
 

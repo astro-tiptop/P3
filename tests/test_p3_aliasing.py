@@ -8,6 +8,7 @@ import unittest
 import numpy as np
 import os
 import pathlib
+from p3.aoSystem import asnumpy
 from p3.aoSystem.fourierModel import fourierModel
 import p3.aoSystem as aoSystemMain
 
@@ -30,7 +31,7 @@ class TestAliasingChunking(unittest.TestCase):
                           verbose=False, display=False)
 
         # Compute aliasing PSD
-        psd_chunked = fao.aliasingPSD()
+        psd_chunked = asnumpy(fao.aliasingPSD())
 
         # Check it's not all zeros
         self.assertGreater(np.sum(np.abs(psd_chunked)), 0, 
@@ -51,7 +52,7 @@ class TestAliasingChunking(unittest.TestCase):
         fao = fourierModel(path_ini, path_root=self.path_p3, calcPSF=False,
                           verbose=False, display=False)
 
-        psd_chunked = fao.aliasingPSD()
+        psd_chunked = asnumpy(fao.aliasingPSD())
 
         self.assertGreater(np.sum(np.abs(psd_chunked)), 0)
         self.assertFalse(np.any(np.isnan(psd_chunked)))
@@ -70,7 +71,7 @@ class TestAliasingChunking(unittest.TestCase):
         ini_file = os.path.join(test_dir, 'scao_test_wvl1100nm.ini')
         fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False)
         fao.controller()
-        psd_alias = fao.aliasingPSD()
+        psd_alias = asnumpy(fao.aliasingPSD())
 
         self.assertFalse(np.isnan(psd_alias).any(), "Aliasing PSD contains NaN!")
         self.assertFalse(np.isinf(psd_alias).any(), "Aliasing PSD contains Inf!")
@@ -87,8 +88,8 @@ class TestAliasingChunking(unittest.TestCase):
         fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False, verbose=False)
         fao.controller()
 
-        psd_chunked = np.asarray(fao.aliasingPSD(method='chunked'))
-        psd_streaming = np.asarray(fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4))
+        psd_chunked = asnumpy(fao.aliasingPSD(method='chunked'))
+        psd_streaming = asnumpy(fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4))
 
         ref_norm = np.linalg.norm(psd_chunked)
         err_norm = np.linalg.norm(psd_streaming - psd_chunked)
@@ -102,8 +103,8 @@ class TestAliasingChunking(unittest.TestCase):
         fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False, verbose=False)
         fao.controller()
 
-        psd_ref = np.asarray(fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4))
-        psd_limited = np.asarray(
+        psd_ref = asnumpy(fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4))
+        psd_limited = asnumpy(
             fao.aliasingPSD(method='limited', shift_batch=8, layer_chunk=4, n_times_limit=2)
         )
 
@@ -121,10 +122,10 @@ class TestAliasingChunking(unittest.TestCase):
         fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False, verbose=False)
         fao.controller()
 
-        psd_cached = np.asarray(
+        psd_cached = asnumpy(
             fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4, use_precompute=True)
         )
-        psd_nocache = np.asarray(
+        psd_nocache = asnumpy(
             fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4, use_precompute=False)
         )
 
@@ -148,7 +149,7 @@ class TestAliasingChunking(unittest.TestCase):
         fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False, verbose=False)
         fao.controller()
 
-        psd_streaming = np.asarray(
+        psd_streaming = asnumpy(
             fao.aliasingPSD(
                 method='limited',
                 n_times_limit=2,
@@ -158,7 +159,7 @@ class TestAliasingChunking(unittest.TestCase):
                 use_precompute=True,
             )
         )
-        psd_tiptorch = np.asarray(
+        psd_tiptorch = asnumpy(
             fao.aliasingPSD(
                 method='limited',
                 n_times_limit=2,
@@ -178,7 +179,7 @@ class TestAliasingChunking(unittest.TestCase):
         fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False, verbose=False)
         fao.controller()
 
-        psd_fallback = np.asarray(
+        psd_fallback = asnumpy(
             fao.aliasingPSD(
                 method='limited',
                 n_times_limit=2,
@@ -187,7 +188,7 @@ class TestAliasingChunking(unittest.TestCase):
                 use_precompute=True,
             )
         )
-        psd_streaming = np.asarray(
+        psd_streaming = asnumpy(
             fao.aliasingPSD(
                 method='limited',
                 n_times_limit=2,

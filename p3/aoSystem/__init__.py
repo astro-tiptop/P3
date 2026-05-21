@@ -74,6 +74,21 @@ def cpuArray(v):
     else:
         return v.get()
 
+
+def asnumpy(v):
+    """Return a NumPy array/scalar from either NumPy or CuPy-backed inputs."""
+    if isinstance(v, list):
+        return [asnumpy(item) for item in v]
+    if isinstance(v, tuple):
+        return tuple(asnumpy(item) for item in v)
+    if nnp.isscalar(v) or isinstance(v, nnp.ndarray) or isinstance(v, nnp.generic):
+        return nnp.asarray(v)
+    if gpuEnabled and cp is not None and hasattr(cp, 'ndarray') and isinstance(v, cp.ndarray):
+        return cp.asnumpy(v)
+    if hasattr(v, 'get'):
+        return nnp.asarray(v.get())
+    return nnp.asarray(v)
+
 def resolve_config_path(path_value, path_root, path_p3, path_tiptop=None):
     """
     Resolve configuration file paths for both P3 and TIPTOP

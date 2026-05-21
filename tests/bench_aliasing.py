@@ -9,7 +9,7 @@ import resource
 import numpy as np
 
 import p3.aoSystem as aoSystemMain
-from p3.aoSystem import gpuEnabled, cp
+from p3.aoSystem import gpuEnabled, cp, asnumpy
 from p3.aoSystem.fourierModel import fourierModel
 
 
@@ -29,7 +29,10 @@ def gpu_pool_used_mb():
     if not gpuEnabled:
         return 0.0
     try:
-        return cp.get_default_memory_pool().used_bytes() / (1024 * 1024)
+        used = cp.get_default_memory_pool().used_bytes()
+        if used is None:
+            return 0.0
+        return float(used) / (1024 * 1024)
     except Exception:
         return 0.0
 
@@ -39,7 +42,7 @@ def main():
     parser.add_argument('--ini', default='tests/scao_test_wvl1100nm.ini', help='Path to ini file, relative to P3 root.')
     parser.add_argument('--warmups', type=int, default=2)
     parser.add_argument('--repeats', type=int, default=10)
-    parser.add_argument('--method', choices=['chunked', 'streaming', 'limited'], default='streaming')
+    parser.add_argument('--method', choices=['chunked', 'streaming', 'limited'], default='chunked')
     parser.add_argument('--shift-batch', type=int, default=8)
     parser.add_argument('--layer-chunk', type=int, default=5)
     parser.add_argument('--n-times-limit', type=int, default=2)
@@ -79,8 +82,8 @@ def main():
 
     rel_err = None
     if args.compare_reference and args.method != 'chunked':
-        ref = np.asarray(model.aliasingPSD(method='chunked', layer_chunk=args.layer_chunk))
-        test = np.asarray(
+        ref = asnumpy(model.aliasingPSD(method='chunked', layer_chunk=args.layer_chunk))
+        test = asnumpy(
             model.aliasingPSD(
                 method=args.method,
                 shift_batch=args.shift_batch,
