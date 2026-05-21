@@ -522,11 +522,6 @@ class fourierModel:
         P = None
         M_diag = None
 
-        # Noise covariance matrix
-        noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype)
-        self.Cb = np.ones((nK,nK,nGs,nGs),
-                          dtype=self.dtype) * np.diag(noise_var)
-
         # Atmospheric PSD is diagonal across statistically independent layers.
         atm_weights = np.asarray(self.ao.atm.weights, dtype=self.dtype)
         cte = (24 * spc.gamma(6/5)/5)**(5/6) \
@@ -545,8 +540,15 @@ class fourierModel:
         kernel = None
 
         MP_t = np.conj(MP.transpose(0, 1, 3, 2))
-        MP_Cphi = MP * self.Cphi_mod[:, :, None, :]
-        to_inv  = np.matmul(MP_Cphi, MP_t) + self.Cb
+        
+        # to_inv created as MP^H * Cphi_mod * MP + Cb, where Cb is the noise covariance matrix
+        to_inv = np.matmul(np.matmul(MP, self.Cphi_mod), MP_t)
+
+        # Directly add noise variance to the diagonal of the system matrix (equivalent to adding Cb)
+        noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.complex_dtype)
+        idx = np.arange(nGs)
+        to_inv[:, :, idx, idx] += noise_var
+        
         rhs = self.Cphi_mod[:, :, :, None] * MP_t
 
         # Try using solve (faster), fallback to pinv if fails
@@ -806,7 +808,6 @@ class fourierModel:
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdNoise = None
-                self.Cb = None
                 self.Cphi_mod = None
 
             # Aliasing
@@ -1198,17 +1199,19 @@ class fourierModel:
             else:
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),
                                dtype=self.dtype)
-                # - Noise level is considered in the covariance matrix Cb
                 # - Noise gain is considered to be that produced by
                 #   an integrator controller with a gain of 0.5.
                 #   The linear value ranges from 0.4 to 0.8 for a delay from 0 to 3 frames.
                 noise_gain = min(0.8, 0.4 + 0.1333 * self.ao.rtc.holoop['delay']) ** 2
+                noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype)
+                
                 for j in range(self.ao.src.nSrc):
-                    PW = np.matmul(self.PbetaDM[j],self.W)
-                    PW_t = np.conj(PW.transpose(0,1,3,2))
-                    tmp = np.matmul(PW,np.matmul(self.Cb,PW_t)).real
-                    psd[:,:,j] = self.freq.mskInAO_ * tmp[:, :, 0, 0]  \
-                        * self.freq.pistonFilterAO_ * noise_gain
+                    PW = np.matmul(self.PbetaDM[j], self.W) # Shape: (nK, nK, 1, nGs)
+                    # Cb is diagonal. PW @ Cb @ PW^T reduces to the sum of the weighted squared moduli
+                    # PW[:, :, 0, :] extracts the weights for each guide star (nK, nK, nGs)
+                    tmp = np.sum(np.abs(PW[:, :, 0, :])**2 * noise_var, axis=-1)
+                    
+                    psd[:,:,j] = self.freq.mskInAO_ * tmp * self.freq.pistonFilterAO_ * noise_gain
 
         self.t_noisePSD = 1000*(time.time() - tstart)
         # NOTE: the noise variance is the same for all WFS
@@ -1373,12 +1376,13 @@ class fourierModel:
         for s in range(self.ao.src.nSrc):
             th  = self.ao.src.direction[:,s] - self.gs.direction[:,0]
             if any(th):
-                A = np.zeros((self.freq.resAO,self.freq.resAO),
-                               dtype=self.dtype)
-                for l in range(self.ao.atm.nL):
-                    A = A + 2 * Ws[l] * \
-                        (1 - np.cos(2*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0])))
-                psd[:,:,s] = self.freq.mskInAO_ * A*Watm
+                phase = self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]
+                # Vectorized sum over layers: 2*Ws*(1 - cos(2*pi*Hs*phase)) is (nL, nK, nK),
+                # sum over axis=0 gives (nK, nK)
+                A = np.sum(2 * Ws[:, None, None] \
+                    * (1 - np.cos(2*np.pi*Hs[:, None, None] * phase[None, :, :])), axis=0)
+                psd[:,:,s] = self.freq.mskInAO_ * A * Watm
+
         self.t_anisoplanatismPSD = 1000*(time.time() - tstart)
         return np.real(psd)
 
@@ -1399,9 +1403,11 @@ class fourierModel:
             theta = delta_n * np.tan(self.ao.tel.zenith_angle*np.pi/180)
 
             for s in range(self.ao.src.nSrc):
-                A = 0
-                for l in range(self.ao.atm.nL):
-                    A = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*k*np.tan(theta)*np.cos(arg_k-azimuth[s])))
+                phase = k * np.tan(theta) * np.cos(arg_k - azimuth[s])
+                # Vectorized sum over layers: 2*Ws*(1 - cos(2*pi*Hs*phase)) is (nL, nK, nK),
+                # sum over axis=0 gives (nK, nK)
+                A = np.sum(2 * Ws[:, None, None] \
+                    * (1 - np.cos(2*np.pi*Hs[:, None, None] * phase[None, :, :])), axis=0)
                 psd[:,:,s] = self.freq.mskInAO_ * A * Watm
 
         self.t_differentialRefractionPSD = 1000*(time.time() - tstart)
