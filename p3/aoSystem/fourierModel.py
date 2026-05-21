@@ -1851,7 +1851,7 @@ class fourierModel:
                 print('.Chromatic error:\t\t%4.2fnm'%self.wfeChrom[idCenter])
                 print('.Aliasing error:\t\t%4.2fnm'%self.wfeAl)
                 if self.nGs == 1:
-                    print('.Noise error:\t\t\t%4.2fnm'%self.wfeN)
+                    print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[0])
                 else:
                     print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[idCenter])
                 print('.Spatio-temporal error:\t\t%4.2fnm'%self.wfeST[idCenter])

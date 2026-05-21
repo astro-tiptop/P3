@@ -6,7 +6,7 @@ Created on Wed Jun 17 01:17:43 2020
 """
 
 # Libraries
-from . import gpuEnabled, np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray
+from . import np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray, asnumpy
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -392,6 +392,9 @@ def sort_params_from_labels(psfModelInst, x0):
     return (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat)
 
 def telescopeOtf(pupil,samp):
+
+    samp = float(asnumpy(samp).ravel()[0])
+
     if samp >1:
         pup_pad = enlargeSupport(pupil,samp)
         otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
@@ -699,6 +702,8 @@ def cropSupport(im,n):
 
 
 def enlargeSupport(cube, n):
+
+    n = float(asnumpy(n).ravel()[0])
 
     if np.ndim(cube) == 2:
         nx, ny = cube.shape
