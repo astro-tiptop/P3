@@ -504,60 +504,52 @@ class fourierModel:
         nL_mod = len(h_mod)
         nGs = self.nGs
         i = np.complex64(1j)
-        d = [self.ao.wfs.optics[j].dsub for j in range(nGs)]   #sub-aperture size
+        d = [self.ao.wfs.optics[j].dsub for j in range(nGs)]
 
-        # WFS operator and projection matrices
-        M = np.zeros([nK, nK, nGs, nGs],
-                     dtype=self.complex_dtype)
-        P = np.zeros([nK, nK, nGs, nL_mod],
-                     dtype=self.complex_dtype)
+        # 1. WFS operator and projection matrices
+        # Calculate MP directly via broadcasting, avoiding the dense M matrix allocation
+        MP = np.zeros([nK, nK, nGs, nL_mod], dtype=self.complex_dtype)
         for j in range(nGs):
-            M[:, :, j, j] = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_)\
-                            * np.sinc(d[j]*self.freq.kyAO_)
+            M_diag_j = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_) * np.sinc(d[j]*self.freq.kyAO_)
             for n in range(nL_mod):
-                P[:, :, j, n] = np.exp(i*2*np.pi*h_mod[n]\
-                                        *(self.freq.kxAO_*self.gs.direction[0, j]
-                                        + self.freq.kyAO_*self.gs.direction[1, j]))
-        self.M = M
-        MP = np.matmul(self.M,P)
-        P = None
-        if self.reduce_memory:
-            self.M = None
+                P_jn = np.exp(i*2*np.pi*h_mod[n]*(self.freq.kxAO_*self.gs.direction[0, j] \
+                     + self.freq.kyAO_*self.gs.direction[1, j]))
+                MP[:, :, j, n] = M_diag_j * P_jn
 
-        # Noise covariance matrix
-        noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype)
-        self.Cb = np.ones((nK,nK,nGs,nGs),
-                          dtype=self.dtype) * np.diag(noise_var)
-
-        # Atmospheric PSD with the true atmosphere
+        # 2. Atmospheric PSD (Diagonal with respect to the layers)
         atm_weights = np.asarray(self.ao.atm.weights, dtype=self.dtype)
-        self.Cphi = np.zeros([nK,nK,nL,nL],
-                             dtype=self.complex_dtype)
-        cte = (24 * spc.gamma(6/5)/5)**(5/6) \
-               * (spc.gamma(11/6)**2. / (2.*np.pi**(11/3))).astype(self.dtype)
-        kernel = (self.ao.atm.r0**(-5/3) * cte \
-            * (self.freq.k2AO_ + 1/self.ao.atm.L0**2)**(-11/6) \
-            * self.freq.pistonFilterAO_).astype(self.dtype)
-        self.Cphi = kernel.repeat(nL**2, axis=1)
-        self.Cphi = self.Cphi.reshape((nK, nK, nL, nL)) * np.diag(atm_weights)
+        cte = (24 * spc.gamma(6/5)/5)**(5/6) * (spc.gamma(11/6)**2. / (2.*np.pi**(11/3))).astype(self.dtype)
+        kernel = (self.ao.atm.r0**(-5/3) * cte * (self.freq.k2AO_ + 1/self.ao.atm.L0**2)**(-11/6) \
+               * self.freq.pistonFilterAO_).astype(self.dtype)
+        
+        # Save ONLY the 3D diagonal (nK, nK, nL) instead of allocating a full (nK, nK, nL, nL) tensor
+        self.Cphi = kernel[:, :, None] * atm_weights[None, None, :]
 
-        # Atmospheric PSD with the modelled atmosphere
         atm_mod_weights = np.asarray(self.atm_mod.weights, dtype=self.dtype)
         if nL_mod == nL:
             self.Cphi_mod = self.Cphi
         else:
-            self.Cphi_mod = kernel.repeat(nL_mod**2, axis=1)
-            self.Cphi_mod = self.Cphi_mod.reshape((nK, nK, nL_mod, nL_mod)) \
-                * np.diag(atm_mod_weights)
+            self.Cphi_mod = kernel[:, :, None] * atm_mod_weights[None, None, :]
         kernel = None
 
-        MP_t = np.conj(MP.transpose(0, 1, 3, 2))
-        to_inv  = np.matmul(np.matmul(MP, self.Cphi_mod), MP_t) + self.Cb
-        rhs = np.matmul(self.Cphi_mod, MP_t)
+        # 3. Covariance Matrices
+        # np.ascontiguousarray strictly prevents CuPy crashes on strided matmuls
+        MP_t = np.ascontiguousarray(np.conj(MP.transpose(0, 1, 3, 2)))
+        
+        # MP @ Cphi_mod @ MP_t
+        MP_Cphi = MP * self.Cphi_mod[:, :, None, :]
+        to_inv  = np.matmul(MP_Cphi, MP_t)
+        
+        # Direct addition of noise on the diagonal (completely eliminates self.Cb allocation)
+        noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.complex_dtype)
+        idx = np.arange(nGs)
+        to_inv[:, :, idx, idx] += noise_var
 
-        # Try using solve (faster), fallback to pinv if fails
+        # rhs = Cphi_mod @ MP_t
+        rhs = self.Cphi_mod[:, :, :, None] * MP_t
+
+        # 4. Inversion
         try:
-            # Standard solve
             if self.verbose:
                 print("Tomography: Using standard solve")
             Wtomo = np.linalg.solve(
@@ -565,7 +557,6 @@ class fourierModel:
                 rhs.astype(np.complex64).transpose(0, 1, 3, 2)
             ).transpose(0, 1, 3, 2)
         except np.linalg.LinAlgError as e:
-            # Fallback: Use pinv for singular/ill-conditioned matrices
             if self.verbose:
                 print(f"Tomography: Standard solve failed ({e}), using pinv")
             inv = np.linalg.pinv(to_inv.astype(np.complex64),
@@ -573,7 +564,8 @@ class fourierModel:
             Wtomo = np.matmul(rhs, inv)
 
         to_inv = None
-
+        
+        self.t_tomo = 1000*(time.time() - tstart)
         return Wtomo
 
     def optimalProjector(self):
@@ -812,7 +804,6 @@ class fourierModel:
             # --- free memory
             if self.reduce_memory and not self.getErrorBreakDown:
                 self.psdNoise = None
-                self.Cb = None
                 self.Cphi_mod = None
 
             # Aliasing
@@ -952,126 +943,241 @@ class fourierModel:
         self.t_fittingPSD = 1000*(time.time() - tstart)
         return psd
 
-    def aliasingPSD(self):
-        """
-        Aliasing error power spectrum density
-        Memory-optimized with GPU-aware vectorized implementation
-        TO BE REVIEWED IN THE CASE OF A PYRAMID WFS
-        """
-        tstart = time.time()
-        psd = np.zeros((self.freq.resAO, self.freq.resAO),
-                       dtype=self.dtype)
+    def _aliasing_common(self):
         i = self.complex_dtype(1j)
         d = self.ao.wfs.optics[0].dsub
         clock_rate = np.array([self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)])
         T = np.mean(clock_rate / self.ao.rtc.holoop['rate'])
         td = T * self.ao.rtc.holoop['delay']
-        vx = self.ao.atm.wSpeed * nnp.cos(self.ao.atm.wDir * np.pi / 180)
-        vy = self.ao.atm.wSpeed * nnp.sin(self.ao.atm.wDir * np.pi / 180)
-        weights = self.ao.atm.weights
+        vx = np.asarray(self.ao.atm.wSpeed * nnp.cos(self.ao.atm.wDir * np.pi / 180), dtype=self.dtype)
+        vy = np.asarray(self.ao.atm.wSpeed * nnp.sin(self.ao.atm.wDir * np.pi / 180), dtype=self.dtype)
+        weights = np.asarray(self.ao.atm.weights, dtype=self.dtype)
         w = 2 * i * np.pi * d
 
         if not hasattr(self, 'Rx'):
             self.reconstructionFilter()
-        Rx = self.Rx * w
-        Ry = self.Ry * w
+        Rx = np.asarray((self.Rx * w).ravel(), dtype=self.complex_dtype)
+        Ry = np.asarray((self.Ry * w).ravel(), dtype=self.complex_dtype)
 
         if self.ao.rtc.holoop['gain'] == 0:
-            tf = 1
+            tf_flat = np.ones(self.freq.kxAO_.size, dtype=self.complex_dtype)
         else:
-            tf = self.h1
+            tf_flat = np.asarray(self.h1.ravel(), dtype=self.complex_dtype)
 
-        # Create grid of frequency shifts
-        mi, ni = np.meshgrid(
-            np.arange(-self.freq.nTimes, self.freq.nTimes),
-            np.arange(-self.freq.nTimes, self.freq.nTimes),
-            indexing="ij"
-        )
-        # Mask to exclude (0,0) shift
+        kxAO = np.asarray(self.freq.kxAO_.ravel(), dtype=self.dtype)
+        kyAO = np.asarray(self.freq.kyAO_.ravel(), dtype=self.dtype)
+        shift_grid = np.arange(-self.freq.nTimes, self.freq.nTimes)
+        mi, ni = np.meshgrid(shift_grid, shift_grid, indexing='ij')
         mask = (mi != 0) | (ni != 0)
-        mi = mi[:, :, None]  # Shape (nShifts, nShifts, 1)
-        ni = ni[:, :, None]
+        m_flat = np.asarray(mi[mask], dtype=self.dtype)
+        n_flat = np.asarray(ni[mask], dtype=self.dtype)
+        return d, T, td, vx, vy, weights, Rx, Ry, tf_flat, kxAO, kyAO, m_flat, n_flat
 
-        # Frequency arrays (flatten to 1D for clean broadcasting)
-        kxAO = self.freq.kxAO_.ravel()  # Shape (K,)
-        kyAO = self.freq.kyAO_.ravel()
-
-        # Shifted frequencies (broadcasts to: nShifts x nShifts x K)
-        km = kxAO[None, None, :] - mi / d
-        kn = kyAO[None, None, :] - ni / d
-
-        NN = self.Rx.shape
-
-        # Piston filter
-        PR = FourierUtils.pistonFilter(
-            self.ao.tel.D,
-            np.hypot(km, kn),
-            fm=mi[:, :, None] / d,
-            fn=ni[:, :, None] / d,
-            dtype=self.dtype
+    def _aliasing_signature(self, d, Rx, Ry, tf_flat, kxAO, kyAO):
+        # Cheap signature to detect geometry/reconstructor changes and invalidate stale precompute data.
+        return (
+            int(self.freq.nTimes),
+            int(kxAO.size),
+            float(d),
+            float(self.ao.tel.D),
+            float(self.ao.atm.L0),
+            float(kxAO[0]) if kxAO.size else 0.0,
+            float(kxAO[-1]) if kxAO.size else 0.0,
+            float(kyAO[0]) if kyAO.size else 0.0,
+            float(kyAO[-1]) if kyAO.size else 0.0,
+            float(np.real(Rx[0])) if Rx.size else 0.0,
+            float(np.imag(Rx[0])) if Rx.size else 0.0,
+            float(np.real(Ry[0])) if Ry.size else 0.0,
+            float(np.imag(Ry[0])) if Ry.size else 0.0,
+            float(np.real(tf_flat[0])) if tf_flat.size else 0.0,
+            float(np.imag(tf_flat[0])) if tf_flat.size else 0.0,
         )
 
-        # Atmospheric spectrum
+    def _get_aliasing_shift_terms(self, d, Rx, Ry, tf_flat, kxAO, kyAO, m_flat, n_flat, n_times_limit=None):
+        if n_times_limit is not None:
+            keep = (np.abs(m_flat) <= n_times_limit) & (np.abs(n_flat) <= n_times_limit)
+            m_sel = m_flat[keep]
+            n_sel = n_flat[keep]
+        else:
+            m_sel = m_flat
+            n_sel = n_flat
+
+        signature = self._aliasing_signature(d, Rx, Ry, tf_flat, kxAO, kyAO)
+        if not hasattr(self, '_aliasing_shift_cache'):
+            self._aliasing_shift_cache = {}
+
+        # Invalidate stale cache from a different model geometry/reconstructor state.
+        if getattr(self, '_aliasing_shift_cache_signature', None) != signature:
+            self._aliasing_shift_cache = {}
+            self._aliasing_shift_cache_signature = signature
+
+        cache_key = ('terms', None if n_times_limit is None else int(n_times_limit))
+        cached = self._aliasing_shift_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        km = kxAO[None, :] - m_sel[:, None] / d
+        kn = kyAO[None, :] - n_sel[:, None] / d
+        PR = FourierUtils.pistonFilter(self.ao.tel.D, np.hypot(km, kn), dtype=self.dtype)
         W_mn = (km**2 + kn**2 + 1 / self.ao.atm.L0**2) ** (-11 / 6)
+        Q = (Rx[None, :] * km + Ry[None, :] * kn) * (np.sinc(d * km) * np.sinc(d * kn))
+        out = {
+            'm_flat': m_sel,
+            'n_flat': n_sel,
+            'km': km,
+            'kn': kn,
+            'PR': PR,
+            'W_mn': W_mn,
+            'Q': Q,
+        }
 
-        # Reconstructor (reshape for broadcasting)
-        Rx = Rx.ravel()[None, None, :]  # Shape (1, 1, K)
-        Ry = Ry.ravel()[None, None, :]
-        # Q factor
-        Q = (Rx * km + Ry * kn) * (np.sinc(d * km) * np.sinc(d * kn))
+        # Keep cache small to avoid unbounded memory growth during development sweeps.
+        self._aliasing_shift_cache[cache_key] = out
+        if len(self._aliasing_shift_cache) > 3:
+            first_key = next(iter(self._aliasing_shift_cache.keys()))
+            if first_key != cache_key:
+                self._aliasing_shift_cache.pop(first_key, None)
+        return out
 
-        tf_flat = np.asarray(tf.ravel()[None, None, :])
+    def aliasingPrecomputeMemoryMB(self):
+        if not hasattr(self, '_aliasing_shift_cache'):
+            return 0.0
+        total_bytes = 0
+        for val in self._aliasing_shift_cache.values():
+            for k in ('m_flat', 'n_flat', 'km', 'kn', 'PR', 'W_mn', 'Q'):
+                arr = val.get(k)
+                if hasattr(arr, 'nbytes'):
+                    total_bytes += int(arr.nbytes)
+        return total_bytes / (1024 * 1024)
 
-        # **VECTORIZED CHUNKED PROCESSING**:
-        # Process layers in chunks with full vectorization
-        chunk_size = min(5, self.ao.atm.nL)  # Adjust chunk size
-        avr_sum = np.zeros((mi.shape[0], mi.shape[1], len(kxAO)),
-                           dtype=self.complex_dtype)
+    def clearAliasingPrecompute(self):
+        self._aliasing_shift_cache = {}
+        self._aliasing_shift_cache_signature = None
 
-        # Pre-allocate chunk array ONCE (fixed size, reused across iterations)
-        avr_chunk = np.zeros((chunk_size, mi.shape[0], mi.shape[1], len(kxAO)),
-                             dtype=self.complex_dtype)
+    def _aliasing_psd_chunked(self, layer_chunk=5):
+        d, T, td, vx, vy, weights, Rx, Ry, tf_flat, kxAO, kyAO, m_flat, n_flat = self._aliasing_common()
 
-        for chunk_start in range(0, self.ao.atm.nL, chunk_size):
-            chunk_end = min(chunk_start + chunk_size, self.ao.atm.nL)
-            n_layers_chunk = chunk_end - chunk_start
+        terms = self._get_aliasing_shift_terms(
+            d, Rx, Ry, tf_flat, kxAO, kyAO, m_flat, n_flat, n_times_limit=None
+        )
+        km = terms['km']
+        kn = terms['kn']
+        PR = terms['PR']
+        W_mn = terms['W_mn']
+        Q = terms['Q']
 
-            # Reset chunk array to zero (reusing allocation)
-            avr_chunk.fill(0)
+        layer_chunk = max(1, min(layer_chunk, self.ao.atm.nL))
+        avr_sum = np.zeros((m_flat.size, kxAO.size), dtype=self.complex_dtype)
+        two_pi_i = 2 * self.complex_dtype(1j) * np.pi
 
-            # **VECTORIZED COMPUTATION FOR ALL LAYERS IN CHUNK**
-            # Extract velocity components for this chunk
-            vx_chunk = vx[chunk_start:chunk_end]  # Shape: (n_layers_chunk,)
-            vy_chunk = vy[chunk_start:chunk_end]
+        for chunk_start in range(0, self.ao.atm.nL, layer_chunk):
+            chunk_end = min(chunk_start + layer_chunk, self.ao.atm.nL)
+            vx_chunk = vx[chunk_start:chunk_end][:, None, None]
+            vy_chunk = vy[chunk_start:chunk_end][:, None, None]
+            weights_chunk = weights[chunk_start:chunk_end][:, None, None]
 
-            # Broadcast to (n_layers_chunk, 1, 1, 1) for proper broadcasting
-            vx_bc = np.asarray(vx_chunk[:, None, None, None])
-            vy_bc = np.asarray(vy_chunk[:, None, None, None])
-
-            # Compute transfer function for all layers in chunk simultaneously
-            # Broadcasting: (n_layers_chunk, nShifts, nShifts, K)
-            avr_chunk[:n_layers_chunk] = (
-                np.sinc(km[None, :, :, :] * vx_bc * T) *
-                np.sinc(kn[None, :, :, :] * vy_bc * T) *
-                np.exp(2j * np.pi * (km[None, :, :, :] * vx_bc + kn[None, :, :, :] * vy_bc) * td) *
-                tf_flat[None, :, :, :]
+            avr_chunk = (
+                np.sinc(km[None, :, :] * vx_chunk * T)
+                * np.sinc(kn[None, :, :] * vy_chunk * T)
+                * np.exp(two_pi_i * (km[None, :, :] * vx_chunk + kn[None, :, :] * vy_chunk) * td)
+                * tf_flat[None, None, :]
             )
+            avr_sum += np.sum(weights_chunk * avr_chunk, axis=0)
 
-            # Weighted sum over ONLY the valid layers in this chunk
-            # For the last chunk, only sum over the first n_layers_chunk elements
-            weights_chunk = np.asarray(weights[chunk_start:chunk_end][:, None, None, None])
-            avr_sum += np.sum(weights_chunk * avr_chunk[:n_layers_chunk], axis=0)
+        psd = np.sum(PR * W_mn * np.abs(Q * avr_sum) ** 2, axis=0)
+        return np.reshape(psd, self.Rx.shape)
 
-        # Free chunk memory
-        avr_chunk = None
+    def _aliasing_psd_streaming(self, shift_batch=8, layer_chunk=5, n_times_limit=None, use_precompute=True):
+        d, T, td, vx, vy, weights, Rx, Ry, tf_flat, kxAO, kyAO, m_flat, n_flat = self._aliasing_common()
 
-        # Compute aliasing PSD
-        psd = np.sum(PR * W_mn * np.abs(Q * avr_sum) ** 2 * mask[:, :, None], axis=(0, 1))
-        psd = np.reshape(psd, NN)
+        terms = None
+        if use_precompute:
+            terms = self._get_aliasing_shift_terms(
+                d, Rx, Ry, tf_flat, kxAO, kyAO, m_flat, n_flat, n_times_limit=n_times_limit
+            )
+            m_flat = terms['m_flat']
+            n_flat = terms['n_flat']
+        elif n_times_limit is not None:
+            keep = (np.abs(m_flat) <= n_times_limit) & (np.abs(n_flat) <= n_times_limit)
+            m_flat = m_flat[keep]
+            n_flat = n_flat[keep]
+
+        shift_batch = max(1, int(shift_batch))
+        layer_chunk = max(1, min(int(layer_chunk), self.ao.atm.nL))
+        two_pi_i = 2 * self.complex_dtype(1j) * np.pi
+        psd_vec = np.zeros(kxAO.size, dtype=self.dtype)
+
+        for shift_start in range(0, m_flat.size, shift_batch):
+            shift_end = min(shift_start + shift_batch, m_flat.size)
+            if terms is not None:
+                km = terms['km'][shift_start:shift_end]
+                kn = terms['kn'][shift_start:shift_end]
+                PR = terms['PR'][shift_start:shift_end]
+                W_mn = terms['W_mn'][shift_start:shift_end]
+                Q = terms['Q'][shift_start:shift_end]
+            else:
+                mb = m_flat[shift_start:shift_end]
+                nb = n_flat[shift_start:shift_end]
+                km = kxAO[None, :] - mb[:, None] / d
+                kn = kyAO[None, :] - nb[:, None] / d
+                PR = FourierUtils.pistonFilter(self.ao.tel.D, np.hypot(km, kn), dtype=self.dtype)
+                W_mn = (km**2 + kn**2 + 1 / self.ao.atm.L0**2) ** (-11 / 6)
+                Q = (Rx[None, :] * km + Ry[None, :] * kn) * (np.sinc(d * km) * np.sinc(d * kn))
+
+            avr_sum = np.zeros((shift_end - shift_start, kxAO.size), dtype=self.complex_dtype)
+            for layer_start in range(0, self.ao.atm.nL, layer_chunk):
+                layer_end = min(layer_start + layer_chunk, self.ao.atm.nL)
+                vx_chunk = vx[layer_start:layer_end][:, None, None]
+                vy_chunk = vy[layer_start:layer_end][:, None, None]
+                weights_chunk = weights[layer_start:layer_end][:, None, None]
+
+                avr_chunk = (
+                    np.sinc(km[None, :, :] * vx_chunk * T)
+                    * np.sinc(kn[None, :, :] * vy_chunk * T)
+                    * np.exp(two_pi_i * (km[None, :, :] * vx_chunk + kn[None, :, :] * vy_chunk) * td)
+                    * tf_flat[None, None, :]
+                )
+                avr_sum += np.sum(weights_chunk * avr_chunk, axis=0)
+
+            psd_vec += np.sum(PR * W_mn * np.abs(Q * avr_sum) ** 2, axis=0)
+
+        return np.reshape(psd_vec, self.Rx.shape)
+
+    def aliasingPSD(self, method=None, shift_batch=8, layer_chunk=5, n_times_limit=None, use_precompute=True):
+        """
+        Aliasing error power spectrum density.
+        Supported methods:
+            - default: 'chunked'
+            - 'chunked': dense vectorized baseline across all shifts
+            - 'limited': comb truncation with streaming backend
+        """
+        tstart = time.time()
+
+        if method is None:
+            method = 'chunked'
+
+        if method == 'chunked':
+            psd = self._aliasing_psd_chunked(layer_chunk=layer_chunk)
+        elif method == 'limited':
+            if n_times_limit is None:
+                n_times_limit = max(1, int(self.freq.nTimes // 2))
+            psd = self._aliasing_psd_streaming(
+                shift_batch=shift_batch,
+                layer_chunk=layer_chunk,
+                n_times_limit=n_times_limit,
+                use_precompute=use_precompute,
+            )
+        else:
+            psd = self._aliasing_psd_streaming(
+                shift_batch=shift_batch,
+                layer_chunk=layer_chunk,
+                n_times_limit=None,
+                use_precompute=use_precompute,
+            )
 
         self.t_aliasingPSD = 1000 * (time.time() - tstart)
         return self.freq.mskInAO_ * psd * self.ao.atm.r0**(-5/3) * 0.0229
-
+    
     def noisePSD(self):
         """Noise error power spectrum density
         """
@@ -1087,22 +1193,24 @@ class fourierModel:
                 psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_ \
                       * self.noiseGain * mean_noise_var
             else:
+                # Tomographic case
                 psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),
                                dtype=self.dtype)
-                # - Noise level is considered in the covariance matrix Cb
                 # - Noise gain is considered to be that produced by
                 #   an integrator controller with a gain of 0.5.
                 #   The linear value ranges from 0.4 to 0.8 for a delay from 0 to 3 frames.
                 noise_gain = min(0.8, 0.4 + 0.1333 * self.ao.rtc.holoop['delay']) ** 2
+                noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype)
+                
                 for j in range(self.ao.src.nSrc):
-                    PW = np.matmul(self.PbetaDM[j],self.W)
-                    PW_t = np.conj(PW.transpose(0,1,3,2))
-                    tmp = np.matmul(PW,np.matmul(self.Cb,PW_t)).real
-                    psd[:,:,j] = self.freq.mskInAO_ * tmp[:, :, 0, 0]  \
-                        * self.freq.pistonFilterAO_ * noise_gain
+                    PW = np.matmul(self.PbetaDM[j], self.W)
+                    
+                    # Since Cb was strictly diagonal across GS, PW @ Cb @ PW^T 
+                    # mathematically simplifies to the weighted sum of squared moduli
+                    tmp = np.sum(np.abs(PW[:, :, 0, :])**2 * noise_var, axis=-1)
+                    psd[:,:,j] = self.freq.mskInAO_ * tmp * self.freq.pistonFilterAO_ * noise_gain
 
         self.t_noisePSD = 1000*(time.time() - tstart)
-        # NOTE: the noise variance is the same for all WFS
         return psd
 
     def reconstructionPSD(self):
@@ -1198,23 +1306,26 @@ class fourierModel:
                        dtype=self.dtype)
         i = self.complex_dtype(1j)
         nH = self.ao.atm.nL
-        Hs = self.ao.atm.heights * self.strechFactor
-        Ws = self.ao.atm.weights
+        Hs = np.asarray(self.ao.atm.heights) * np.asarray(self.strechFactor)
+        Ws = np.asarray(self.ao.atm.weights)
         deltaT = self.ao.rtc.holoop['delay']/self.ao.rtc.holoop['rate']
-        wDir_x = nnp.cos(self.ao.atm.wDir*np.pi/180)
-        wDir_y = nnp.sin(self.ao.atm.wDir*np.pi/180)
+        wDir_x = np.cos(np.asarray(self.ao.atm.wDir) * np.pi / 180)
+        wDir_y = np.sin(np.asarray(self.ao.atm.wDir) * np.pi / 180)
+        wSpeed = np.asarray(self.ao.atm.wSpeed)
         Watm = self.Wphi * self.freq.pistonFilterAO_
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
+        two_pi_i = 2 * i * np.pi
 
         for s in range(self.ao.src.nSrc):
             if self.nGs<2:
                 th = self.ao.src.direction[:, s] - self.gs.direction[:, 0]
                 if np.any(np.asarray(th)):
-                    A = np.zeros((nK, nK),
-                                 dtype=self.complex_dtype)
-                    for l in range(self.ao.atm.nL):
-                        A = A + Ws[l] \
-                            * np.exp(2*i*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]))
+                    # Vectorized sum over layers.
+                    phase = self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]
+                    A = np.sum(
+                        Ws[:, None, None] * np.exp(two_pi_i * Hs[:, None, None] * phase[None, :, :]),
+                        axis=0,
+                    )
                 else:
                     A = np.ones((self.freq.resAO, self.freq.resAO),
                                 dtype=self.complex_dtype)
@@ -1225,21 +1336,31 @@ class fourierModel:
                     psd[:, :, s] = self.freq.mskInAO_ * \
                         (1 + abs(F)**2*self.h2 - 2*np.real(F*self.h1*A)) * Watm
             else:
-                # tomographic case
+                # Tomographic case
                 Beta = [self.ao.src.direction[0,s],self.ao.src.direction[1,s]]
-                PbetaL = np.zeros([nK, nK, 1, nH],
-                                  dtype=self.complex_dtype)
                 fx = Beta[0]*self.freq.kxAO_
                 fy = Beta[1]*self.freq.kyAO_
-                for j in range(nH):
-                    freq_t = wDir_x[j]*self.freq.kxAO_+ wDir_y[j]*self.freq.kyAO_
-                    delta_h = Hs[j]*(fx+fy) - deltaT*self.ao.atm.wSpeed[j]*freq_t
-                    PbetaL[: , :, 0, j] = np.exp(i*2*np.pi*delta_h)
+                
+                # Native construction with shape (nK, nK, 1, nH) to avoid .transpose()
+                # wDir_x is (nH,) -> [None, None, None, :]
+                # self.freq.kxAO_ is (nK, nK) -> [:, :, None, None]
+                freq_t = (
+                    wDir_x[None, None, None, :] * self.freq.kxAO_[:, :, None, None]
+                    + wDir_y[None, None, None, :] * self.freq.kyAO_[:, :, None, None]
+                )
+                delta_h = (
+                    Hs[None, None, None, :] * (fx + fy)[:, :, None, None]
+                    - deltaT * wSpeed[None, None, None, :] * freq_t
+                )
+                
+                PbetaL = np.exp(two_pi_i * delta_h)
 
                 proj = PbetaL - np.matmul(self.PbetaDM[s], self.Walpha)
-                proj_t = np.conj(proj.transpose(0, 1, 3, 2))
-                tmp = np.matmul(proj,np.matmul(self.Cphi, proj_t)).real
-                psd[:, :, s] = self.freq.mskInAO_ * tmp[:, :, 0, 0]*self.freq.pistonFilterAO_
+                
+                # Cphi is now a 3D diagonal array (nK, nK, nL).
+                # proj @ Cphi @ proj_T massively simplifies to element-wise broadcasting:
+                tmp = np.sum(np.abs(proj[:, :, 0, :])**2 * self.Cphi, axis=-1)
+                psd[:, :, s] = self.freq.mskInAO_ * tmp * self.freq.pistonFilterAO_
         if self.reduce_memory:
             self.Walpha = None
         self.t_spatioTemporalPSD = 1000*(time.time() - tstart)
@@ -1251,19 +1372,19 @@ class fourierModel:
         tstart  = time.time()
         psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc),
                        dtype=self.dtype)
-        Hs = self.ao.atm.heights * self.strechFactor
-        Ws = self.ao.atm.weights
+
+        Hs = np.asarray(self.ao.atm.heights * self.strechFactor, dtype=self.dtype)
+        Ws = np.asarray(self.ao.atm.weights, dtype=self.dtype)
         Watm = self.Wphi * self.freq.pistonFilterAO_
 
         for s in range(self.ao.src.nSrc):
             th  = self.ao.src.direction[:,s] - self.gs.direction[:,0]
-            if any(th):
-                A = np.zeros((self.freq.resAO,self.freq.resAO),
-                               dtype=self.dtype)
-                for l in range(self.ao.atm.nL):
-                    A = A + 2 * Ws[l] * \
-                        (1 - np.cos(2*np.pi*Hs[l]*(self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0])))
-                psd[:,:,s] = self.freq.mskInAO_ * A*Watm
+            if np.any(np.asarray(th)):
+                phase = self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]
+                # Vectorized sum over layers natively on GPU
+                A = np.sum(2 * Ws[:, None, None] * (1 - np.cos(2*np.pi*Hs[:, None, None] * phase[None, :, :])), axis=0)
+                psd[:,:,s] = self.freq.mskInAO_ * A * Watm
+                
         self.t_anisoplanatismPSD = 1000*(time.time() - tstart)
         return np.real(psd)
 
@@ -1272,21 +1393,22 @@ class fourierModel:
         psd = np.zeros((self.freq.resAO,self.freq.resAO,self.ao.src.nSrc), dtype=self.dtype)
 
         if self.ao.tel.zenith_angle != 0:
-            Hs = self.ao.atm.heights * self.strechFactor
-            Ws = self.ao.atm.weights
+            Hs = np.asarray(self.ao.atm.heights * self.strechFactor, dtype=self.dtype)
+            Ws = np.asarray(self.ao.atm.weights, dtype=self.dtype)
+
             Watm = self.Wphi * self.freq.pistonFilterAO_
             k = np.sqrt(self.freq.k2AO_)
             arg_k = np.arctan2(self.freq.kyAO_, self.freq.kxAO_)
-            azimuth = self.ao.src.azimuth
+            azimuth = np.asarray(self.ao.src.azimuth, dtype=self.dtype)
 
             # Uses the pre-calculated values from Mathar
             delta_n = self.n_air_wvlRef - self.n_air_gs
             theta = delta_n * np.tan(self.ao.tel.zenith_angle*np.pi/180)
 
             for s in range(self.ao.src.nSrc):
-                A = 0
-                for l in range(self.ao.atm.nL):
-                    A = A + 2*Ws[l]*(1 - np.cos(2*np.pi*Hs[l]*k*np.tan(theta)*np.cos(arg_k-azimuth[s])))
+                phase = k * np.tan(theta) * np.cos(arg_k - azimuth[s])
+                # Vectorized sum over layers natively on GPU
+                A = np.sum(2 * Ws[:, None, None] * (1 - np.cos(2*np.pi*Hs[:, None, None] * phase[None, :, :])), axis=0)
                 psd[:,:,s] = self.freq.mskInAO_ * A * Watm
 
         self.t_differentialRefractionPSD = 1000*(time.time() - tstart)
@@ -1729,7 +1851,7 @@ class fourierModel:
                 print('.Chromatic error:\t\t%4.2fnm'%self.wfeChrom[idCenter])
                 print('.Aliasing error:\t\t%4.2fnm'%self.wfeAl)
                 if self.nGs == 1:
-                    print('.Noise error:\t\t\t%4.2fnm'%self.wfeN)
+                    print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[0])
                 else:
                     print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[idCenter])
                 print('.Spatio-temporal error:\t\t%4.2fnm'%self.wfeST[idCenter])
@@ -1905,7 +2027,7 @@ class fourierModel:
                 memory_breakdown['Walpha'] = res_ao * res_ao * n_gs * n_atm * dtype_size * 2
                 memory_breakdown['PbetaDM'] = res_ao * res_ao * n_src * n_dm * dtype_size * 2
                 memory_breakdown['Cb'] = res_ao * res_ao * n_gs * n_gs * dtype_size * 2
-                memory_breakdown['Cphi'] = res_ao * res_ao * n_atm * n_atm * dtype_size * 2
+                memory_breakdown['Cphi'] = res_ao * res_ao * n_atm * dtype_size
 
         # Partial PSDs (if getErrorBreakDown or not reduce_memory)
         if self.getErrorBreakDown or not self.reduce_memory:
@@ -1962,7 +2084,11 @@ class fourierModel:
 
         # Compute totals
         total_final = sum(memory_breakdown.values())
-        total_peak_temp = sum(peak_breakdown.values())
+        # Temporary buffers come from different stages and mostly do not coexist.
+        # Peak estimate should be driven by the dominant stage, with a partial
+        # overlap factor to account for short-lived co-allocations around stage transitions.
+        peak_temp_dominant = max(peak_breakdown.values()) if peak_breakdown else 0
+        total_peak_temp = 0.45 * peak_temp_dominant
         total_peak = total_final + total_peak_temp
 
         model_final_mb = total_final / (1024**2)

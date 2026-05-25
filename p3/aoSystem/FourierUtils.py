@@ -6,10 +6,11 @@ Created on Wed Jun 17 01:17:43 2020
 """
 
 # Libraries
-from . import gpuEnabled, np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray
+from . import np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray, asnumpy
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import warnings
 from astropy.modeling import fitting, models
 from matplotlib.path import Path
 from scipy import ndimage
@@ -79,19 +80,17 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=None, theta_ext=0, spatialFilter=1,
 
     # ADDING STATIC MAP
     phaseStat = np.zeros((nPup, nPup), dtype=dtype)
-    if tel.opdMap_on is not None and nnp.any(cpuArray(tel.opdMap_on)):
+
+    if tel.opdMap_on is not None and np.any(np.asarray(tel.opdMap_on)):
         opd_map = np.asarray(tel.opdMap_on, dtype=dtype)
         if theta_ext:
-            if isinstance(tel.opdMap_on, nnp.ndarray):
-                opd_map = np.asarray(ndimage.rotate(cpuArray(opd_map), theta_ext, reshape=False), dtype=dtype)
-            else:
-                opd_map = scnd.rotate(opd_map, theta_ext, reshape=False)
+            opd_map = np.asarray(scnd.rotate(opd_map, theta_ext, reshape=False), dtype=dtype)
         phaseStat = ((2 * np.pi * 1e-9 / wvl) * opd_map).astype(dtype)
 
     # ADDING USER-SPECIFIED STATIC MODES
     phaseMap = 0
     xStat = np.asarray([] if xStat is None else xStat, dtype=dtype)
-    if tel.statModes is not None and nnp.any(cpuArray(tel.statModes)):
+    if tel.statModes is not None and np.any(np.asarray(tel.statModes)):
         stat_modes = np.asarray(tel.statModes, dtype=dtype)
         if stat_modes.shape[2] == xStat.size:
             phaseMap = (2 * np.pi * 1e-9 / wvl * np.sum(stat_modes * xStat, axis=2)).astype(dtype)
@@ -104,8 +103,8 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=None, theta_ext=0, spatialFilter=1,
 
     # INSTRUMENTAL OTF
     otfStat = np.real(pupil2otf(pupil * apodizer, phaseStat, samp))
-    if otfStat is not None and nnp.any(otfStat.shape != nOtf):
-        otfStat = interpolateSupport(otfStat, nOtf)
+    if otfStat is not None and np.any(np.array(otfStat.shape) != nOtf):
+        otfStat = interpolateSupport(otfStat, nOtf, kind='spline') 
     otfStat /= otfStat.max()
 
     # DIFFRACTION-LIMITED OTF
@@ -113,8 +112,8 @@ def getStaticOTF(tel, nOtf, samp, wvl, xStat=None, theta_ext=0, spatialFilter=1,
         otfDL = np.real(otfStat)
     else:
         otfDL = np.real(pupil2otf(pupil * apodizer, 0 * phaseStat, samp))
-        if nnp.any(otfDL.shape != nOtf):
-            otfDL = interpolateSupport(otfDL, nOtf)
+        if np.any(np.array(otfDL.shape) != nOtf):
+            otfDL = interpolateSupport(otfDL, nOtf, kind='spline')
             otfDL /= otfDL.max()
 
     otfStat = otfStat.astype(dtype)
@@ -210,12 +209,19 @@ def otfShannon2psf(otf,nqSmpl,fovInPixel):
 def pistonFilter(D, f, fm=0, fn=0, dtype=np.float64):
     f = np.asarray(f, dtype=dtype).copy()
     f[np.where(np.equal(f, 0))] = 1e-10
-    if len(f.shape) == 1:
+    if f.ndim == 1:
         Fx, Fy = np.meshgrid(f, f)
         FX = Fx - fm
         FY = Fy - fn
         F = np.pi * D * np.hypot(FX, FY)
     else:
+        if fm != 0 or fn != 0:
+            warnings.warn(
+                "fm and fn shifts are ignored when f is a multidimensional array. "
+                "The input f is assumed to be a pre-shifted radial magnitude.",
+                UserWarning,
+                stacklevel=2,
+            )
         F = np.pi * D * f
     R         = sombrero(1, F, dtype=dtype)
     pFilter   =  1 - 4 * R**2
@@ -386,6 +392,9 @@ def sort_params_from_labels(psfModelInst, x0):
     return (Cn2, r0, x0_dphi, x0_jitter, x0_stellar, x0_stat)
 
 def telescopeOtf(pupil,samp):
+
+    samp = float(asnumpy(samp).ravel()[0])
+
     if samp >1:
         pup_pad = enlargeSupport(pupil,samp)
         otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
@@ -694,6 +703,8 @@ def cropSupport(im,n):
 
 def enlargeSupport(cube, n):
 
+    n = float(asnumpy(n).ravel()[0])
+
     if np.ndim(cube) == 2:
         nx, ny = cube.shape
         pad_x = int((n - 1) * nx / 2)
@@ -725,70 +736,49 @@ def inpolygon(xq, yq, xv, yv):
 
  
 def interpolateSupport(image, n_out, kind='spline'):
-
+    """
+    Interpolate (resize) a 2D image/support to a new shape.
+    Fully GPU-aware: avoids host-to-device memory transfers.
+    """
     C_I = _complex_dtype_for(image)(1j)
-    is_complex = nnp.iscomplexobj(cpuArray(image))
+    
+    # Check if the array is natively complex on the backend (avoiding D2H transfer)
+    is_complex = np.iscomplexobj(image)
 
     n_x, n_y = image.shape
-    # Define angular frequencies vectors
+    
+    # Define target shape
     if nnp.isscalar(n_out):
         m_x = m_y = int(n_out)
     else:
         m_x = int(n_out[0])
         m_y = int(n_out[1])
 
+    # If the shape is already correct, return the original image
     if n_x == m_x and n_y == m_y:
         return image
 
+    zoom_factors = (m_x / n_x, m_y / n_y)
+
+    # Map the 'kind' parameter to the spline interpolation order
     if kind == "nearest":
-        zoom_factors = (m_x / n_x, m_y / n_y)
-        tmpReal = scnd.zoom(np.real(image), zoom_factors, order=0)
-        if is_complex:
-            tmpImag = scnd.zoom(np.imag(image), zoom_factors, order=0)
-            return np.asarray(tmpReal + C_I * tmpImag, dtype=image.dtype)
-        return np.asarray(tmpReal, dtype=image.dtype)
+        order_val = 0
+    elif kind == "linear":
+        order_val = 1
+    elif kind == "spline":
+        order_val = 3  # Native cubic spline (optimized on both CPU and GPU)
+    else:
+        order_val = 3  # Default fallback
 
-    # Initial frequencies grid
-    if n_x%2 == 0:
-        uinit = nnp.linspace(-n_x/2, n_x/2-1, n_x) * 2 / n_x
-    else:
-        uinit = nnp.linspace(-nnp.floor(n_x/2), nnp.floor(n_x/2), n_x) * 2 / n_x
-    if n_y%2 == 0:
-        vinit = nnp.linspace(-n_y/2, n_y/2-1, n_y) * 2 / n_y
-    else:
-        vinit = nnp.linspace(-nnp.floor(n_y/2), nnp.floor(n_y/2), n_y) * 2 / n_y
-
-    # Interpolated frequencies grid
-    if m_x%2 == 0:
-        unew = nnp.linspace(-m_x/2, m_x/2-1, m_x) * 2 / m_x
-    else:
-        unew = nnp.linspace(-nnp.floor(m_x/2), nnp.floor(m_x/2), m_x) * 2 / m_x
-    if m_y%2 == 0:
-        vnew = nnp.linspace(-m_y/2, m_y/2-1, m_y) * 2 / m_y
-    else:
-        vnew = nnp.linspace(-nnp.floor(m_y/2), nnp.floor(m_y/2), m_y) * 2 / m_y
-
-    # Interpolation
-    fun_imag = None
-    if kind == "spline":
-        # Surprisingly v and u vectors must be shifted when using
-        # RectBivariateSpline. See: https://github.com/scipy/scipy/issues/3164
-        xin = np.real(image)
-        fun_real = RectBivariateSpline(vinit, uinit, cpuArray(xin))
-        if is_complex:
-            xin = np.imag(image)
-            fun_imag = RectBivariateSpline(vinit, uinit, cpuArray(xin))
-    else:
-        xin = np.real(image)
-        fun_real = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
-        if is_complex:
-            xin = np.imag(image)
-            fun_imag = RectBivariateSpline(uinit, vinit, cpuArray(xin), kx=1, ky=1)
-
+    # Direct interpolation
+    # scnd.zoom maps to cupyx.scipy.ndimage.zoom if the GPU is enabled
+    tmpReal = scnd.zoom(np.real(image), zoom_factors, order=order_val)
+    
     if is_complex:
-        return np.asarray(fun_real(unew, vnew) + C_I * fun_imag(unew, vnew),
-                          dtype=image.dtype)
-    return np.asarray(fun_real(unew, vnew), dtype=image.dtype)
+        tmpImag = scnd.zoom(np.imag(image), zoom_factors, order=order_val)
+        return np.asarray(tmpReal + C_I * tmpImag, dtype=image.dtype)
+        
+    return np.asarray(tmpReal, dtype=image.dtype)
 
 
 def normalizeImage(im, normType=1, param=None):

@@ -62,10 +62,10 @@ class atmosphere:
                 cst = (24*spc.gamma(6/5)/5)**(-5/6)*self.r0**(5/3)
                 th0 = ( cst/sum(self.weights*self.heights**(5/3) ) )**(3/5)
             else:
-                func = lambda x: self.angularStructureFunction(x) -2
-                th0 = abs(spo.fsolve(func,0))
-                th0 = th0[0]
-
+                # SANITIZATION: fsolve is CPU-only and strictly requires Python floats.
+                # We force the extraction of the value and cast it to float.
+                func = lambda x: float(np.atleast_1d(self.angularStructureFunction(x))[0]) - 2.0
+                th0 = abs(spo.fsolve(func, 0.0)[0])
 
         return th0*3600*180/np.pi
 
@@ -188,108 +188,88 @@ class atmosphere:
         return s
 #%%
     # ATMOSPHERE STATISTICS
-    def variance(atm):
+    def variance(self):
         """ Phase variance: computes the phase variance in rd^2
             from an atmosphere object
         """
         c1 = (24*spc.gamma(6/5)/5)**(5/6)
         c2 = spc.gamma(11/6)*spc.gamma(5/6)/(2*np.pi**(8/3))
 
-        return (c1*c2*(atm.L0/atm.r0)**(5/3)).astype(atm.dtype)
+        return (c1*c2*(self.L0/self.r0)**(5/3)).astype(self.dtype)
 
-    def covariance(atm,rho):
+    def covariance(self, rho):
         """COVARIANCE Phase covariance
-        out = phaseStats.covariance(rho,atm) computes the phase covariance from
-        the baseline rho and an atmosphere object
+        Computes the phase covariance from the baseline rho.
+        Safely handles both scalars and arrays (NumPy or CuPy).
         """
         c1       = (24*spc.gamma(6/5)/5)**(5/6)
         c2       = spc.gamma(11/6)/(2**(5/6)*np.pi**(8/3))
         c3       = spc.gamma(11/6)*spc.gamma(5/6)/(2*np.pi**(8/3))
-        L0r0ratio= (atm.L0/atm.r0)**(5/3)
+        L0r0ratio= (self.L0/self.r0)**(5/3)
 
-        if not np.isscalar(rho):
-            cov      = c1*c3*L0r0ratio*np.ones(rho.shape)
-            index    = rho!=0
-            u        = 2*np.pi*rho[index]/atm.L0
-            cov[index] = c1*c2*L0r0ratio*u**(5/6)*spc.kv(5/6,u)
+        rho = np.asarray(rho, dtype=self.dtype)
+        is_scalar = (rho.ndim == 0)
+        rho_1d = np.atleast_1d(rho)
+
+        cov = c1 * c3 * L0r0ratio * np.ones_like(rho_1d)
+        index = rho_1d != 0
+
+        if np.any(index):
+            u = 2 * np.pi * rho_1d[index] / self.L0
+            cov[index] = c1 * c2 * L0r0ratio * u**(5/6) * spc.kv(5/6, u)
+
+        if is_scalar:
+            return cov[0].astype(self.dtype)
+        return cov.astype(self.dtype)
+
+    def structureFunction(self, rho):
+        """STRUCTUREFUNCTION Phase structure function"""
+        var = self.variance()
+
+        rho = np.asarray(rho, dtype=self.dtype)
+        is_scalar = (rho.ndim == 0)
+        rho_1d = np.atleast_1d(rho)
+
+        if np.isinf(self.L0):
+            sf = np.zeros_like(rho_1d)
+            index = rho_1d != 0
+            if np.any(index):
+                sf[index] = 2*(24*spc.gamma(6/5)/5)**(5/6)*(rho_1d[index]/self.r0)**(5/3)
         else:
-            if rho==0:
-                cov = c1*c3*L0r0ratio
-            else:
-                u   = 2*np.pi*rho/atm.L0
-                cov = c1*c2*L0r0ratio*u**(5/6)*spc.kv(5/6,u)
+            sf = 2 * (var - self.covariance(rho_1d))
 
-        return cov.astype(atm.dtype)
+        if is_scalar:
+            return sf[0].astype(self.dtype)
+        return sf.astype(self.dtype)
 
-    def structureFunction(atm,rho):
-        """STRUCTUREFUNCTION Phase structure function computes the phase structure function from
-        the baseline rho and an atmosphere object
-        """
-        var = atm.variance()
-
-        if np.isinf(atm.L0):
-            if not np.isscalar(rho):
-                sf   = np.zeros(rho.shape)
-                index = rho!=0
-                sf[index] = 2*(24*spc.gamma(6/5)/5)**(5/6)*(rho[index]/atm.r0)**(5/3)
-            else:
-                sf = 2*(24*spc.gamma(6/5)/5)**(5/6)*(rho/atm.r0)**(5/3)
-        else:
-            sf = 2*(var- atm.covariance(rho))
-
-        return sf.astype(atm.dtype)
-
-
-    def spectrum(atm,k):
-        """SPECTRUM Phase power spectrum density computes the phase power
-            spectrum density from the spatial frequency f and an
-            atmosphere object
-        """
+    def spectrum(self, k):
+        """SPECTRUM Phase power spectrum density"""
         cte = (24*spc.gamma(6/5)/5)**(5/6)*(spc.gamma(11/6)**2./(2.*np.pi**(11/3)))
-        return (atm.r0**(-5/3)*cte*(k**2 + 1/atm.L0**2)**(-11/6)).astype(atm.dtype)
+        return (self.r0**(-5/3)*cte*(k**2 + 1/self.L0**2)**(-11/6)).astype(self.dtype)
 
-    def angularCovariance(atm,theta):
-        """ ANGULARCOVARIANCE Phase angular covariance computes the
-        phase angular covariance from the zenith angle theta and an
-        atmosphere object
-        """
-        if not np.isscalar(theta):
-            cov = np.zeros(theta.shape)
-        else:
-            cov = 0
+    def angularCovariance(self, theta):
+        """ ANGULARCOVARIANCE Phase angular covariance """
+        cov = 0
+        # VECTORIZATION & MATH OPTIMIZATION: 
+        # C_layer(rho) is exactly equal to weight * C_full(rho).
+        # We completely removed the slow creation of atm.slab(l) objects.
+        for l in range(self.nL):
+            cov += self.weights[l] * self.covariance(self.heights[l] * np.tan(theta))
+        return cov
 
-        for l in np.arange(0,atm.nL):
-            atmSlab = atm.slab(l)
-            atmSlab.r0 = atm.r0 * (atm.weights[l])**(-3.0/5.0)
-            tmp     = atmSlab.covariance(atmSlab.heights*np.tan(theta))
-            cov    += tmp
-        return cov.astype(atm.dtype)
+    def angularStructureFunction(self, theta):
+        """ANGULARSTRUCTUREFUNCTION Phase angular structure function"""
+        sf = 0
+        var_full = self.variance()
+        for l in range(self.nL):
+            cov_layer = self.weights[l] * self.covariance(self.heights[l] * np.tan(theta))
+            var_layer = self.weights[l] * var_full
+            sf += 2 * (var_layer - cov_layer)
+        return sf
 
-    def angularStructureFunction(atm,theta):
-        """ANGULARSTRUCTUREFUNCTION Phase angular structure function computes
-        the phase angular structure function from the zenith angle theta
-        and an atmosphere object
-        """
-
-        if not np.isscalar(theta):
-            sf = np.zeros(theta.shape, dtype=atm.dtype)
-        else:
-            sf = 0
-
-        for l in np.arange(0,atm.nL):
-            atmSlab = atm.slab(l)
-            atmSlab.r0 = atm.r0 * (atm.weights[l])**(-3.0/5.0)
-            tmp     = atmSlab.covariance(atmSlab.heights*np.tan(theta))
-            sf      = sf + 2*( atmSlab.variance() - tmp)
-        return sf.astype(atm.dtype)
-
-    def temporalCovariance(atm,tau):
-        '''
-        TEMPORALCOVARIANCE Phase temporal covariance computes the
-        phase temporal covariance from the delay tau and an
-        '''
-
-        corr = np.zeros(len(tau), dtype=atm.dtype)
-        for kLayer in range(atm.nL):
-            corr   += atm.covariance(atm.wSpeed[kLayer]*tau)
-        return corr.astype(atm.dtype)
+    def temporalCovariance(self, tau):
+        '''TEMPORALCOVARIANCE Phase temporal covariance'''
+        corr = 0
+        for l in range(self.nL):
+            corr += self.weights[l] * self.covariance(self.wSpeed[l] * tau)
+        return corr

@@ -8,6 +8,7 @@ import unittest
 import numpy as np
 import os
 import pathlib
+from p3.aoSystem import asnumpy
 from p3.aoSystem.fourierModel import fourierModel
 import p3.aoSystem as aoSystemMain
 
@@ -30,7 +31,7 @@ class TestAliasingChunking(unittest.TestCase):
                           verbose=False, display=False)
 
         # Compute aliasing PSD
-        psd_chunked = fao.aliasingPSD()
+        psd_chunked = asnumpy(fao.aliasingPSD())
 
         # Check it's not all zeros
         self.assertGreater(np.sum(np.abs(psd_chunked)), 0, 
@@ -51,7 +52,7 @@ class TestAliasingChunking(unittest.TestCase):
         fao = fourierModel(path_ini, path_root=self.path_p3, calcPSF=False,
                           verbose=False, display=False)
 
-        psd_chunked = fao.aliasingPSD()
+        psd_chunked = asnumpy(fao.aliasingPSD())
 
         self.assertGreater(np.sum(np.abs(psd_chunked)), 0)
         self.assertFalse(np.any(np.isnan(psd_chunked)))
@@ -70,7 +71,7 @@ class TestAliasingChunking(unittest.TestCase):
         ini_file = os.path.join(test_dir, 'scao_test_wvl1100nm.ini')
         fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False)
         fao.controller()
-        psd_alias = fao.aliasingPSD()
+        psd_alias = asnumpy(fao.aliasingPSD())
 
         self.assertFalse(np.isnan(psd_alias).any(), "Aliasing PSD contains NaN!")
         self.assertFalse(np.isinf(psd_alias).any(), "Aliasing PSD contains Inf!")
@@ -79,6 +80,67 @@ class TestAliasingChunking(unittest.TestCase):
         min_val = np.min(psd_alias)
         self.assertGreaterEqual(min_val, -1e-15,
                                 f"Aliasing PSD contains negative energy: {min_val}")
+
+    def test_streaming_matches_chunked_scao(self):
+        """Exact streaming implementation should match chunked baseline in SCAO."""
+        test_dir = pathlib.Path(__file__).parent.absolute()
+        ini_file = os.path.join(test_dir, 'scao_test_wvl1100nm.ini')
+        fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False, verbose=False)
+        fao.controller()
+
+        psd_chunked = asnumpy(fao.aliasingPSD(method='chunked'))
+        psd_streaming = asnumpy(fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4))
+
+        ref_norm = np.linalg.norm(psd_chunked)
+        err_norm = np.linalg.norm(psd_streaming - psd_chunked)
+        rel_err = err_norm / max(ref_norm, 1e-30)
+        self.assertLess(rel_err, 1e-9, f"Streaming mismatch too large: rel_err={rel_err}")
+
+    def test_limited_is_stable_and_close_scao(self):
+        """Limited comb variant is approximate but must stay numerically well-behaved."""
+        test_dir = pathlib.Path(__file__).parent.absolute()
+        ini_file = os.path.join(test_dir, 'scao_test_wvl1100nm.ini')
+        fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False, verbose=False)
+        fao.controller()
+
+        psd_ref = asnumpy(fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4))
+        psd_limited = asnumpy(
+            fao.aliasingPSD(method='limited', shift_batch=8, layer_chunk=4, n_times_limit=2)
+        )
+
+        self.assertFalse(np.any(np.isnan(psd_limited)))
+        self.assertFalse(np.any(np.isinf(psd_limited)))
+        self.assertGreater(np.sum(np.abs(psd_limited)), 0)
+
+        rel_err = np.linalg.norm(psd_limited - psd_ref) / max(np.linalg.norm(psd_ref), 1e-30)
+        self.assertLess(rel_err, 0.08, f"Limited comb approximation too far from reference: {rel_err}")
+
+    def test_streaming_precompute_toggle_equivalence(self):
+        """Persistent precompute must not change streaming numerical results."""
+        test_dir = pathlib.Path(__file__).parent.absolute()
+        ini_file = os.path.join(test_dir, 'scao_test_wvl1100nm.ini')
+        fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False, verbose=False)
+        fao.controller()
+
+        psd_cached = asnumpy(
+            fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4, use_precompute=True)
+        )
+        psd_nocache = asnumpy(
+            fao.aliasingPSD(method='streaming', shift_batch=8, layer_chunk=4, use_precompute=False)
+        )
+
+        rel_err = np.linalg.norm(psd_cached - psd_nocache) / max(np.linalg.norm(psd_nocache), 1e-30)
+        self.assertLess(rel_err, 1e-12, f"Precompute toggle changed result: rel_err={rel_err}")
+
+    def test_precompute_cache_has_nonzero_footprint(self):
+        """Cache memory estimator should report non-zero after precompute path is used."""
+        test_dir = pathlib.Path(__file__).parent.absolute()
+        ini_file = os.path.join(test_dir, 'scao_test_wvl1100nm.ini')
+        fao = fourierModel(ini_file, path_root='', calcPSF=False, display=False, verbose=False)
+        fao.controller()
+
+        _ = fao.aliasingPSD(method='limited', n_times_limit=2, shift_batch=8, layer_chunk=4, use_precompute=True)
+        self.assertGreater(fao.aliasingPrecomputeMemoryMB(), 0.0)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
