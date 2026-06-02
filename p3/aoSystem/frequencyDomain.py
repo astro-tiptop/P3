@@ -20,6 +20,18 @@ rad2arc = rad2mas / 1000
 
 class frequencyDomain():
 
+    def _resolve_min_pix_lod(self):
+        """Resolve sampling policy from aoSystem configuration."""
+        if hasattr(self.ao, 'minPixLoD'):
+            value = self.ao.minPixLoD
+        else:
+            value = 2.0
+
+        value = float(np.asarray(value).reshape(-1)[0])
+        if not np.isfinite(value) or value <= 0:
+            raise ValueError("minPixLoD must be a positive finite number")
+        return np.asarray(value, dtype=self.dtype)
+
     # CUT-OFF FREQUENCY
     @property
     def pitch(self):
@@ -103,6 +115,7 @@ class frequencyDomain():
             self.kcExt = None
 
         self.Hfilter = Hfilter
+        self.minPixLoD = self._resolve_min_pix_lod()
 
         # MANAGING THE WAVELENGTH
         self.nBin = self.ao.cam.nWvl # number of spectral bins for polychromatic PSFs
@@ -132,27 +145,36 @@ class frequencyDomain():
         self.wvlRef = self.wvl_[idxWmin]
 
         if self.nyquistSampling == True:
-            self.psInMas    = rad2mas*self.wvl/self.ao.tel.D/2
-            self.psInMasCen = rad2mas*wvlCen_/self.ao.tel.D/2
-            samp  = 2.0 * np.ones_like(self.psInMas)
+            self.psInMasRequested = rad2mas*self.wvl/self.ao.tel.D/2
+            self.psInMasCenRequested = rad2mas*wvlCen_/self.ao.tel.D/2
+            samp  = 2.0 * np.ones_like(self.psInMasRequested)
             sampCen  = 2.0 * np.ones(len(self.wvlCen), dtype=self.dtype)
             sampRef  = 2.0 * np.ones(len(self.wvlCen), dtype=self.dtype)
 
         else:
-            self.psInMas    = self.ao.cam.psInMas * np.ones(self.nWvl, dtype=self.dtype)
-            self.psInMasCen = self.ao.cam.psInMas * np.ones(self.nWvlCen, dtype=self.dtype)
-            samp  = self.wvl* rad2mas / (self.psInMas*self.ao.tel.D)
-            sampCen  = self.wvlCen * rad2mas / (self.psInMasCen*self.ao.tel.D)
+            self.psInMasRequested = self.ao.cam.psInMas * np.ones(self.nWvl, dtype=self.dtype)
+            self.psInMasCenRequested = self.ao.cam.psInMas * np.ones(self.nWvlCen, dtype=self.dtype)
+            samp  = self.wvl* rad2mas / (self.psInMasRequested*self.ao.tel.D)
+            sampCen  = self.wvlCen * rad2mas / (self.psInMasCenRequested*self.ao.tel.D)
             sampRef  = np.asarray(self.wvlRef * rad2mas, dtype=self.dtype) \
-                       / np.asarray(self.psInMas[0]*self.ao.tel.D, dtype=self.dtype)
+                       / np.asarray(self.psInMasRequested[0]*self.ao.tel.D, dtype=self.dtype)
 
-        self.k_      = np.ceil(2.0/samp).astype('int') # works for oversampling
+        # Backward compatible aliases used across P3/TIPTOP call sites.
+        self.psInMas = self.psInMasRequested
+        self.psInMasCen = self.psInMasCenRequested
+
+        self.k_      = np.ceil(self.minPixLoD/samp).astype('int')
+        self.k_      = np.maximum(self.k_, 1)
         self.samp    = self.k_ * samp
 
-        self.kCen_   = np.ceil(2.0/sampCen).astype('int') # works for oversampling
+        self.kCen_   = np.ceil(self.minPixLoD/sampCen).astype('int')
+        self.kCen_   = np.maximum(self.kCen_, 1)
         self.sampCen = self.kCen_ * sampCen
 
-        psdSteps = self.psInMas/(self.wvl*rad2mas*self.k_)
+        self.psInMasInternal = self.psInMasRequested / self.k_
+        self.psInMasCenInternal = self.psInMasCenRequested / self.kCen_
+
+        psdSteps = self.psInMasRequested/(self.wvl*rad2mas*self.k_)
         if psdSteps.shape[0] > 1:
             idxPmin = nnp.argmin(psdSteps)
         else:
@@ -163,6 +185,8 @@ class frequencyDomain():
             self.kRef_   = int(self.k_[idxPmin]) # works for oversampling
         else:
             self.kRef_   = int(self.k_[idxWmin]) # works for oversampling
+        self.oversamplingFactor = int(self.kRef_)
+        self.oversamplingFactorPerWavelength = np.asarray(self.k_, dtype='int')
         self.sampRef = self.kRef_ * sampRef
 
         self.nOtf    = self.nPix * self.kRef_
@@ -209,6 +233,7 @@ class frequencyDomain():
 
         s = '__ FREQUENCY DOMAIN __\n' + '--------------------------------------------- \n'
         s += '. Reference wavelength : %.2f µm\n'%(self.wvlRef*1e6)
+        s += '. min pixels per lambda/D : %.2f\n'%(float(self.minPixLoD))
         s += '. Oversampling factor at the reference wavelength : %.2f\n'%(self.sampRef)
         s += '. Size of the frequency domain : %d pixels\n'%(self.nOtf)
         s += '. Pixel scale at the reference wavelength : %.4f m^-1\n'%(self.PSDstep)

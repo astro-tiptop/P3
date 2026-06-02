@@ -61,6 +61,21 @@ class aoSystem():
         except Exception:
             return value
 
+    def _resolve_min_pix_lod(self):
+        """Resolve the minimum internal sampling policy in pixels per lambda/D."""
+        if self.check_section_key('COMPUTATION'):
+            if self.check_config_key('COMPUTATION', 'minPixLoD'):
+                value = self.get_config_value('COMPUTATION', 'minPixLoD')
+            else:
+                value = 2.0
+        else:
+            value = 2.0
+
+        value = float(np.asarray(value).reshape(-1)[0])
+        if not np.isfinite(value) or value <= 0:
+            raise ValueError("minPixLoD must be a positive finite number")
+        return value
+
     def _compute_science_field_of_view(self, science_wavelength, pixel_scale, dm_pitchs):
         rad2mas = 180 * 3600 * 1e3 / np.pi
         wvl_min = float(np.min(np.atleast_1d(science_wavelength)))
@@ -164,6 +179,9 @@ class aoSystem():
         elif self.precision == 'double':
             self.dtype = np.float64
             self.complex_dtype = np.complex128
+
+        # Internal sampling policy used by frequencyDomain.
+        self.minPixLoD = self._resolve_min_pix_lod()
 
         self.getPSDatNGSpositions = getPSDatNGSpositions
 

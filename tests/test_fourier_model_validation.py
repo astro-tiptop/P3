@@ -83,3 +83,24 @@ class TestFourierModelValidation(unittest.TestCase):
         self.assertIn("nOtf=32", msg)
         self.assertIn("resAO=32", msg)
         self.assertIn("fovInPix=8", msg)
+
+    def test_fourier_model_does_not_forward_min_pixels_policy_argument(self):
+        ao = self._base_ao(fov_in_pix=8)
+
+        with patch(
+            "p3.aoSystem.fourierModel.FourierUtils.create_wavelength_vector",
+            return_value=(np.array([1.65e-6]), 1),
+        ), patch(
+            "p3.aoSystem.fourierModel.frequencyDomain",
+            side_effect=RuntimeError("sentinel-frequency-domain-call"),
+        ) as freq_ctor:
+            with self.assertRaisesRegex(RuntimeError, "sentinel-frequency-domain-call"):
+                fourierModel(
+                    path_ini="unused.ini",
+                    ao=ao,
+                    doComputations=True,
+                    calcPSF=False,
+                )
+
+        self.assertTrue(freq_ctor.called)
+        self.assertNotIn("minPixLoD", freq_ctor.call_args.kwargs)

@@ -318,6 +318,56 @@ class TestAOSystemExtracted(unittest.TestCase):
                 self.assertIsNotNone(ao)
                 self.assertIsNotNone(freq)
 
+    def test_frequency_domain_min_pixels_policy_from_config(self):
+        """frequencyDomain reads minPixLoD from [COMPUTATION]."""
+        template_ini = os.path.join(self.path_ao, 'parFiles', 'nirc2.ini')
+        config = ConfigParser()
+        config.optionxform = str
+        config.read(template_ini)
+        config.set('sensor_science', 'PixelScale', '30.0')
+        if not config.has_section('COMPUTATION'):
+            config.add_section('COMPUTATION')
+        config.set('COMPUTATION', 'minPixLoD', '1.0')
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as temp_file:
+            config.write(temp_file)
+            temp_name = temp_file.name
+
+        try:
+            ao = aoSystem(temp_name, path_root=self.path_p3, verbose=False)
+            freq = frequencyDomain(ao)
+            self.assertAlmostEqual(float(freq.minPixLoD), 1.0)
+
+            rad2mas_local = 3600 * 180 * 1000 / np.pi
+            samp = freq.wvl * rad2mas_local / (freq.psInMas * ao.tel.D)
+            expected_k = np.maximum(1, np.ceil(1.0 / samp).astype(int))
+            np.testing.assert_array_equal(freq.k_, expected_k)
+            np.testing.assert_allclose(freq.psInMasInternal, freq.psInMas / expected_k)
+        finally:
+            if os.path.exists(temp_name):
+                os.remove(temp_name)
+
+    def test_frequency_domain_min_pixels_policy_rejects_invalid_values(self):
+        """frequencyDomain rejects non-positive minPixLoD values."""
+        template_ini = os.path.join(self.path_ao, 'parFiles', 'nirc2.ini')
+        config = ConfigParser()
+        config.optionxform = str
+        config.read(template_ini)
+        if not config.has_section('COMPUTATION'):
+            config.add_section('COMPUTATION')
+        config.set('COMPUTATION', 'minPixLoD', '-1.0')
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as temp_file:
+            config.write(temp_file)
+            temp_name = temp_file.name
+
+        try:
+            with self.assertRaisesRegex(ValueError, 'minPixLoD'):
+                aoSystem(temp_name, path_root=self.path_p3, verbose=False)
+        finally:
+            if os.path.exists(temp_name):
+                os.remove(temp_name)
+
     def test_fourier_psd_selected_systems(self):
         """Run Fourier PSD model (no PSF) for selected configs."""
         for sys_name in ['nirc2', 'irdis', 'eris']:
