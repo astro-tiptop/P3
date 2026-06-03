@@ -344,6 +344,80 @@ class TestAOSystemExtracted(unittest.TestCase):
                            displayContour=False)
         self.assertIsNotNone(fao)
 
+    def test_psd_expansion_does_not_multiply_field_of_view(self):
+        """
+        Regression test: when psdExpansion=True with multiple wavelengths,
+        FieldOfView should NOT be multiplied by ceil(wvlMax/wvlMin).
+        
+        Bug fix: aoSystem.py lines 759-764
+        Before fix: fov = 128 * ceil(2.5/1.0) = 384
+        After fix: fov = 128 (user-specified value respected)
+        """
+        config = ConfigParser()
+        config.optionxform = str
+        
+        # Minimal valid config
+        config.add_section('telescope')
+        config.set('telescope', 'TelescopeDiameter', '8.0')
+        config.set('telescope', 'Resolution', '64')
+        
+        config.add_section('atmosphere')
+        config.set('atmosphere', 'Seeing', '0.8')
+        config.set('atmosphere', 'L0', '25')
+        
+        config.add_section('sources_science')
+        config.set('sources_science', 'Wavelength', '[1.0e-6, 2.5e-6]')  # ratio = 2.5
+        config.set('sources_science', 'Zenith', '[0.0]')
+        config.set('sources_science', 'Azimuth', '[0.0]')
+        
+        config.add_section('sources_HO')
+        config.set('sources_HO', 'Wavelength', '[750e-9]')
+        config.set('sources_HO', 'Zenith', '[0.0]')
+        config.set('sources_HO', 'Azimuth', '[0.0]')
+        config.set('sources_HO', 'Height', '0')
+        
+        config.add_section('sensor_science')
+        config.set('sensor_science', 'PixelScale', '10')
+        config.set('sensor_science', 'FieldOfView', '128')  # User-specified value
+        
+        config.add_section('sensor_HO')
+        config.set('sensor_HO', 'WfsType', 'Shack-Hartmann')
+        config.set('sensor_HO', 'PixelScale', '500')
+        config.set('sensor_HO', 'FieldOfView', '6')
+        config.set('sensor_HO', 'NumberPhotons', '[100.0]')
+        config.set('sensor_HO', 'SigmaRON', '0.2')
+        config.set('sensor_HO', 'NumberLenslets', '[20]')
+        
+        config.add_section('DM')
+        config.set('DM', 'NumberActuators', '[20]')
+        config.set('DM', 'DmPitchs', '[0.4]')
+        config.set('DM', 'DmHeights', '[0.0]')
+        
+        config.add_section('RTC')
+        config.set('RTC', 'SensorFrameRate_HO', '500')
+        config.set('RTC', 'LoopDelaySteps_HO', '2')
+        config.set('RTC', 'LoopGain_HO', '0.5')
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False) as tmp:
+            config.write(tmp)
+            temp_filename = tmp.name
+        
+        try:
+            # Initialize with psdExpansion=True (multi-wavelength mode)
+            ao = aoSystem(temp_filename, psdExpansion=True, verbose=False)
+            
+            # CRITICAL: FieldOfView should be 128, NOT 128*ceil(2.5)=384
+            self.assertEqual(ao.cam.fovInPix, 128,
+                f"FieldOfView was modified from user-specified 128 to {ao.cam.fovInPix}. "
+                "psdExpansion should only affect internal grid sizes, not output PSF size.")
+            
+            # Verify wavelengths were parsed correctly
+            self.assertEqual(len(ao.src.wvl), 2)
+            
+        finally:
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

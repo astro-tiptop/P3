@@ -1674,6 +1674,8 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=Fa
         otf     = otf/otf.max()
         notf    = nnp.array(otf.shape)
         otfDL   = interpolateSupport(otfDL,notf)
+        # Re-normalize otfDL after interpolation to preserve correct sum ratio
+        otfDL   = otfDL/otfDL.max()
         # Get the Strehl
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
