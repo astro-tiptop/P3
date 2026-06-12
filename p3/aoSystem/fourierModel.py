@@ -12,6 +12,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 import time
+import os
+import pathlib
 from shutil import which
 
 import p3.aoSystem.FourierUtils as FourierUtils
@@ -2464,7 +2466,6 @@ class fourierModel:
 
         print("="*70 + "\n")
 
-import pathlib
 # Conditional GPU warmup based on environment variable
 if os.environ.get('P3_GPU_WARMUP', 'FALSE').upper() == 'TRUE':
     file_ini0 = str(pathlib.Path(__file__).parent.parent.absolute()) + '/dummy.ini'
