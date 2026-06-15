@@ -55,14 +55,22 @@ class psfao21:
         self.wvl, self.nwvl = FourierUtils.create_wavelength_vector(self.ao)
         samp = RAD2MAS * self.wvl/(self.ao.cam.psInMas*self.ao.tel.D)
 
+        # Maoppy strictly requires scalar floats, not CuPy or 1D arrays.
+        if getattr(samp, 'ndim', 0) == 0:
+            samp_vals = [float(samp)]
+        else:
+            samp_vals = [float(s) for s in samp]
+        # ----------------------------------------------------------
+
         if self.nwvl > 1:
             self.psfao_19 = []
             self.freq = []
             src_wvl = self.wvl
             for n in range(self.nwvl):
                 # CREATING INSTANCES OF THE MAOPPY MODEL
+                # Pass the perfectly safe native python float
                 self.psfao_19.append(Psfao((self.npix, self.npix),
-                                    system=system, samp=samp[n]))
+                                    system=system, samp=samp_vals[n]))
 
                 # DEFINING THE FREQUENCY DOMAIN
                 self.ao.cam.nWvl = 1
@@ -71,8 +79,9 @@ class psfao21:
                 self.ao.cam.bandwidth = 0
                 self.freq.append(frequencyDomain(self.ao))
         else:
+            # Pass the perfectly safe native python float
             self.psfao_19 = Psfao((self.npix, self.npix),
-                                  system=system, samp=samp)
+                                  system=system, samp=samp_vals[0])
             self.freq = frequencyDomain(self.ao)
 
         # DEFINING THE NUMBER OF PSF PARAMETERS
@@ -116,8 +125,9 @@ class psfao21:
         bounds_down += list(-np.inf * np.ones(self.nwvl))
         bounds_up += list(np.inf * np.ones(self.nwvl))
         # Static aberrations
-        bounds_down += list(-max(self.wvl)/2*1e9 * np.ones(self.ao.tel.nModes))
-        bounds_up += list(max(self.wvl)/2 *1e9 * np.ones(self.ao.tel.nModes))
+        max_wvl = float(self.wvl.max())
+        bounds_down += list(-max_wvl/2*1e9 * np.ones(self.ao.tel.nModes))
+        bounds_up += list(max_wvl/2 *1e9 * np.ones(self.ao.tel.nModes))
 
         return (bounds_down, bounds_up)
 
@@ -127,17 +137,19 @@ class psfao21:
             of the split fitting.
         '''
         bounds = np.array(self.bounds)
+        max_wvl = float(self.wvl.max())
+        
         # lower bounds
         bounds_low_psd = list(np.maximum(xfinal[:7] - sig/3*xerr[:7], bounds[0, :7]))
         bounds_low = bounds_low_psd\
                     + [-np.inf, -np.inf, -np.inf, 0, -np.inf, -np.inf, -np.inf]\
-                    + [-max(self.wvl)*1e9/2,]*self.ao.tel.nModes
+                    + [-max_wvl*1e9/2,]*self.ao.tel.nModes
 
         #upper bounds
         bounds_up_psd = list(np.minimum(xfinal[:7] + sig/3*xerr[:7], bounds[1, :7]))
         bounds_up = bounds_up_psd\
                     + [np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]\
-                    + [max(self.wvl)*1e9/2,]*self.ao.tel.nModes
+                    + [max_wvl*1e9/2,]*self.ao.tel.nModes
 
         self.psfao_19.bounds = (bounds_low_psd, bounds_up_psd)
         return (bounds_low, bounds_up)
@@ -153,9 +165,12 @@ class psfao21:
             psd, self.wfe = psd_model.psd(x0, grad=False)
 
         # wavefront errors
-        cte = freq.wvl*1e9/2/np.pi
+        # --- Ensure constants are native floats to prevent CuPy leaks ---
+        cte = float(np.max(freq.wvl)) * 1e9 / 2 / np.pi
         self.wfe = np.sqrt(self.wfe) * cte
-        self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * freq.wfe_fit_norm  * cte
+        
+        wfe_fit_norm = float(freq.wfe_fit_norm)
+        self.wfe_fit = np.sqrt(x0[0]**(-5/3)) * wfe_fit_norm * cte
 
         return psd
 
@@ -165,10 +180,21 @@ class psfao21:
             psd model and the anisoplanatism model
         '''
 
-        #covariance map
-        real_fft = fft.rfft2(fft.fftshift(self.psd)) / (self.ao.tel.D * freq.sampRef)**2
-        Bphi = fft.fftshift(FourierUtils._rfft2_to_fft2(self.psd.shape, real_fft))
-        #Bphi = fft.fft2(fft.fftshift(self.psd)) / (self.ao.tel.D * freq.sampRef)**2
+        # covariance map
+        samp_ref = float(freq.sampRef)
+        real_fft = fft.rfft2(fft.fftshift(self.psd)) / (self.ao.tel.D * samp_ref)**2
+
+        # --- Send real_fft back to the backend platform safely ---
+        # Detect the backend dynamically from freq to avoid fragile imports
+        if type(freq.sampRef).__module__.startswith('cupy'):
+            import cupy as cp
+            real_fft_backend = cp.asarray(real_fft)
+        else:
+            real_fft_backend = np.asarray(real_fft)
+            
+        Bphi = fft.fftshift(FourierUtils._rfft2_to_fft2(self.psd.shape, real_fft_backend))
+        # --------------------------------------------------------------
+
         # On-axis phase structure function
         SF = np.real(2*(Bphi.max() - Bphi))
 
@@ -176,7 +202,12 @@ class psfao21:
         if freq.isAniso and Cn2 is not None and (len(Cn2) == freq.dani_ang.shape[1]):
             SF = SF[:, :, np.newaxis] + (freq.dphi_ani * Cn2).sum(axis=2)
         else:
-            SF = np.repeat(SF[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
+            # Safely repeat using the same backend module
+            if type(SF).__module__.startswith('cupy'):
+                import cupy as cp
+                SF = cp.repeat(SF[:, :, cp.newaxis], self.ao.src.nSrc, axis=2)
+            else:
+                SF = np.repeat(SF[:, :, np.newaxis], self.ao.src.nSrc, axis=2)
 
         return SF
 
@@ -217,7 +248,8 @@ class psfao21:
             PSF = []
             for n in range(self.nwvl):
                 # ----------------- SCALING FACTOR
-                wvl_ratio = (self.wvl[0]/self.wvl[n])**2
+                # --- Force scalar float for numpy compatibility ---
+                wvl_ratio = float((self.wvl[0]/self.wvl[n])**2)
 
                 # ----------------- SELECTING THE OBJECT PARAMETERS
                 if len(self.ao.src.wvl)>1:

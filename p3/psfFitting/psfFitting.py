@@ -185,7 +185,16 @@ def psfFitting(image, psfModelInst, x0, weights=None, fixed=None, method='trf',
     # static map
     nModes = psfModelInst.ao.tel.nModes
     if (nModes) > 0 and len(result.x) > nModes + psfModelInst.ao.src.nSrc:
-        result.opd = (psfModelInst.ao.tel.statModes*result.x[-nModes:]).sum(axis=2)
+        stat_modes = psfModelInst.ao.tel.statModes
+        x_modes = result.x[-nModes:]
+
+        # --- Match backend to avoid CuPy/NumPy collision ---
+        if type(stat_modes).__module__.startswith('cupy'):
+            import cupy as cp
+            x_modes = cp.asarray(x_modes)
+
+        # Compute OPD and safely pull it back to CPU
+        result.opd = cpuArray((stat_modes * x_modes).sum(axis=2))
 
     # 95% confidence interval
     try:

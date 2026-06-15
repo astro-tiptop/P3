@@ -756,8 +756,6 @@ class aoSystem():
             self.raiseMissingRequiredOpt('sensor_science', 'PixelScale')
 
         fov = self.get_science_field_of_view(wvlSrc, psInMas, DmPitchs)
-        if self.psdExpansion and len(wvlSrc) > 1:
-            fov = int(fov * np.ceil(np.max(wvlSrc) / np.min(wvlSrc)))
         self.my_data_map['sensor_science']['FieldOfView'] = fov
 
         if self.check_config_key('sensor_science','Binning'):
