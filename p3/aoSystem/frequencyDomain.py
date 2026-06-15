@@ -160,10 +160,17 @@ class frequencyDomain():
         self.PSDstep = np.asarray(psdSteps[idxPmin], dtype=self.dtype)
 
         if self.ao.psdExpansion:
-            self.kRef_   = int(self.k_[idxPmin]) # works for oversampling
+            # kRef must compensate for PSDstep coming from wvl[idxPmin] (not wvl_min),
+            # so that target_ps = wvl_min * PSDstep * kRef_float = psInMas/rad2mas exactly.
+            # int(idxPmin) converts a potential CuPy scalar index to a Python int,
+            # which is required to index self.wvl_ (CPU numpy) without triggering __array__().
+            _idxPmin = int(idxPmin)
+            _kRef_float = int(self.k_[_idxPmin]) * (float(self.wvl_[_idxPmin]) / float(self.wvl_[idxWmin]))
         else:
-            self.kRef_   = int(self.k_[idxWmin]) # works for oversampling
-        self.sampRef = self.kRef_ * sampRef
+            _kRef_float = int(self.k_[idxWmin])
+        self.kRef_      = int(nnp.ceil(_kRef_float))   # integer, for nOtf grid size
+        self.kRef_float = _kRef_float                  # float, for exact pixel scale in MASTSEL
+        self.sampRef    = _kRef_float * sampRef
 
         self.nOtf    = self.nPix * self.kRef_
 
