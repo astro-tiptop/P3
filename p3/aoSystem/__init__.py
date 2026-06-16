@@ -175,3 +175,19 @@ def detect_tiptop_path():
 
 # Try to auto-detect TIPTOP path
 PATH_TIPTOP = detect_tiptop_path()
+
+# GPU warmup initialization control
+GPU_WARMUP = os.environ.get('P3_GPU_WARMUP', 'FALSE').upper() == 'TRUE'
+GPU_WARMUP_IDX = int(os.environ.get('P3_GPU_WARMUP_IDX', '-1'))
+
+# Set GPU device only if warmup is enabled
+if GPU_WARMUP:
+    if not gpuEnabled:
+        raise RuntimeError("P3_GPU_WARMUP is TRUE but GPU is not available (check P3_DISABLE_GPU)")
+    if GPU_WARMUP_IDX < 0:
+        raise ValueError("P3_GPU_WARMUP is TRUE but P3_GPU_WARMUP_IDX is not set (must be >= 0)")
+    try:
+        cp.cuda.Device(GPU_WARMUP_IDX).use()
+        print(f"Using GPU device {GPU_WARMUP_IDX} for warmup")
+    except Exception as e:
+        raise RuntimeError(f"Could not set GPU device {GPU_WARMUP_IDX}: {e}")
