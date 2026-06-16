@@ -63,7 +63,7 @@ class fourierModel:
                  getEnsquaredEnergy=False, getEncircledEnergy=False, fftphasor=False,
                  MV=0, nyquistSampling=False, addOtfPixel=False, freq=None, ao=None,
                  computeFocalAnisoCov=True, TiltFilter=False, doComputations=True,
-                 psdExpansion=False, reduce_memory=False):
+                 psdExpansion=False, reduce_memory=False, config_dict=None):
 
         tstart = time.time()
 
@@ -103,7 +103,8 @@ class fourierModel:
             self.ao = aoSystem(path_ini, path_root=path_root,
                                getPSDatNGSpositions=getPSDatNGSpositions,
                                psdExpansion=psdExpansion,
-                               verbose=verbose)
+                               verbose=verbose,
+                               config_dict=config_dict)
         else:
             self.ao = ao
         self.dtype = self.ao.dtype

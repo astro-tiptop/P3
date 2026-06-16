@@ -7,6 +7,7 @@ Created on Mon Apr  5 14:42:49 2021
 """
 
 # IMPORTING PYTHON LIBRAIRIES
+import copy
 import os.path as ospath
 import pathlib
 from configparser import ConfigParser
@@ -118,35 +119,40 @@ class aoSystem():
     def __init__(self, path_config, path_root='',
                  getPSDatNGSpositions=False,
                  psdExpansion=False,
-                 coo_stars=None, verbose=True):
+                 coo_stars=None, verbose=True,
+                 config_dict=None):
 
         if path_root is None:
             path_root = ''
         self.path_root = path_root
 
-
         self.coo_stars = coo_stars
         self.psdExpansion = psdExpansion
         self.error = False
-        # verify if the file exists
-        if not ospath.isfile(path_config):
-            raise ValueError('The parameter file (.ini or .yml) could not be found.'\
-                             + str(path_config))
 
-        if path_config[-4:]=='.ini':
-            # open the .ini file
-            config = ConfigParser()
-            config.optionxform = str
-            config.read(path_config)
-            self.my_data_map = {}
-            for section in config.sections():
-                self.my_data_map[section] = {}
-                for name,value in config.items(section):
-                    self.my_data_map[section].update({name:self._parse_config_value(value)})
-        elif path_config[-4:]=='.yml':
-            with open(path_config) as f:
-                my_yaml_dict = yaml.safe_load(f)
-            self.my_data_map = my_yaml_dict
+        if config_dict is not None:
+            # Use the caller-supplied dict (deep-copied so P3 internals stay isolated).
+            self.my_data_map = copy.deepcopy(config_dict)
+        else:
+            # verify if the file exists
+            if not ospath.isfile(path_config):
+                raise ValueError('The parameter file (.ini or .yml) could not be found.'\
+                                 + str(path_config))
+
+            if path_config[-4:]=='.ini':
+                # open the .ini file
+                config = ConfigParser()
+                config.optionxform = str
+                config.read(path_config)
+                self.my_data_map = {}
+                for section in config.sections():
+                    self.my_data_map[section] = {}
+                    for name,value in config.items(section):
+                        self.my_data_map[section].update({name:self._parse_config_value(value)})
+            elif path_config[-4:]=='.yml':
+                with open(path_config) as f:
+                    my_yaml_dict = yaml.safe_load(f)
+                self.my_data_map = my_yaml_dict
 
         # Precision parameter: look for 'precision' in [COMPUTATION] section
         # Default to 'double' if not specified, and set dtype and complex_dtype accordingly
