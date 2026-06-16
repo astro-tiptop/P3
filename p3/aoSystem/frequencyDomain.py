@@ -164,12 +164,16 @@ class frequencyDomain():
             # so that target_ps = wvl_min * PSDstep * kRef_float = psInMas/rad2mas exactly.
             # int(idxPmin) converts a potential CuPy scalar index to a Python int,
             # which is required to index self.wvl_ (CPU numpy) without triggering __array__().
-            _idxPmin = int(idxPmin)
-            _kRef_float = int(self.k_[_idxPmin]) * (float(self.wvl_[_idxPmin]) / float(self.wvl_[idxWmin]))
+            _idxPmin    = int(idxPmin)
+            _kGrid      = int(self.k_[_idxPmin])
+            _kRef_float = _kGrid * (float(self.wvl_[_idxPmin]) / float(self.wvl_[idxWmin]))
         else:
-            _kRef_float = int(self.k_[idxWmin])
+            _idxPmin    = int(idxWmin)
+            _kGrid      = int(self.k_[_idxPmin])
+            _kRef_float = _kGrid
         self.kRef_      = int(nnp.ceil(_kRef_float))   # integer, for nOtf grid size
-        self.kRef_float = _kRef_float                  # float, for exact pixel scale in MASTSEL
+        self.kRef_float = _kRef_float                  # float, for exact science PSF pixel scale
+        self.kGrid_     = _kGrid                       # k_[idxPmin]: native grid oversampling
         self.sampRef    = _kRef_float * sampRef
 
         self.nOtf    = self.nPix * self.kRef_
@@ -183,6 +187,10 @@ class frequencyDomain():
         self.pistonFilter_[self.nOtf//2,self.nOtf//2] = 0
 
         self.pitch  = self.ao.dms.pitch
+
+        # Derived interface quantities for TIPTOP/MASTSEL
+        self.dk_        = 1e9 * self.kcMax_ / self.resAO
+        self.nPupilPix_ = int(2 * np.round(self.ao.tel.D / 2.0 * self.resAO * float(self.PSDstep)))
 
         # MANAGING THE PIXEL SCALE
         self.tfreq = 1000*(time.time()-t0)
