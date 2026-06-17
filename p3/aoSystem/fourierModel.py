@@ -12,6 +12,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 import time
+import os
+import pathlib
 from shutil import which
 
 import p3.aoSystem.FourierUtils as FourierUtils
@@ -2465,9 +2467,10 @@ class fourierModel:
 
         print("="*70 + "\n")
 
-import pathlib
-file_ini0 = str(pathlib.Path(__file__).parent.parent.absolute()) + '/dummy.ini'
-faoDummy = fourierModel(path_ini=file_ini0, calcPSF=False, verbose=False, display=False,
-                        path_root="", doComputations=True, computeFocalAnisoCov=False,
-                        reduce_memory=True)
-faoDummy = None
+# Conditional GPU warmup based on environment variable
+if os.environ.get('P3_GPU_WARMUP', 'FALSE').upper() == 'TRUE':
+    file_ini0 = str(pathlib.Path(__file__).parent.parent.absolute()) + '/dummy.ini'
+    faoDummy = fourierModel(path_ini=file_ini0, calcPSF=False, verbose=False, display=False,
+                            path_root="", doComputations=True, computeFocalAnisoCov=False,
+                            reduce_memory=True)
+    faoDummy = None
