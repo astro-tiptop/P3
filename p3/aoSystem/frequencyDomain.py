@@ -9,6 +9,7 @@ Created on Mon Apr 19 11:34:44 2021
 # IMPORTING PYTHON LIBRAIRIES
 import numpy as nnp
 from . import np, nnp, trapz
+import copy
 
 from p3.aoSystem.FourierUtils import *
 from p3.aoSystem.anisoplanatismModel import anisoplanatism_structure_function
@@ -219,6 +220,152 @@ class frequencyDomain():
             self.isAniso = False
             self.dphi_ani = None
         self.tani = 1000*(time.time()-t0)
+
+        # ---- PER-WAVELENGTH GRIDS
+        # One grid context (PSDstep/resAO/nOtf/...) per requested science
+        # wavelength, each exactly reproducing what a standalone single-wavelength
+        # run would compute for that wavelength. Legacy behaviour (psdPerWavelength
+        # disabled, or a single wavelength requested) collapses to a one-element
+        # list wrapping this shared grid -- there is no separate legacy code path,
+        # only the len(wvl_grids) == 1 case of this same interface.
+        #
+        # psdPerWavelength is independent from psdExpansion: psdExpansion only
+        # picks the exact PSDstep/kRef_float for *this* shared grid (see the
+        # kRef_float block above); psdPerWavelength controls whether that shared
+        # grid is used at all, or replaced by one exact grid per wavelength.
+        self.wvl_grids = self._buildWvlGrids(computeFocalAnisoCov=computeFocalAnisoCov)
+
+    def _buildWvlGrids(self, computeFocalAnisoCov=True):
+        """
+        Legacy/shared case (psdPerWavelength disabled, or a single wavelength
+        requested): the list wraps this very instance -- self.freq.wvl_grids[0]
+        IS self.freq, not a copy, so there is zero overhead and zero risk of
+        drift between the two.
+        """
+        if not (self.ao.psdPerWavelength and self.nWvl > 1):
+            return [self]
+
+        return [self._buildOneWvlGrid(i, computeFocalAnisoCov=computeFocalAnisoCov)
+                for i in range(self.nWvl)]
+
+    def _buildOneWvlGrid(self, i, computeFocalAnisoCov=True):
+        """
+        Exact per-wavelength grid context for science wavelength index i:
+        same PSDstep/resAO/nOtf a standalone single-wavelength run would use
+        for self.wvl_[i], reusing the per-element quantities (k_[i], psInMas[i])
+        already computed above for the shared-grid selection.
+
+        Returned as a *shallow copy* of this frequencyDomain instance with only
+        the grid-dependent attributes overridden, rather than a hand-picked
+        subset of attributes: this guarantees that any attribute read on
+        self.freq elsewhere in fourierModel (including ones not anticipated
+        here) resolves to a sensible value -- either the per-wavelength
+        override, or the correct wavelength-independent shared value (e.g.
+        kc_, nPix, psInMas, U_/V_/U2_/V2_/UV_) -- instead of raising
+        AttributeError or silently reading stale shared-grid data.
+        """
+        wvl_i = float(self.wvl_[i])
+        k_i   = int(self.k_[i])
+
+        PSDstep_i = np.asarray(self.psInMas[i] / (self.wvl[i] * rad2mas * self.k_[i]),
+                               dtype=self.dtype)
+        resAO_i = int(np.max(2 * self.kc_ / PSDstep_i))
+        nOtf_i  = int(self.nPix) * k_i
+
+        kxAO_i, kyAO_i = freq_array(resAO_i, offset=1e-10, L=PSDstep_i, dtype=self.dtype)
+        k2AO_i = kxAO_i**2 + kyAO_i**2
+        pistonFilterAO_i = pistonFilter(self.ao.tel.D, np.sqrt(k2AO_i), dtype=self.dtype)
+        pistonFilterAO_i[resAO_i//2, resAO_i//2] = 0
+
+        kx_i, ky_i = freq_array(nOtf_i, offset=1e-10, L=PSDstep_i, dtype=self.dtype)
+        k2_i = kx_i**2 + ky_i**2
+        pistonFilter_i = pistonFilter(self.ao.tel.D, np.sqrt(k2_i), dtype=self.dtype)
+        pistonFilter_i[nOtf_i//2, nOtf_i//2] = 0
+
+        if self.ao.dms.AoArea == 'circle':
+            mskOut_i   = (k2_i >= self.kcMax_**2)
+            mskIn_i    = (k2_i < self.kcMax_**2)
+            mskOutAO_i = k2AO_i >= self.kcMax_**2
+            mskInAO_i  = k2AO_i < self.kcMax_**2
+        else:
+            mskIn_i    = np.logical_and(abs(kx_i) < self.kcMax_, abs(ky_i) < self.kcMax_)
+            mskOut_i   = np.logical_or(abs(kx_i) >= self.kcMax_, abs(ky_i) >= self.kcMax_)
+            mskInAO_i  = np.logical_and(abs(kxAO_i) < self.kcMax_, abs(kyAO_i) < self.kcMax_)
+            mskOutAO_i = np.logical_or(abs(kxAO_i) >= self.kcMax_, abs(kyAO_i) >= self.kcMax_)
+
+        # self.samp[i] == k_i * (wvl_i*rad2mas)/(psInMas[i]*D): the oversampling
+        # factor that makes this wavelength's native FFT pixel scale hit
+        # psInMas[i] exactly (see self.samp definition above).
+        sampRef_i = self.samp[i]
+
+        otfNCPA_i, otfDL_i, phaseMap_i = getStaticOTF(self.ao.tel, nOtf_i, sampRef_i,
+                                                      wvl_i, dtype=self.dtype)
+
+        grid_ctx = copy.copy(self)
+        grid_ctx.resAO = resAO_i
+        grid_ctx.nOtf = nOtf_i
+        grid_ctx.PSDstep = PSDstep_i
+        grid_ctx.kxAO_ = kxAO_i
+        grid_ctx.kyAO_ = kyAO_i
+        grid_ctx.k2AO_ = k2AO_i
+        grid_ctx.pistonFilterAO_ = pistonFilterAO_i
+        grid_ctx.mskInAO_ = mskInAO_i
+        grid_ctx.mskOutAO_ = mskOutAO_i
+        grid_ctx.kx_ = kx_i
+        grid_ctx.ky_ = ky_i
+        grid_ctx.k2_ = k2_i
+        grid_ctx.pistonFilter_ = pistonFilter_i
+        grid_ctx.mskIn_ = mskIn_i
+        grid_ctx.mskOut_ = mskOut_i
+        grid_ctx.sampRef = sampRef_i
+        grid_ctx.otfNCPA = otfNCPA_i
+        grid_ctx.otfDL = otfDL_i
+        grid_ctx.phaseMap = phaseMap_i
+        grid_ctx.wvlRef = wvl_i
+        # Avoid keeping nWvl deep (recursive) copies of the whole grid list
+        # alive from every single per-wavelength copy.
+        grid_ctx.wvl_grids = None
+
+        if (self.ao.aoMode == 'SCAO') or (self.ao.aoMode == 'SLAO'):
+            grid_ctx.dphi_ani = self._wvlGridAnisoplanatismDphi(
+                nOtf_i, sampRef_i, mskIn_i, computeFocalAnisoCov=computeFocalAnisoCov)
+        else:
+            grid_ctx.dphi_ani = None
+
+        return grid_ctx
+
+    def _wvlGridAnisoplanatismDphi(self, nOtf, samp, msk_in, computeFocalAnisoCov=True):
+        """
+        Standalone (side-effect-free) copy of the branching logic in
+        anisoplanatismPhaseStructureFunction, parametrised on nOtf/samp/msk_in
+        so it can be called once per per-wavelength grid without touching the
+        state (self.dani_ang, self.isAniso, ...) used by the legacy/shared path.
+        """
+        if computeFocalAnisoCov == False:
+            return None
+
+        Cn2 = self.ao.atm.weights * self.ao.atm.r0**(-5/3)
+
+        if self.ao.aoMode == 'SCAO':
+            if nnp.all(nnp.equal(nnp.asarray(self.ao.src.direction),
+                                 nnp.asarray(self.ao.ngs.direction))):
+                return None
+            dani_ang = anisoplanatism_structure_function(self.ao.tel, self.ao.atm,
+                                                          self.ao.src, self.ao.lgs,
+                                                          self.ao.ngs, nOtf, samp,
+                                                          self.ao.dms.nActu1D,
+                                                          msk_in=msk_in,
+                                                          Hfilter=self.Hfilter)
+            return (dani_ang * Cn2[np.newaxis, :, np.newaxis, np.newaxis]).sum(axis=1)
+
+        elif self.ao.aoMode == 'SLAO':
+            dani_focang, dani_ang, dani_tt = anisoplanatism_structure_function(
+                self.ao.tel, self.ao.atm, self.ao.src, self.ao.lgs, self.ao.ngs,
+                nOtf, samp, self.ao.dms.nActu1D)
+            return ((dani_focang + dani_tt)
+                    * Cn2[np.newaxis, :, np.newaxis, np.newaxis]).sum(axis=1)
+
+        return None
 
     def __repr__(self):
 
