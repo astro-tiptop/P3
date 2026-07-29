@@ -330,6 +330,22 @@ class fourierModel:
             multi_grid = len(self.freq.wvl_grids) > 1
             psd_list = []
             for grid_ctx in self.freq.wvl_grids:
+                # This is the crux of the per-wavelength PSD: every method
+                # below (spatialReconstructor, controller, powerSpectrumDensity
+                # and everything they call) reads its grid geometry exclusively
+                # through self.freq.* (resAO, nOtf, kxAO_/kyAO_/k2AO_, kcMax_,
+                # pistonFilter*, masks, sampRef, otfNCPA/otfDL, dphi_ani, ...).
+                # None of that code is grid-aware by itself; swapping the
+                # object self.freq points to is what makes one unmodified
+                # PSD/reconstructor/controller implementation compute a
+                # different, exactly-sized grid on each iteration. grid_ctx is
+                # either self.freq itself (legacy single-grid case, see
+                # frequencyDomain._buildWvlGrids) or a shallow copy of it with
+                # only the wavelength-dependent attributes overridden (see
+                # frequencyDomain._buildOneWvlGrid) -- so any attribute this
+                # loop body does NOT explicitly touch still resolves correctly
+                # to the original, wavelength-independent value (kc_, nPix,
+                # psInMas, U_/V_/U2_/V2_/UV_, ...).
                 self.freq = grid_ctx
 
                 # These three quantities are wavelength-dependent and were
