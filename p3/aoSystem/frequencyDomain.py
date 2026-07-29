@@ -305,6 +305,11 @@ class frequencyDomain():
         grid_ctx.resAO = resAO_i
         grid_ctx.nOtf = nOtf_i
         grid_ctx.PSDstep = PSDstep_i
+        # Derived interface quantities for TIPTOP/MASTSEL (see their definition
+        # above): both depend on resAO/PSDstep, so they must be recomputed per
+        # grid too, not just inherited from the shared-grid shallow copy.
+        grid_ctx.dk_        = 1e9 * self.kcMax_ / resAO_i
+        grid_ctx.nPupilPix_ = int(2 * np.round(self.ao.tel.D / 2.0 * resAO_i * float(PSDstep_i)))
         grid_ctx.kxAO_ = kxAO_i
         grid_ctx.kyAO_ = kyAO_i
         grid_ctx.k2AO_ = k2AO_i
