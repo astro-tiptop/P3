@@ -297,7 +297,7 @@ class fourierModel:
             # Normalized by the WFS subaperture pitch (the spatial scale Rx/Ry
             # are actually built from in reconstructionFilter), not by the DM
             # actuator pitch (kcMax_ = 1/(2*pitch)). These coincide only when
-            # the actuator pitch equals the subaperture pitch; see issue #144.
+            # the actuator pitch equals the subaperture pitch.
             d_sub_wfs = self.ao.wfs.optics[0].dsub
             self.Wn = np.mean(self.ao.wfs.processing.noiseVar) * d_sub_wfs**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
@@ -1201,7 +1201,7 @@ class fourierModel:
                 # actually built from in reconstructionFilter), not by the DM
                 # actuator pitch (kcMax_ = 1/(2*pitch)). Using kcMax_ here
                 # made the noise term incorrectly track the DM pitch instead
-                # of staying WFS-driven whenever the two differ; see issue #144.
+                # of staying WFS-driven whenever the two differ.
                 d_sub_wfs = self.ao.wfs.optics[0].dsub
                 psd = psd * d_sub_wfs**2
                 psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_ \
