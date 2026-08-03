@@ -294,7 +294,12 @@ class fourierModel:
             self.atm_mod.wvl = self.freq.wvlRef
 
             # DEFINING THE ATMOSPHERE PSD
-            self.Wn = np.mean(self.ao.wfs.processing.noiseVar) / (2*self.freq.kcMax_)**2
+            # Normalized by the WFS subaperture pitch (the spatial scale Rx/Ry
+            # are actually built from in reconstructionFilter), not by the DM
+            # actuator pitch (kcMax_ = 1/(2*pitch)). These coincide only when
+            # the actuator pitch equals the subaperture pitch; see issue #144.
+            d_sub_wfs = self.ao.wfs.optics[0].dsub
+            self.Wn = np.mean(self.ao.wfs.processing.noiseVar) * d_sub_wfs**2
             self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
 
             # DEFINE THE RECONSTRUCTOR
@@ -1192,7 +1197,13 @@ class fourierModel:
             if self.nGs < 2:
                 # SCAO case
                 psd = abs(self.Rx**2 + self.Ry**2)
-                psd = psd/(2*self.freq.kcMax_)**2
+                # Normalized by the WFS subaperture pitch (what Rx/Ry are
+                # actually built from in reconstructionFilter), not by the DM
+                # actuator pitch (kcMax_ = 1/(2*pitch)). Using kcMax_ here
+                # made the noise term incorrectly track the DM pitch instead
+                # of staying WFS-driven whenever the two differ; see issue #144.
+                d_sub_wfs = self.ao.wfs.optics[0].dsub
+                psd = psd * d_sub_wfs**2
                 psd = self.freq.mskInAO_ * psd * self.freq.pistonFilterAO_ \
                       * self.noiseGain * mean_noise_var
             else:
