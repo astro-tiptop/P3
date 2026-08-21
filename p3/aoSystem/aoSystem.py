@@ -114,6 +114,7 @@ class aoSystem():
     def __init__(self, path_config, path_root='',
                  getPSDatNGSpositions=False,
                  psdExpansion=False,
+                 psdPerWavelength=False,
                  coo_stars=None, verbose=True,
                  config_dict=None):
 
@@ -123,6 +124,15 @@ class aoSystem():
 
         self.coo_stars = coo_stars
         self.psdExpansion = psdExpansion
+        # Independent from psdExpansion (which only picks the exact PSDstep/
+        # kRef_float for the *shared* grid): when True and more than one
+        # science wavelength is requested, frequencyDomain builds one exact
+        # grid per wavelength (self.wvl_grids) and fourierModel.PSD becomes a
+        # list, one array per wavelength, instead of a single shared array.
+        # Defaults to False so existing psdExpansion=True callers (e.g.
+        # TIPTOP, which always sets psdExpansion=True) keep today's shared
+        # single-array behaviour unless they explicitly opt in.
+        self.psdPerWavelength = psdPerWavelength
         self.error = False
 
         if config_dict is not None:

@@ -65,7 +65,8 @@ class fourierModel:
                  getEnsquaredEnergy=False, getEncircledEnergy=False, fftphasor=False,
                  MV=0, nyquistSampling=False, addOtfPixel=False, freq=None, ao=None,
                  computeFocalAnisoCov=True, TiltFilter=False, doComputations=True,
-                 psdExpansion=False, reduce_memory=False, config_dict=None):
+                 psdExpansion=False, psdPerWavelength=False,
+                 reduce_memory=False, config_dict=None):
 
         tstart = time.time()
 
@@ -105,6 +106,7 @@ class fourierModel:
             self.ao = aoSystem(path_ini, path_root=path_root,
                                getPSDatNGSpositions=getPSDatNGSpositions,
                                psdExpansion=psdExpansion,
+                               psdPerWavelength=psdPerWavelength,
                                verbose=verbose,
                                config_dict=config_dict)
         else:
@@ -205,6 +207,9 @@ class fourierModel:
                 self.strechFactor = 1.0
 
             # DEFINING THE REFRACTIVE INDEX OF THE AIR AT THE REFERENCE AND GUIDE STAR WAVELENGTH
+            # (self.n_air_wvlRef is recomputed per science wavelength inside the
+            # PSD loop below when a per-wavelength PSD list is requested; this
+            # value is only the one left over for the legacy/shared-grid case.)
             mathar_model = MatharAirRefraction()
             self.n_air_wvlRef = np.asarray(mathar_model.get_refractive_index(self.freq.wvlRef),
                                            dtype=self.dtype)
@@ -275,12 +280,17 @@ class fourierModel:
                 )
 
             # DEFINING THE NOISE PSD
-            if self.ao.wfs.processing.noiseVar == [None]:
-                wvl_gs = self.gs.wvl[0]
+            # r0 at 500nm must be captured *before* the first self.ao.atm.wvl
+            # reassignment below (that reassignment rescales self.ao.atm.r0
+            # in place, so self.ao.atm.r0 stops being "at 500nm" afterwards).
+            wvl_gs = self.gs.wvl[0]
+            r0_at_500nm = self.ao.atm.r0
+            noiseVar_is_auto = (self.ao.wfs.processing.noiseVar == [None])
+            if noiseVar_is_auto:
                 self.ao.wfs.processing.noiseVar = self.ao.wfs.computeNoiseVarianceAtWavelength(
                     wvl_science=self.freq.wvlRef,
                     wvl_wfs=wvl_gs,
-                    r0_at_500nm=self.ao.atm.r0,
+                    r0_at_500nm=r0_at_500nm,
                 )
 
             self.ao.wfs.processing.noiseVar = np.asarray(
@@ -293,25 +303,131 @@ class fourierModel:
             self.ao.atm.wvl  = self.freq.wvlRef
             self.atm_mod.wvl = self.freq.wvlRef
 
-            # DEFINING THE ATMOSPHERE PSD
-            self.Wn = np.mean(self.ao.wfs.processing.noiseVar) / (2*self.freq.kcMax_)**2
-            self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
+            # COMPUTE THE PSD -- once per entry in self.freq.wvl_grids.
+            # In the legacy/shared-grid case (psdPerWavelength disabled, or a
+            # single wavelength requested) wvl_grids has exactly one entry
+            # which IS self.freq itself, so this loop runs once and self.PSD
+            # ends up identical (same object, same values) to what the
+            # pre-refactor code produced -- no separate legacy branch.
+            #
+            # calcPSF/getErrorBreakDown assume a single reference grid
+            # (self.freq/self.Rx/self.Ry/... as left by the last loop
+            # iteration); they are not meaningful with a per-wavelength PSD
+            # list, so that combination is rejected explicitly rather than
+            # silently computing a PSF for whichever grid happened to run last.
+            if len(self.freq.wvl_grids) > 1 and (self.calcPSF or self.getErrorBreakDown):
+                raise NotImplementedError(
+                    "calcPSF=True/getErrorBreakDown=True are not supported "
+                    "together with psdPerWavelength=True and multiple science "
+                    "wavelengths (per-wavelength PSD list). Use calcPSF=False "
+                    "and getErrorBreakDown=False, and consume self.PSD "
+                    "downstream (TIPTOP/MASTSEL); or request a single "
+                    "wavelength / disable psdPerWavelength for a standalone "
+                    "PSF or error breakdown."
+                )
 
-            # DEFINE THE RECONSTRUCTOR
-            self.spatialReconstructor(MV=self.MV)
+            saved_freq = self.freq
+            multi_grid = len(self.freq.wvl_grids) > 1
+            psd_list = []
+            for grid_ctx in self.freq.wvl_grids:
+                # This is the crux of the per-wavelength PSD: every method
+                # below (spatialReconstructor, controller, powerSpectrumDensity
+                # and everything they call) reads its grid geometry exclusively
+                # through self.freq.* (resAO, nOtf, kxAO_/kyAO_/k2AO_, kcMax_,
+                # pistonFilter*, masks, sampRef, otfNCPA/otfDL, dphi_ani, ...).
+                # None of that code is grid-aware by itself; swapping the
+                # object self.freq points to is what makes one unmodified
+                # PSD/reconstructor/controller implementation compute a
+                # different, exactly-sized grid on each iteration. grid_ctx is
+                # either self.freq itself (legacy single-grid case, see
+                # frequencyDomain._buildWvlGrids) or a shallow copy of it with
+                # only the wavelength-dependent attributes overridden (see
+                # frequencyDomain._buildOneWvlGrid) -- so any attribute this
+                # loop body does NOT explicitly touch still resolves correctly
+                # to the original, wavelength-independent value (kc_, nPix,
+                # psInMas, U_/V_/U2_/V2_/UV_, ...).
+                self.freq = grid_ctx
 
-            # DEFINE THE CONTROLLER
-            self.controller(display=self.display)
+                # These three quantities are wavelength-dependent and were
+                # computed above for the shared/reference wavelength only;
+                # recompute them here for this grid's own wavelength so that
+                # every entry of self.PSD is exactly what a standalone
+                # single-wavelength run would produce for that wavelength
+                # (noise propagation, r0 chromatic scaling, differential
+                # refraction all depend on the science wavelength).
+                if multi_grid:
+                    if noiseVar_is_auto:
+                        self.ao.wfs.processing.noiseVar = np.asarray(
+                            self.ao.wfs.computeNoiseVarianceAtWavelength(
+                                wvl_science=grid_ctx.wvlRef,
+                                wvl_wfs=wvl_gs,
+                                r0_at_500nm=r0_at_500nm,
+                            ),
+                            dtype=self.dtype,
+                        )
+                    self.ao.atm.wvl  = grid_ctx.wvlRef
+                    self.atm_mod.wvl = grid_ctx.wvlRef
+                    self.n_air_wvlRef = np.asarray(
+                        mathar_model.get_refractive_index(grid_ctx.wvlRef),
+                        dtype=self.dtype,
+                    )
 
-            #set tilt filter key before computing the PSD
-            self.applyTiltFilter = self.TiltFilterP
+                # Several methods (_aliasing_common, reconstructionPSD,
+                # servoLagPSD) lazily (re)build self.Rx/self.Ry only "if not
+                # hasattr(self, 'Rx')". spatialReconstructor() itself always
+                # refreshes them for SCAO/SLAO (nGs<2), but never touches them
+                # for tomographic systems (nGs>=2) -- so across iterations of
+                # this loop they would silently keep the *previous* grid's
+                # shape there. Forcing them absent here makes every iteration
+                # rebuild fresh, for either branch.
+                if hasattr(self, 'Rx'):
+                    del self.Rx
+                if hasattr(self, 'Ry'):
+                    del self.Ry
 
-            # COMPUTE THE PSD
-            if self.normalizePSD:
-                wfe = self.ao.rtc.holoop['wfe']
-            else:
-                wfe = None
-            self.PSD = self.powerSpectrumDensity(wfe=wfe)
+                # DEFINING THE ATMOSPHERE PSD
+                self.Wn = np.mean(self.ao.wfs.processing.noiseVar) / (2*self.freq.kcMax_)**2
+                self.Wphi = self.ao.atm.spectrum(np.sqrt(self.freq.k2AO_))
+
+                # DEFINE THE RECONSTRUCTOR
+                self.spatialReconstructor(MV=self.MV)
+
+                # DEFINE THE CONTROLLER
+                self.controller(display=self.display)
+
+                #set tilt filter key before computing the PSD
+                self.applyTiltFilter = self.TiltFilterP
+
+                # COMPUTE THE PSD
+                if self.normalizePSD:
+                    wfe = self.ao.rtc.holoop['wfe']
+                else:
+                    wfe = None
+                psd_list.append(self.powerSpectrumDensity(wfe=wfe))
+            self.freq = saved_freq
+
+            # Restore the leftover shared-reference state (noiseVar/atm.wvl/
+            # n_air_wvlRef) so that anything reading it after construction sees
+            # exactly what today's single-grid code leaves behind, regardless
+            # of how many wavelengths were actually looped over above.
+            if multi_grid:
+                if noiseVar_is_auto:
+                    self.ao.wfs.processing.noiseVar = np.asarray(
+                        self.ao.wfs.computeNoiseVarianceAtWavelength(
+                            wvl_science=saved_freq.wvlRef,
+                            wvl_wfs=wvl_gs,
+                            r0_at_500nm=r0_at_500nm,
+                        ),
+                        dtype=self.dtype,
+                    )
+                self.ao.atm.wvl  = saved_freq.wvlRef
+                self.atm_mod.wvl = saved_freq.wvlRef
+                self.n_air_wvlRef = np.asarray(
+                    mathar_model.get_refractive_index(saved_freq.wvlRef),
+                    dtype=self.dtype,
+                )
+
+            self.PSD = psd_list[0] if len(psd_list) == 1 else psd_list
 
             # COMPUTE THE PSF
             if self.calcPSF:
