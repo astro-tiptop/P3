@@ -1324,7 +1324,11 @@ class fourierModel:
                 th = self.ao.src.direction[:, s] - self.gs.direction[:, 0]
                 if np.any(np.asarray(th)):
                     # Vectorized sum over layers.
-                    phase = self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]
+                    # th[0]/th[1] are the x/y components of source.direction (see source.py);
+                    # kxAO_/kyAO_ must pair with them in the same order used everywhere else
+                    # in this file (wind vx/vy, tomographic Beta) or the anisoplanatism phase
+                    # ends up rotated 90 deg relative to the wind direction.
+                    phase = self.freq.kxAO_*th[0] + self.freq.kyAO_*th[1]
                     A = np.sum(
                         Ws[:, None, None] * np.exp(two_pi_i * Hs[:, None, None] * phase[None, :, :]),
                         axis=0,
@@ -1383,7 +1387,8 @@ class fourierModel:
         for s in range(self.ao.src.nSrc):
             th  = self.ao.src.direction[:,s] - self.gs.direction[:,0]
             if np.any(np.asarray(th)):
-                phase = self.freq.kxAO_*th[1] + self.freq.kyAO_*th[0]
+                # see spatioTemporalPSD: kxAO_/kyAO_ must pair with th[0]/th[1] in order
+                phase = self.freq.kxAO_*th[0] + self.freq.kyAO_*th[1]
                 # Vectorized sum over layers natively on GPU
                 A = np.sum(2 * Ws[:, None, None] * (1 - np.cos(2*np.pi*Hs[:, None, None] * phase[None, :, :])), axis=0)
                 psd[:,:,s] = self.freq.mskInAO_ * A * Watm

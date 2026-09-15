@@ -46,7 +46,7 @@ def _spatiotemporal_reference(fao):
                 A = nnp.zeros((nK, nK), dtype=complex_dtype)
                 for l in range(fao.ao.atm.nL):
                     A = A + Ws[l] * nnp.exp(
-                        2 * i * nnp.pi * Hs[l] * (kx * th[1] + ky * th[0])
+                        2 * i * nnp.pi * Hs[l] * (kx * th[0] + ky * th[1])
                     )
             else:
                 A = nnp.ones((fao.freq.resAO, fao.freq.resAO), dtype=complex_dtype)
