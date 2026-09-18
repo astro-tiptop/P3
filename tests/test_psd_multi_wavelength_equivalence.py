@@ -95,8 +95,11 @@ class TestScaoMultiWavelengthEquivalence(unittest.TestCase):
                 )
                 mono_model = _build_model(mono_ini, self.path_p3)
 
-                multi_psd = nnp.asarray(self.multi_model.PSD[idx])
-                mono_psd = nnp.asarray(mono_model.PSD)
+                # PSD is a P3-dispatched array: cupy when GPU is enabled, hence the
+                # cpuArray() hop before nnp.asarray() (nnp is real numpy, which refuses
+                # to implicitly convert a cupy array).
+                multi_psd = nnp.asarray(aoSystemMain.cpuArray(self.multi_model.PSD[idx]))
+                mono_psd = nnp.asarray(aoSystemMain.cpuArray(mono_model.PSD))
 
                 self.assertEqual(multi_psd.shape, mono_psd.shape,
                                  f"shape mismatch at {wvl_nm}nm")
@@ -148,8 +151,8 @@ class TestMcaoMultiWavelengthEquivalence(unittest.TestCase):
                 )
                 mono_model = _build_model(mono_ini, self.path_p3)
 
-                multi_psd = nnp.asarray(self.multi_model.PSD[idx])
-                mono_psd = nnp.asarray(mono_model.PSD)
+                multi_psd = nnp.asarray(aoSystemMain.cpuArray(self.multi_model.PSD[idx]))
+                mono_psd = nnp.asarray(aoSystemMain.cpuArray(mono_model.PSD))
 
                 self.assertEqual(multi_psd.shape, mono_psd.shape,
                                  f"shape mismatch at {wvl_nm}nm")
