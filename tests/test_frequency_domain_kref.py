@@ -27,7 +27,7 @@ def _p3_path():
     return str(pathlib.Path(aoSystemMain.__file__).parent.parent.parent.absolute())
 
 
-def _build_model(ini_path, path_p3, psdExpansion=False):
+def _build_model(ini_path, path_p3, psdExpansion=False, psdPerWavelength=False):
     return fourierModel(
         ini_path,
         path_root=path_p3,
@@ -35,6 +35,7 @@ def _build_model(ini_path, path_p3, psdExpansion=False):
         verbose=False,
         display=False,
         psdExpansion=psdExpansion,
+        psdPerWavelength=psdPerWavelength,
     )
 
 
@@ -142,6 +143,55 @@ class TestKRefFloatMulti(unittest.TestCase):
         expected_nOtf = freq.nPix * int(freq.kRef_)
         self.assertEqual(int(freq.nOtf), expected_nOtf,
                          msg=f"nOtf={freq.nOtf} ≠ nPix*kRef_={expected_nOtf}")
+
+
+class TestWvlGrids(unittest.TestCase):
+    """
+    frequencyDomain.wvl_grids: one grid context per requested science
+    wavelength, exact per-wavelength PSDstep/resAO/nOtf.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.path_p3 = _p3_path()
+        cls.mono_ini  = cls.path_p3 + '/tests/scao_test_wvl1100nm.ini'
+        cls.multi_ini = cls.path_p3 + '/tests/scao_test_multi_wvl.ini'
+
+    def test_mono_wavelength_wvl_grids_is_single_element_and_is_self_freq(self):
+        fao = _build_model(self.mono_ini, self.path_p3)
+        self.assertEqual(len(fao.freq.wvl_grids), 1)
+        self.assertIs(fao.freq.wvl_grids[0], fao.freq)
+
+    def test_psd_per_wavelength_false_collapses_to_single_grid_even_for_multi_wavelength(self):
+        # This is also the exact pattern TIPTOP uses today (psdExpansion=True,
+        # psdPerWavelength left at its default False) -- must stay one shared
+        # grid regardless of psdExpansion.
+        fao = _build_model(self.multi_ini, self.path_p3, psdExpansion=True,
+                           psdPerWavelength=False)
+        self.assertEqual(len(fao.freq.wvl_grids), 1)
+        self.assertIs(fao.freq.wvl_grids[0], fao.freq)
+
+    def test_multi_wavelength_wvl_grids_has_one_entry_per_wavelength(self):
+        fao = _build_model(self.multi_ini, self.path_p3, psdPerWavelength=True)
+        self.assertEqual(len(fao.freq.wvl_grids), fao.freq.nWvl)
+
+    def test_each_grid_hits_target_pixel_scale_exactly(self):
+        fao = _build_model(self.multi_ini, self.path_p3, psdPerWavelength=True)
+        freq = fao.freq
+        for i, grid in enumerate(freq.wvl_grids):
+            k_i = int(freq.k_[i])
+            target_ps_mas = grid.wvlRef * float(grid.PSDstep) * k_i * _RAD2MAS
+            self.assertAlmostEqual(
+                target_ps_mas, float(freq.psInMas[i]), places=6,
+                msg=f"grid[{i}] (wvl={grid.wvlRef*1e9:.1f}nm): "
+                    f"target_ps={target_ps_mas:.6f} != psInMas={float(freq.psInMas[i]):.6f}"
+            )
+
+    def test_grid_nOtf_matches_nPix_times_its_own_k(self):
+        fao = _build_model(self.multi_ini, self.path_p3, psdPerWavelength=True)
+        freq = fao.freq
+        for i, grid in enumerate(freq.wvl_grids):
+            self.assertEqual(int(grid.nOtf), freq.nPix * int(freq.k_[i]))
 
 
 if __name__ == '__main__':
