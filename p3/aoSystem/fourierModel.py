@@ -202,14 +202,24 @@ class fourierModel:
             if self.ao.lgs:
                 self.gs = self.ao.lgs
                 self.nGs = self.ao.lgs.nSrc
-                if self.gs.height[0]!=0:
-                    self.strechFactor = 1.0/(1.0 - self.ao.atm.heights/self.gs.height[0])
-                else:
-                    self.strechFactor = 1.0
             else:
                 self.gs = self.ao.ngs
                 self.nGs = self.ao.ngs.nSrc
-                self.strechFactor = 1.0
+            # Layers at or above a finite-altitude LGS are not sensed: they are
+            # left uncorrected (open loop) instead of entering the cone
+            # stretch 1/(1-h/z), which diverges at h=z and is negative above.
+            self.sensedLayers = self._sensed_layers_mask(self.ao.atm.heights)
+            self.sensedWeights = nnp.asarray(cpuArray(self.ao.atm.weights), dtype=float) \
+                                 * self.sensedLayers
+            # Sensed fraction of the Cn2 (exactly 1 when all layers are sensed,
+            # so that the NGS/high-LGS results are unchanged).
+            self.sensedFraction = 1.0 if self.sensedLayers.all() else \
+                float(self.sensedWeights.sum() / nnp.sum(cpuArray(self.ao.atm.weights)))
+            if self.verbose and not self.sensedLayers.all():
+                print(f'{int((~self.sensedLayers).sum())} layer(s) at or above the LGS '
+                      f'altitude ({1 - self.sensedFraction:.3f} of Cn2) are not sensed '
+                      'and left uncorrected.')
+            self.strechFactor = self._stretch_factor(self.ao.atm.heights)
 
             # DEFINING THE REFRACTIVE INDEX OF THE AIR AT THE REFERENCE AND GUIDE STAR WAVELENGTH
             # (self.n_air_wvlRef is recomputed per science wavelength inside the
@@ -222,31 +232,38 @@ class fourierModel:
                                        dtype=self.dtype)
 
             # DEFINING THE MODELED ATMOSPHERE
+            # (no compression when nothing is sensed: the WFS model is then empty anyway)
             if (self.ao.dms.nRecLayers!=None) and \
-                (self.ao.dms.nRecLayers < len(self.ao.atm.weights)):
+                (self.ao.dms.nRecLayers < len(self.ao.atm.weights)) and \
+                self.sensedLayers.any():
+                # Compress only the sensed layers, so that no equivalent layer
+                # mixes sensed and unsensed turbulence.
+                if self.sensedLayers.all():
+                    w_in = self.ao.atm.weights
+                    h_in = self.ao.atm.heights
+                else:
+                    w_in = nnp.asarray(cpuArray(self.ao.atm.weights))[self.sensedLayers]
+                    h_in = nnp.asarray(cpuArray(self.ao.atm.heights))[self.sensedLayers]
+                n_rec = min(self.ao.dms.nRecLayers, len(w_in))
                 weights_mod,heights_mod = FourierUtils.eqLayers(
-                    self.ao.atm.weights,
-                    self.ao.atm.heights,
-                    self.ao.dms.nRecLayers,
+                    w_in,
+                    h_in,
+                    n_rec,
                     dtype=self.dtype
                 )
-                if self.ao.dms.nRecLayers == 1:
+                if n_rec == 1:
                     heights_mod = [0.0]
                 wSpeed_mod = cpuArray(
                     np.linspace(min(self.ao.atm.wSpeed),
                                 max(self.ao.atm.wSpeed),
-                                num=self.ao.dms.nRecLayers)
+                                num=n_rec)
                 )
                 wDir_mod   = cpuArray(
                     np.linspace(min(self.ao.atm.wDir),
                                 max(self.ao.atm.wDir),
-                                num=self.ao.dms.nRecLayers)
+                                num=n_rec)
                 )
-                if self.ao.lgs:
-                    # Recalculate stretch factor for modeled atmosphere
-                    self.strechFactor_mod = 1.0/(1.0 - heights_mod/self.gs.height[0])
-                else:
-                    self.strechFactor_mod = 1.0
+                self.strechFactor_mod = self._stretch_factor(heights_mod)
             else:
                 weights_mod    = self.ao.atm.weights
                 heights_mod    = self.ao.atm.heights
@@ -472,6 +489,32 @@ class fourierModel:
         if self.verbose:
             self.displayExecutionTime()
 
+    def _sensed_layers_mask(self, heights) -> nnp.ndarray:
+        """Boolean mask of the layers seen by the HO guide star (all of them for NGS)."""
+        h = nnp.asarray(cpuArray(heights), dtype=float)
+        z = float(cpuArray(self.gs.height[0])) if self.ao.lgs else 0.0
+        if z <= 0 or not nnp.isfinite(z):
+            return nnp.ones(h.shape, dtype=bool)
+        return h < z
+
+    def _stretch_factor(self, heights):
+        """Cone stretch 1/(1-h/z) for sensed layers, 1 (placeholder) for unsensed ones.
+
+        Unsensed layers are excluded from the WFS model elsewhere, so their
+        placeholder value never affects the result.
+        """
+        if not self.ao.lgs or self.gs.height[0] == 0:
+            return 1.0
+        h = nnp.asarray(cpuArray(heights))
+        if not nnp.issubdtype(h.dtype, nnp.floating):
+            h = h.astype(float)
+        z = float(cpuArray(self.gs.height[0]))
+        sensed = self._sensed_layers_mask(h)
+        stretch = nnp.ones_like(h)
+        stretch[sensed] = 1.0/(1.0 - h[sensed]/z)
+        # host array, like atm.heights it multiplies
+        return stretch
+
     def __repr__(self):
         s = '\t\t\t\t________________________ FOURIER MODEL ________________________\n\n'
         s += self.ao.__repr__() + '\n'
@@ -553,6 +596,9 @@ class fourierModel:
             self.MPalphaL = np.zeros([nK, nK, self.nGs, nH],
                                      dtype=self.complex_dtype)
             for h in range(nH):
+                # unsensed layers: zero WFS response -> full residual in spatioTemporalPSD
+                if not self.sensedLayers[h]:
+                    continue
                 freq_t = wDir_x[h]*self.freq.kxAO_ + wDir_y[h]*self.freq.kyAO_
                 for g in range(self.nGs):
                     Alpha = [self.gs.direction[0, g],self.gs.direction[1, g]]
@@ -637,6 +683,7 @@ class fourierModel:
         nGs = self.nGs
         i = np.complex64(1j)
         d = [self.ao.wfs.optics[j].dsub for j in range(nGs)]
+        sensed_mod = self._sensed_layers_mask(self.atm_mod.heights)
 
         # 1. WFS operator and projection matrices
         # Calculate MP directly via broadcasting, avoiding the dense M matrix allocation
@@ -644,6 +691,8 @@ class fourierModel:
         for j in range(nGs):
             M_diag_j = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_) * np.sinc(d[j]*self.freq.kyAO_)
             for n in range(nL_mod):
+                if not sensed_mod[n]:
+                    continue
                 P_jn = np.exp(i*2*np.pi*h_mod[n]*(self.freq.kxAO_*self.gs.direction[0, j] \
                      + self.freq.kyAO_*self.gs.direction[1, j]))
                 MP[:, :, j, n] = M_diag_j * P_jn
@@ -816,7 +865,11 @@ class fourierModel:
             nPts = self.freq.resAO
             thetaWind = np.linspace(0, 2*np.pi-2*np.pi/nTh, nTh)
             costh = np.cos(thetaWind)
-            weights = self.ao.atm.weights
+            if self.sensedLayers.all():
+                weights = self.ao.atm.weights
+            else:
+                # unsensed layers are not in the loop: average over sensed ones only
+                weights = self.sensedWeights / max(self.sensedWeights.sum(), nnp.finfo(float).tiny)
             Ts = 1.0/self.ao.rtc.holoop['rate']#samplingTime
             delay = self.ao.rtc.holoop['delay']#latency
             loopGain = self.ao.rtc.holoop['gain']
@@ -1095,7 +1148,7 @@ class fourierModel:
         td = T * self.ao.rtc.holoop['delay']
         vx = np.asarray(self.ao.atm.wSpeed * nnp.cos(self.ao.atm.wDir * np.pi / 180), dtype=self.dtype)
         vy = np.asarray(self.ao.atm.wSpeed * nnp.sin(self.ao.atm.wDir * np.pi / 180), dtype=self.dtype)
-        weights = np.asarray(self.ao.atm.weights, dtype=self.dtype)
+        weights = np.asarray(self.ao.atm.weights, dtype=self.dtype) * np.asarray(self.sensedLayers)
         w = 2 * i * np.pi * d
 
         if not hasattr(self, 'Rx'):
@@ -1460,6 +1513,10 @@ class fourierModel:
         nH = self.ao.atm.nL
         Hs = np.asarray(self.ao.atm.heights) * np.asarray(self.strechFactor)
         Ws = np.asarray(self.ao.atm.weights)
+        # SCAO: unsensed layers drop out of the correlation term A and of the
+        # correction term |F|^2 h2, so they keep their full open-loop PSD.
+        Ws_sensed = Ws * np.asarray(self.sensedLayers)
+        w_sensed = self.sensedFraction
         deltaT = self.ao.rtc.holoop['delay']/self.ao.rtc.holoop['rate']
         wDir_x = np.cos(np.asarray(self.ao.atm.wDir) * np.pi / 180)
         wDir_y = np.sin(np.asarray(self.ao.atm.wDir) * np.pi / 180)
@@ -1479,18 +1536,18 @@ class fourierModel:
                     # ends up rotated 90 deg relative to the wind direction.
                     phase = self.freq.kxAO_*th[0] + self.freq.kyAO_*th[1]
                     A = np.sum(
-                        Ws[:, None, None] * np.exp(two_pi_i * Hs[:, None, None] * phase[None, :, :]),
+                        Ws_sensed[:, None, None] * np.exp(two_pi_i * Hs[:, None, None] * phase[None, :, :]),
                         axis=0,
                     )
                 else:
-                    A = np.ones((self.freq.resAO, self.freq.resAO),
-                                dtype=self.complex_dtype)
+                    A = w_sensed * np.ones((self.freq.resAO, self.freq.resAO),
+                                           dtype=self.complex_dtype)
 
                 if (self.ao.rtc.holoop['gain'] == 0):
                     psd[:, :, s] = abs(1-F)**2 * Watm
                 else:
                     psd[:, :, s] = self.freq.mskInAO_ * \
-                        (1 + abs(F)**2*self.h2 - 2*np.real(F*self.h1*A)) * Watm
+                        (1 + w_sensed*abs(F)**2*self.h2 - 2*np.real(F*self.h1*A)) * Watm
             else:
                 # Tomographic case
                 Beta = [self.ao.src.direction[0,s],self.ao.src.direction[1,s]]
@@ -1531,7 +1588,7 @@ class fourierModel:
                        dtype=self.dtype)
 
         Hs = np.asarray(self.ao.atm.heights * self.strechFactor, dtype=self.dtype)
-        Ws = np.asarray(self.ao.atm.weights, dtype=self.dtype)
+        Ws = np.asarray(self.ao.atm.weights, dtype=self.dtype) * np.asarray(self.sensedLayers)
         Watm = self.Wphi * self.freq.pistonFilterAO_
 
         for s in range(self.ao.src.nSrc):
@@ -1552,7 +1609,7 @@ class fourierModel:
 
         if self.ao.tel.zenith_angle != 0:
             Hs = np.asarray(self.ao.atm.heights * self.strechFactor, dtype=self.dtype)
-            Ws = np.asarray(self.ao.atm.weights, dtype=self.dtype)
+            Ws = np.asarray(self.ao.atm.weights, dtype=self.dtype) * np.asarray(self.sensedLayers)
 
             Watm = self.Wphi * self.freq.pistonFilterAO_
             k = np.sqrt(self.freq.k2AO_)
@@ -1590,7 +1647,7 @@ class fourierModel:
         n1 = self.n_air_wvlRef
 
         for s in range(self.ao.src.nSrc):
-            psd[:,:,s] = ((n2-n1)/n2)**2 * Watm
+            psd[:,:,s] = ((n2-n1)/n2)**2 * Watm * self.sensedFraction
 
         self.t_chromatismPSD = 1000*(time.time() - tstart)
         return psd
@@ -1617,7 +1674,10 @@ class fourierModel:
         nPoints = 1001
         nPhase = 5 # number of phase shift cases
         x = self.ao.tel.D*np.linspace(-0.5, 0.5, nPoints, endpoint=1)
-        h = self.ao.atm.heights
+        # unsensed layers (h >= h_laser) are already fully uncorrected
+        sensed = self.sensedLayers
+        h = self.ao.atm.heights[sensed]
+        cone_weights = self.ao.atm.weights[sensed]
         h_laser = self.gs.height[0]
         ratio = np.array((h_laser-h)/h_laser)
         nCn2 = len(h)
@@ -1650,6 +1710,8 @@ class fourierModel:
 
         # We calculate the coefficients using the average on the phase
         coeff = np.mean(np.std(sin_res, axis=2) / sin_ref_std, axis=2)
+        # ratio -> 0 (layer just below the LGS): degenerate fit, layer fully uncorrected
+        coeff = np.nan_to_num(coeff, nan=1.0, posinf=1.0, neginf=1.0)
 
         # Now we calculate where the conditions are not satisfied and we put the coefficients to 0
         condition1 = freqs_matrix * ratio_matrix > self.freq.kc_
@@ -1668,7 +1730,7 @@ class fourierModel:
             #im = ax2.imshow(coeff_tot, cmap='hot')
             #ax2.set_title('cone effect filter coefficients', color='black')
 
-            psd += coeff_tot*psd_atmo*self.ao.atm.weights[j]
+            psd += coeff_tot*psd_atmo*cone_weights[j]
 
         self.t_focalAnisoplanatism = 1000*(time.time() - tstart)
 
@@ -1735,7 +1797,7 @@ class fourierModel:
         atm_weights = np.array(self.ao.atm.weights)  # Shape: (nCn2,)
 
         # Create masks for valid layers and sources
-        valid_layers = atm_heights > 0  # Shape: (nCn2,)
+        valid_layers = (atm_heights > 0) & np.asarray(self.sensedLayers)  # Shape: (nCn2,)
         valid_sources = deltaAngleE > 0  # Shape: (nSrc,)
 
         # Only process valid combinations
@@ -1946,6 +2008,9 @@ class fourierModel:
             self.wfeAl     = np.sqrt(self.psdAlias.sum()) * rad2nm
             self.wfeN      = np.atleast_1d(np.sqrt(self.psdNoise.sum(axis=(0,1))) * rad2nm)
             self.wfeST     = np.atleast_1d(np.sqrt(self.psdSpatioTemporal.sum(axis=(0,1))) * rad2nm)
+            # open-loop residual of layers above the LGS (already part of wfeST)
+            self.wfeUnsensed = float(np.sqrt((1 - self.sensedFraction) * np.sum(
+                self.freq.mskInAO_ * self.Wphi * self.freq.pistonFilterAO_))) * rad2nm
             self.wfeDiffRef= np.atleast_1d(np.sqrt(self.psdDiffRef.sum(axis=(0,1))) * rad2nm)
             self.wfeChrom  = np.atleast_1d(np.sqrt(self.psdChromatism.sum(axis=(0,1))) * rad2nm)
             self.wfeJitter = 1e9*self.ao.tel.D*nnp.mean(self.ao.cam.spotFWHM[0][0:2])/rad2mas/4
@@ -2013,6 +2078,8 @@ class fourierModel:
                 else:
                     print('.Noise error:\t\t\t%4.2fnm'%self.wfeN[idCenter])
                 print('.Spatio-temporal error:\t\t%4.2fnm'%self.wfeST[idCenter])
+                if self.wfeUnsensed > 0:
+                    print('  (of which layers above LGS:\t%4.2fnm)'%self.wfeUnsensed)
                 print('.Wind-shake error:\t\t%4.2fnm'%self.wfeWindShake)
                 print('.Additionnal jitter:\t\t%4.2fmas / %4.2fnm'%(nnp.mean(self.ao.cam.spotFWHM[0][0:2]),self.wfeJitter))
                 if self.ao.addMcaoWFsensConeError:
