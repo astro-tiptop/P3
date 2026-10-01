@@ -61,7 +61,7 @@ class fourierModel:
 
     # Minimum tomographic regularization, relative to the largest diagonal
     # term of the GS covariance at each spatial frequency.
-    tomoRelRegFloor = 1e-6
+    tomoRelRegFloor = 1e-12
 
     # CONTRUCTOR
     def __init__(self, path_ini, calcPSF=True, verbose=False, display=True,
@@ -675,31 +675,36 @@ class fourierModel:
         # Direct addition of noise on the diagonal (completely eliminates self.Cb allocation)
         noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.complex_dtype)
         idx = np.arange(nGs)
-        # At low k all GS see the same turbulence (to_inv ~ rank 1), so with a
-        # bright WFS the noise alone no longer regularizes the single-precision
-        # solve below and Wtomo is silently wrong. Floor the regularization to
-        # a fraction of the largest diagonal term at each k.
+        # At low k all GS see the same turbulence (to_inv ~ rank 1): with a
+        # (nearly) noise-free WFS the system is singular and the solution
+        # backend-dependent. Floor the regularization to a fraction of the
+        # largest diagonal term at each k.
         diag_max = np.max(np.abs(to_inv[:, :, idx, idx]), axis=-1, keepdims=True)
-        reg_floor = self.tomoRelRegFloor * diag_max
+        # where to_inv is identically zero (e.g. k=0, piston-filtered) rhs is zero
+        # too: any positive value gives Wtomo=0 there instead of NaN/LinAlgError
+        reg_floor = np.where(diag_max > 0, self.tomoRelRegFloor * diag_max, 1.0)
         to_inv[:, :, idx, idx] += np.maximum(np.real(noise_var), reg_floor)
 
         # rhs = Cphi_mod @ MP_t
         rhs = self.Cphi_mod[:, :, :, None] * MP_t
 
-        # 4. Inversion
+        # 4. Inversion, in double precision: to_inv is badly conditioned at low k
+        # and a complex64 solve is wrong there (and differs between CPU and GPU).
+        # The small (nGs x nGs) systems make the cost negligible.
         try:
             if self.verbose:
                 print("Tomography: Using standard solve")
             Wtomo = np.linalg.solve(
-                to_inv.astype(np.complex64).transpose(0, 1, 3, 2),
-                rhs.astype(np.complex64).transpose(0, 1, 3, 2)
+                to_inv.astype(np.complex128).transpose(0, 1, 3, 2),
+                rhs.astype(np.complex128).transpose(0, 1, 3, 2)
             ).transpose(0, 1, 3, 2)
         except np.linalg.LinAlgError as e:
             if self.verbose:
                 print(f"Tomography: Standard solve failed ({e}), using pinv")
-            inv = np.linalg.pinv(to_inv.astype(np.complex64),
-                                 rcond=np.finfo(np.float32).eps)
-            Wtomo = np.matmul(rhs, inv)
+            inv = np.linalg.pinv(to_inv.astype(np.complex128),
+                                 rcond=np.finfo(np.float64).eps)
+            Wtomo = np.matmul(rhs.astype(np.complex128), inv)
+        Wtomo = np.ascontiguousarray(Wtomo.astype(self.complex_dtype))
 
         to_inv = None
         
@@ -710,9 +715,10 @@ class fourierModel:
         """
         Computes the projector from layers to DM from Neichel+09.
         
-        Here we forced single precision for the matrix multiplications
-        to save memory and speed up computations, as the optimal projector
-        is not very sensitive to precision.
+        Computed in double precision: the DM projections are nearly identical
+        at low k, and the Tikhonov normal equations square the condition number
+        of to_inv, beyond what complex64 can resolve. Popt is returned in
+        the model complex dtype.
         """
         tstart = time.time()
         k = np.sqrt(self.freq.k2AO_)
@@ -722,23 +728,23 @@ class fourierModel:
         h_mod = self.atm_mod.heights * cpuArray(self.strechFactor_mod)
         nL = len(h_mod)
         nK = self.freq.resAO
-        i = np.complex64(1j)
+        i = np.complex128(1j)
 
         mat1 = np.zeros([nK, nK, nDm, nL],
-                        dtype=np.complex64)
+                        dtype=np.complex128)
         to_inv = np.zeros([nK, nK, nDm, nDm],
-                          dtype=np.complex64)
+                          dtype=np.complex128)
         theta_x = self.ao.dms.opt_dir[0]/206264.8 \
                 * nnp.cos(self.ao.dms.opt_dir[1]*np.pi/180)
         theta_y = self.ao.dms.opt_dir[0]/206264.8 \
                 * nnp.sin(self.ao.dms.opt_dir[1]*np.pi/180)
 
         Pdm = np.zeros([nK, nK, 1, nDm],
-                       dtype=np.complex64)
+                       dtype=np.complex128)
         Pl = np.zeros([nK, nK, 1, nL],
-                      dtype=np.complex64)
+                      dtype=np.complex128)
         Pdm_t = np.zeros([nK, nK, nDm, 1],
-                         dtype=np.complex64)
+                         dtype=np.complex128)
         for d_o in range(nDir):                 #loop on optimization directions
             Pdm.fill(0)
             Pl.fill(0)
@@ -760,22 +766,22 @@ class fourierModel:
 
         # Popt
         if nDir == 1:
-            mat2 = np.linalg.pinv(to_inv.astype(np.complex64),
+            mat2 = np.linalg.pinv(to_inv.astype(np.complex128),
                                   rcond=1/self.ao.dms.opt_cond)
             to_inv = None
         else:
             # Tikhonov: use only the diagonal of to_inv for regularization
-            to_inv_t = to_inv.transpose(0, 1, 3, 2)
+            to_inv_t = np.conj(to_inv.transpose(0, 1, 3, 2))
             lambda_tikhonov = 1/self.ao.dms.opt_cond
             try:
                 # Build regularized system
-                A = to_inv_t.astype(np.complex64) @ to_inv.astype(np.complex64)
+                A = to_inv_t.astype(np.complex128) @ to_inv.astype(np.complex128)
                 # Add regularization on diagonal as a fraction of the trace
                 lambda_reg = (np.mean(np.diagonal(A, axis1=2, axis2=3)) \
                              * lambda_tikhonov).astype(self.complex_dtype)
                 idx = np.arange(nDm)
                 A[:, :, idx, idx] += lambda_reg
-                b = to_inv_t.astype(np.complex64)
+                b = to_inv_t.astype(np.complex128)
                 mat2 = np.linalg.solve(A, b)
                 A = None
                 b = None
@@ -785,10 +791,10 @@ class fourierModel:
                 # Fallback: use pinv on original to_inv
                 if self.verbose:
                     print(f"Optimal projector: Tikhonov failed ({e}), using pinv")
-                mat2 = np.linalg.pinv(to_inv.astype(np.complex64),
+                mat2 = np.linalg.pinv(to_inv.astype(np.complex128),
                                     rcond=1/self.ao.dms.opt_cond)
 
-        Popt = np.matmul(mat2, mat1)
+        Popt = np.matmul(mat2, mat1).astype(self.complex_dtype)
 
         self.t_opt = 1000*(time.time() - tstart)
         return Popt
@@ -1320,8 +1326,10 @@ class fourierModel:
         """Noise error power spectrum density
         """
         tstart = time.time()
-        psd = np.zeros((self.freq.resAO,self.freq.resAO),
-                       dtype=self.dtype)
+        # tomographic callers expect one PSD per science source, also when noise-free
+        shape = (self.freq.resAO, self.freq.resAO) if self.nGs < 2 else \
+                (self.freq.resAO, self.freq.resAO, self.ao.src.nSrc)
+        psd = np.zeros(shape, dtype=self.dtype)
         mean_noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype).mean()
         if float(self.ao.wfs.processing.noiseVar[0]) > 0:
             if self.nGs < 2:

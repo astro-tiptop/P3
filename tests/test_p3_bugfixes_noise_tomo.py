@@ -6,7 +6,10 @@ Regression tests for:
   B) fourierModel.tomoRelRegFloor (tomographic regularization floor)
 """
 
+import os
 import pathlib
+import subprocess
+import sys
 
 import numpy as nnp
 import pytest
@@ -155,21 +158,12 @@ class TestMultiEntryNoiseVariance:
 # ---------------------------------------------------------------- Fix B
 class TestTomoRegFloor:
     def test_default_floor(self):
-        assert fourierModel.tomoRelRegFloor == 1e-6
+        assert fourierModel.tomoRelRegFloor == 1e-12
 
     def test_bright_wfs_residual_matches_nominal(self, tmp_path):
         r_nom = _residual(_build(_write_ini(tmp_path, nph=1e4)))
         r_bright = _residual(_build(_write_ini(tmp_path, nph=1e9)))
         assert r_bright == pytest.approx(r_nom, rel=2e-2)
-
-    def test_without_floor_bright_wfs_is_wrong(self, tmp_path, monkeypatch):
-        r_nom = _residual(_build(_write_ini(tmp_path, nph=1e4)))
-        monkeypatch.setattr(fourierModel, 'tomoRelRegFloor', 0.0)
-        try:
-            r_bright = _residual(_build(_write_ini(tmp_path, nph=1e9)))
-        except AssertionError:
-            return  # non-finite PSD also counts as broken
-        assert abs(r_bright / r_nom - 1) > 0.1
 
     def test_floor_does_not_bias_nominal_case(self, tmp_path, monkeypatch):
         ini = _write_ini(tmp_path, nph=1e4)
@@ -177,3 +171,90 @@ class TestTomoRegFloor:
         monkeypatch.setattr(fourierModel, 'tomoRelRegFloor', 0.0)
         r_nofloor = _residual(_build(ini))
         assert r_default == pytest.approx(r_nofloor, rel=1e-4)
+
+
+# ---------------------------------------------------------------- Zero noise
+class TestZeroNoise:
+    def test_zero_noise_tomographic_builds(self, tmp_path):
+        fao = _build(_write_ini(tmp_path, noisevar='[0.0, 0.0, 0.0]'))
+        assert _residual(fao) > 0
+        res, nsrc = fao.freq.resAO, fao.ao.src.nSrc
+        psd_noise = nnp.asarray(cpuArray(fao.psdNoise))
+        assert psd_noise.shape == (res, res, nsrc)
+        assert not psd_noise.any()
+        assert nnp.all(nnp.isfinite(cpuArray(fao.Wtomo)))
+
+    def test_near_zero_noise_is_robust(self, tmp_path):
+        r = [_residual(_build(_write_ini(tmp_path, noisevar=f'[{v}, {v}, {v}]')))
+             for v in ('0.0', '1e-30', '1e-20')]
+        assert r[1] == pytest.approx(r[0], rel=1e-6)
+        assert r[2] == pytest.approx(r[0], rel=1e-6)
+
+
+# ---------------------------------------------------------------- Popt
+class TestOptimalProjector:
+    def test_asymmetric_asterism_is_finite(self, tmp_path):
+        ini = tmp_path / 'asym.ini'
+        text = _INI_TEMPLATE.format(nph=[1e4] * 3, noisevar='[None]')
+        text = (text
+                .replace('OptimizationZenith = [0.0, 10.0, 10.0, 10.0]',
+                         'OptimizationZenith = [0.0, 10.0, 20.0]')
+                .replace('OptimizationAzimuth = [0.0, 0.0, 120.0, 240.0]',
+                         'OptimizationAzimuth = [0.0, 30.0, 100.0]')
+                .replace('OptimizationWeight = [1.0, 1.0, 1.0, 1.0]',
+                         'OptimizationWeight = [1.0, 1.0, 1.0]')
+                .replace('NumberActuators = [20]', 'NumberActuators = [20, 20]')
+                .replace('DmPitchs = [0.4]', 'DmPitchs = [0.4, 0.4]')
+                .replace('InfCoupling = [0.2]', 'InfCoupling = [0.2, 0.2]')
+                .replace('DmHeights = [0.0]', 'DmHeights = [0.0, 6000.0]'))
+        ini.write_text(text)
+        fao = _build(str(ini))
+        assert fao.Popt.shape[2] == 2
+        assert nnp.all(nnp.isfinite(cpuArray(fao.Popt)))
+        assert _residual(fao) > 0
+
+
+# ---------------------------------------------------------------- CPU vs GPU
+def _cuda_available() -> bool:
+    try:
+        import cupy
+        return cupy.cuda.runtime.getDeviceCount() > 0
+    except Exception:
+        return False
+
+
+def _run_backend(ini: str, out: pathlib.Path, gpu: bool) -> dict:
+    """Run tests/_backend_dump.py in a fresh process with the chosen backend."""
+    here = pathlib.Path(__file__).parent
+    env = {**os.environ, 'P3_DISABLE_GPU': 'FALSE' if gpu else 'TRUE',
+           'PYTHONPATH': os.pathsep.join(
+               [_p3_path()] + ([os.environ['PYTHONPATH']]
+                               if os.environ.get('PYTHONPATH') else []))}
+    subprocess.run([sys.executable, str(here / '_backend_dump.py'), ini, str(out)],
+                   env=env, check=True, cwd=_p3_path(), timeout=600)
+    with nnp.load(out) as d:
+        res = {k: d[k] for k in d.files}
+    assert bool(res['gpu']) == gpu
+    return res
+
+
+def _rel_fro(a, b) -> float:
+    return float(nnp.linalg.norm(a - b) / nnp.linalg.norm(b))
+
+
+@pytest.mark.skipif(not _cuda_available(), reason='no CUDA device / cupy')
+class TestCpuGpuConsistency:
+    def _compare(self, ini: str, tmp_path):
+        cpu = _run_backend(ini, tmp_path / 'cpu.npz', gpu=False)
+        gpu = _run_backend(ini, tmp_path / 'gpu.npz', gpu=True)
+        for key in ('Popt', 'Wtomo', 'W'):
+            assert _rel_fro(gpu[key], cpu[key]) < 1e-8, key
+        mask = nnp.abs(cpu['PSD']) > 1e-3
+        rel = nnp.abs(gpu['PSD'][mask] - cpu['PSD'][mask]) / nnp.abs(cpu['PSD'][mask])
+        assert rel.max() < 1e-6
+
+    def test_reduced_tomographic(self, tmp_path):
+        self._compare(_write_ini(tmp_path), tmp_path)
+
+    def test_mavis(self, tmp_path):
+        self._compare(str(pathlib.Path(__file__).parent / 'MAVIStest.ini'), tmp_path)
