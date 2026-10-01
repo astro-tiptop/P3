@@ -78,7 +78,8 @@ def _spatiotemporal_reference(fao):
                 tmp = nnp.matmul(proj, nnp.matmul(cphi, proj_t)).real
             else:
                 tmp = nnp.matmul(proj, cphi[:, :, :, None] * proj_t).real
-            psd[:, :, s] = msk * tmp[:, :, 0, 0] * piston
+            # Cphi is already piston-filtered: no extra piston factor here
+            psd[:, :, s] = msk * tmp[:, :, 0, 0]
 
     return psd
 

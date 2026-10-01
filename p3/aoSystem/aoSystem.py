@@ -22,6 +22,7 @@ from p3.aoSystem.source import source
 from p3.aoSystem.deformableMirror import deformableMirror
 from p3.aoSystem.detector import detector
 from p3.aoSystem.sensor import sensor
+from p3.aoSystem.processing import is_auto_noise_var
 from p3.aoSystem.rtc import rtc
 import p3.aoSystem.anisoplanatismModel as anisoplanatismModel
 
@@ -1035,7 +1036,7 @@ class aoSystem():
                         * Dr053 * np.sum((nrad+1)**(-2/3)))
 
         # Noise errors
-        if self.wfs.processing.noiseVar == [None]:
+        if is_auto_noise_var(self.wfs.processing.noiseVar):
             varNoise = self.wfs.NoiseVariance(self.atm.r0 ,self.atm.wvl)
         else:
             varNoise = self.wfs.processing.noiseVar
@@ -1047,7 +1048,7 @@ class aoSystem():
                 rad2nm(0.04 * (self.atm.meanWind/self.tel.D/self.rtc.ttloop['bandwidth'])\
                             * Dr053 * 2**(-2/3))
 
-            if self.tts.processing.noiseVar == [None]:
+            if is_auto_noise_var(self.tts.processing.noiseVar):
                 #varNoise = self.tts.NoiseVariance(self.atm.r0 ,self.atm.wvl)
                 # the previuos line has been commented because it makes no sense
                 # to consider the open loop r0 in this computation:

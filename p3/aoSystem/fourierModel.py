@@ -21,6 +21,7 @@ from p3.aoSystem.aoSystem import aoSystem
 from p3.aoSystem.atmosphere import atmosphere
 from p3.aoSystem.frequencyDomain import frequencyDomain
 from p3.aoSystem.airRefraction import MatharAirRefraction
+from p3.aoSystem.processing import is_auto_noise_var
 
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
@@ -57,6 +58,10 @@ class fourierModel:
     Fourier class gathering the PSD calculation for PSF reconstruction and
     fast analytic simulations.
     """
+
+    # Minimum tomographic regularization, relative to the largest diagonal
+    # term of the GS covariance at each spatial frequency.
+    tomoRelRegFloor = 1e-6
 
     # CONTRUCTOR
     def __init__(self, path_ini, calcPSF=True, verbose=False, display=True,
@@ -285,7 +290,7 @@ class fourierModel:
             # in place, so self.ao.atm.r0 stops being "at 500nm" afterwards).
             wvl_gs = self.gs.wvl[0]
             r0_at_500nm = self.ao.atm.r0
-            noiseVar_is_auto = (self.ao.wfs.processing.noiseVar == [None])
+            noiseVar_is_auto = is_auto_noise_var(self.ao.wfs.processing.noiseVar)
             if noiseVar_is_auto:
                 self.ao.wfs.processing.noiseVar = self.ao.wfs.computeNoiseVarianceAtWavelength(
                     wvl_science=self.freq.wvlRef,
@@ -670,7 +675,13 @@ class fourierModel:
         # Direct addition of noise on the diagonal (completely eliminates self.Cb allocation)
         noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.complex_dtype)
         idx = np.arange(nGs)
-        to_inv[:, :, idx, idx] += noise_var
+        # At low k all GS see the same turbulence (to_inv ~ rank 1), so with a
+        # bright WFS the noise alone no longer regularizes the single-precision
+        # solve below and Wtomo is silently wrong. Floor the regularization to
+        # a fraction of the largest diagonal term at each k.
+        diag_max = np.max(np.abs(to_inv[:, :, idx, idx]), axis=-1, keepdims=True)
+        reg_floor = self.tomoRelRegFloor * diag_max
+        to_inv[:, :, idx, idx] += np.maximum(np.real(noise_var), reg_floor)
 
         # rhs = Cphi_mod @ MP_t
         rhs = self.Cphi_mod[:, :, :, None] * MP_t
@@ -1497,7 +1508,8 @@ class fourierModel:
                 # Cphi is now a 3D diagonal array (nK, nK, nL).
                 # proj @ Cphi @ proj_T massively simplifies to element-wise broadcasting:
                 tmp = np.sum(np.abs(proj[:, :, 0, :])**2 * self.Cphi, axis=-1)
-                psd[:, :, s] = self.freq.mskInAO_ * tmp * self.freq.pistonFilterAO_
+                # Cphi is already piston-filtered (see tomographicReconstructor)
+                psd[:, :, s] = self.freq.mskInAO_ * tmp
         if self.reduce_memory:
             self.Walpha = None
         self.t_spatioTemporalPSD = 1000*(time.time() - tstart)
