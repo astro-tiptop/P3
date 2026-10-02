@@ -250,7 +250,7 @@ def test_psd_nonincreasing_unsensed_monotonic(tmp_path, mode):
 def test_residual_lower_bound_open_loop_unsensed(tmp_path, mode):
     """Residual >= in-band open-loop variance of the unsensed Cn2 fraction."""
     fao = _build(tmp_path, 100.0, multi=mode)
-    watm = nnp.asarray(cpuArray(fao.Wphi * fao.freq.pistonFilterAO_), dtype=float)
+    watm = nnp.asarray(cpuArray(fao.Wphi), dtype=float)
     msk = nnp.asarray(cpuArray(fao.freq.mskInAO_), dtype=float)
     lower = nnp.sqrt((1 - fao.sensedFraction) * (msk * watm).sum())
     assert _residual(fao) >= lower * 0.99
@@ -372,19 +372,9 @@ def _np(a) -> nnp.ndarray:
 
 
 def _inband_ol(fao) -> nnp.ndarray:
-    """Open-loop in-band PSD (resAO x resAO)."""
-    return _np(fao.freq.mskInAO_) * _np(fao.Wphi) * _np(fao.freq.pistonFilterAO_)
-
-
-def _inband_ol_tomo(fao, layers=slice(None)) -> nnp.ndarray:
-    """Open-loop in-band PSD of the given layers in the tomographic branch.
-
-    Cphi already contains the piston filter, so this matches the SCAO convention
-    mskInAO * Wphi * pistonFilterAO weighted by the layer Cn2.
-    """
-    cphi = _np(fao.Cphi)[:, :, layers]
-    cphi = cphi if cphi.ndim == 2 else cphi.sum(axis=-1)
-    return _np(fao.freq.mskInAO_) * cphi
+    """Open-loop in-band PSD of the whole Cn2 (resAO x resAO), no piston filter:
+    the residual of unsensed layers is not piston-filtered."""
+    return _np(fao.freq.mskInAO_) * _np(fao.Wphi)
 
 
 def _nm2_scale(fao) -> float:
@@ -431,7 +421,7 @@ def test_ground_plus_layer_above_lgs_tomographic(tmp_path):
     two = _build(tmp_path, 1000.0, heights=[0.0, 5000.0], weights=[w0, w1], **kw)
     ground = _build(tmp_path, 1000.0, heights=[0.0], weights=[1.0], name='g.ini', **kw)
     st = _np(two.psdSpatioTemporal).real
-    ol1 = _inband_ol_tomo(two, layers=1)[:, :, None]
+    ol1 = w1*_inband_ol(two)[:, :, None]
     ref = w0*_np(ground.psdSpatioTemporal).real + ol1
     assert nnp.all(nnp.isfinite(st))
     dev = abs(st.sum(axis=(0, 1)) - ref.sum(axis=(0, 1))) / ref.sum(axis=(0, 1))
@@ -466,7 +456,7 @@ def test_single_layer_above_lgs_is_open_loop_tomographic(tmp_path):
     assert nnp.all(nnp.isfinite(psd))
     expected = _np(fao.psdFit).real[:, :, None] * nnp.ones(psd.shape[2])
     expected = expected.copy()
-    expected[sl, sl, :] += _inband_ol_tomo(fao)[:, :, None]
+    expected[sl, sl, :] += _inband_ol(fao)[:, :, None]
     expected *= _nm2_scale(fao)
     nnp.testing.assert_allclose(psd, expected, rtol=1e-3, atol=1e-5*expected.max())
 
