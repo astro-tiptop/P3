@@ -1054,7 +1054,7 @@ class fourierModel:
 
             # additional error for MCAO system with laser GS:
             # reduced volume for WF sensing due to the cone effect
-            if self.ao.addMcaoWFsensConeError and self.nGs != 1 and self.gs.height[0] != 0:
+            if self._mcaoConeApplied():
                 if self.verbose:
                     print('MCAO and laser case: adding error due to reduced volume for WF sensing')
                 self.psdMcaoWFsensCone = self.mcaoWFsensConePSD(psd)
@@ -1741,117 +1741,139 @@ class fourierModel:
 
         return np.real(psd)
 
-    def mcaoWFsensConePSD(self, psdRes):
-        """%% power spectrum density related to the reduced volume sensed
-            by the LGS WFS due to cone effect in MCAO systems.
-            This effect is related to the cone effect and it depends on
-            the LGS geometry and the uncorrected part of the input PSD.
+    def _footprint_inner_gap(self, h, n_grid=48, n_refine=12):
+        """Size [m] of the largest part of each science footprint, at altitude h,
+        not covered by the LGS footprints (diameter of the largest inscribed circle).
+
+        Only the region inside the outer envelope of the LGS asterism is
+        considered: the protrusion beyond it is the analytic term of
+        mcaoWFsensConePSD. This captures the central hole, the gaps between
+        discrete LGSs and fully separated footprints.
+        The distance to the nearest boundary is computed exactly and maximised
+        on a coarse grid followed by a local refinement around the maximum.
         """
-        tstart = time.time()
+        D = float(self.ao.tel.D)
+        z = float(cpuArray(self.gs.height[0]))
 
-        # Instantiate the function output
-        psd = np.zeros((self.freq.nOtf, self.freq.nOtf, self.ao.src.nSrc),
-                       dtype=self.dtype)
+        def centres(zen, az):
+            zen = nnp.asarray(cpuArray(zen), dtype=float) / rad2arc
+            az = nnp.deg2rad(nnp.asarray(cpuArray(az), dtype=float))
+            return nnp.stack([zen*nnp.cos(az), zen*nnp.sin(az)], axis=-1) * h
 
-        # atmo PSD
-        psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))
+        c_src = centres(self.ao.src.zenith, self.ao.src.azimuth)   # (nSrc, 2)
+        c_gs = centres(self.gs.zenith, self.gs.azimuth)            # (nGs, 2)
+        r_gs = D/2 * (1 - h/z)
+        r_env = nnp.max(nnp.hypot(c_gs[:, 0], c_gs[:, 1])) + r_gs
 
-        # AO correction area
-        id1 = np.ceil(self.freq.nOtf/2 - self.freq.resAO/2).astype(int)
-        id2 = np.ceil(self.freq.nOtf/2 + self.freq.resAO/2).astype(int)
+        def boundary_distance(P):
+            """P: (nSrc, m, 2) points in footprint coordinates -> (nSrc, m);
+            negative when outside the footprint/envelope or inside an LGS footprint."""
+            A = P + c_src[:, None, :]
+            d_src = D/2 - nnp.hypot(P[..., 0], P[..., 1])
+            d_env = r_env - nnp.hypot(A[..., 0], A[..., 1])
+            d_gs = (nnp.hypot(A[..., None, 0] - c_gs[:, 0],
+                              A[..., None, 1] - c_gs[:, 1]) - r_gs).min(axis=-1)
+            return nnp.minimum(nnp.minimum(d_src, d_env), d_gs)
 
-        # geometry
-        lfov = 2 * np.max(self.gs.zenith)
+        pix = D / n_grid
+        u = (nnp.arange(n_grid) - n_grid/2 + 0.5) * pix
+        X, Y = nnp.meshgrid(u, u, indexing='ij')
+        P = nnp.broadcast_to(nnp.stack([X.ravel(), Y.ravel()], axis=-1),
+                             (len(c_src), n_grid**2, 2))
+        d = boundary_distance(P)
+        d_max = d.max(axis=1)
+        has_gap = d_max > 0
+        if has_gap.any():
+            best = P[nnp.arange(len(c_src)), d.argmax(axis=1)]
+            v = nnp.linspace(-pix, pix, n_refine)
+            dx, dy = nnp.meshgrid(v, v, indexing='ij')
+            Q = best[:, None, :] + nnp.stack([dx.ravel(), dy.ravel()], axis=-1)[None]
+            d_max = nnp.maximum(d_max, boundary_distance(Q).max(axis=1))
+        return 2 * nnp.maximum(d_max, 0.0)
 
+    def _mcaoConeApplied(self) -> bool:
+        """True if the reduced sensing volume term is requested and applicable (multi-LGS)."""
+        return bool(self.ao.addMcaoWFsensConeError and self.nGs != 1 and self.gs.height[0] != 0)
+
+    def _mcaoConeGeometry(self):
+        """Geometry of the reduced sensing volume (cone effect) for each layer and
+        science direction: cut-off frequency of the unsensed scales and gain G.
+
+        The size of the unsensed region is the largest of the protrusion beyond
+        the outer edge of the asterism (analytic) and of the uncovered regions
+        inside it (central hole, gaps between LGSs). Returns None when no
+        layer/direction is affected.
+        """
+        D = float(self.ao.tel.D)
+        src_zenith = nnp.asarray(cpuArray(self.ao.src.zenith), dtype=float)
+        gs_zenith = nnp.asarray(cpuArray(self.gs.zenith), dtype=float)
+        z_lgs = float(cpuArray(self.gs.height[0]))
+        lfov = 2 * gs_zenith.max()
         # effective FoV
-        eFoV = (lfov * (1/rad2arc) - self.ao.tel.D * (1/self.gs.height[0])) * rad2arc
+        eFoV = (lfov/rad2arc - D/z_lgs) * rad2arc
+        if eFoV > 0:
+            deltaAngleE = nnp.minimum(src_zenith, gs_zenith.max()) - eFoV/2
+        else:
+            deltaAngleE = nnp.minimum(src_zenith, gs_zenith.max()) - eFoV
+        deltaAngleL = nnp.maximum(src_zenith - lfov/2, 0)
+
+        heights = nnp.asarray(cpuArray(self.ao.atm.heights), dtype=float)
+        layer_idx = nnp.where((heights > 0) & self.sensedLayers)[0]
+        if len(layer_idx) == 0:
+            return None
+        h = heights[layer_idx]
+        err_ana = nnp.maximum(deltaAngleE[None, :] * h[:, None] / rad2arc, 0)
+        err_gap = nnp.stack([self._footprint_inner_gap(hh) for hh in h])
+        err = nnp.maximum(err_ana, err_gap)                         # (nLayers, nSrc)
+        with nnp.errstate(divide='ignore'):
+            f_cut = 1 / err
+        # gain G: fraction of the footprint still inside the asterism
+        eqD = nnp.minimum(D - deltaAngleL[None, :] * h[:, None] / rad2arc, D)
+        mask = (f_cut < float(cpuArray(self.freq.kcMax_))) & (eqD > 0)
+        if not mask.any():
+            return None
 
         # filter considering the maximum cut off frequency
         k = np.sqrt(self.freq.k2_)
         fs = np.max(k) * 2.
-        x = k / (fs/2.) * np.pi
-        xc = 1j * x
-        z = np.exp(xc)
+        id1 = int(np.ceil(self.freq.nOtf/2 - self.freq.resAO/2))
+        id2 = int(np.ceil(self.freq.nOtf/2 + self.freq.resAO/2))
+        z_ao = np.exp(1j * k / (fs/2.) * np.pi)[id1:id2, id1:id2]
+        return dict(layer_idx=layer_idx, f_cut=f_cut, G2=(eqD/D)**2, mask=mask,
+                    z_ao=z_ao, fs=fs, id1=id1, id2=id2)
 
-        # piston filter
-        pf = FourierUtils.pistonFilter(self.ao.tel.D,
-                                       np.sqrt(self.freq.k2_),
-                                       dtype=self.dtype)
-        pf = pf[id1:id2, id1:id2]
+    @staticmethod
+    def _mcaoConeFilter(geom, i, s):
+        """G^2 (1-|H|^2) for layer i (index in geom) and source s, on the AO grid."""
+        zPole = np.exp(2 * np.pi * float(geom['f_cut'][i, s]) / geom['fs'])
+        lpFilter = geom['z_ao'] * (1 - zPole) / (geom['z_ao'] - zPole)
+        return np.maximum((1 - np.abs(lpFilter)**2) * float(geom['G2'][i, s]), 0)
 
-        # Vectorize source-dependent calculations
-        src_zenith = np.array(self.ao.src.zenith, dtype=self.dtype)  # Shape: (nSrc,)
-        max_gs_zenith = np.max(self.gs.zenith)
-
-        # Calculate deltaAngleE and deltaAngleL for all sources at once
-        if eFoV > 0:
-            deltaAngleE = np.minimum(src_zenith, max_gs_zenith) - eFoV/2
-        else:
-            deltaAngleE = np.minimum(src_zenith, max_gs_zenith) - eFoV
-
-        deltaAngleL = src_zenith - lfov/2
-        deltaAngleL = np.maximum(deltaAngleL, 0)  # Equivalent to: deltaAngleL[deltaAngleL < 0] = 0
-
-        # Pre-compute deltaPsd for all sources
-        deltaPsd = psd_atmo[id1:id2, id1:id2, np.newaxis] - psdRes[id1:id2, id1:id2, :]  # Shape: (resAO, resAO, nSrc)
-        deltaPsd = np.maximum(deltaPsd, 0)  # Equivalent to: deltaPsd[deltaPsd < 0] = 0
-        deltaPsdPf = deltaPsd * pf[:, :, np.newaxis]  # Broadcasting piston filter
-
-        # Vectorize layer calculations
-        atm_heights = np.array(self.ao.atm.heights)  # Shape: (nCn2,)
-        atm_weights = np.array(self.ao.atm.weights)  # Shape: (nCn2,)
-
-        # Create masks for valid layers and sources
-        valid_layers = (atm_heights > 0) & np.asarray(self.sensedLayers)  # Shape: (nCn2,)
-        valid_sources = deltaAngleE > 0  # Shape: (nSrc,)
-
-        # Only process valid combinations
-        if np.any(valid_layers) and np.any(valid_sources):
-            # Get indices of valid layers and sources
-            valid_layer_idx = np.where(valid_layers)[0]
-            valid_source_idx = np.where(valid_sources)[0]
-
-            # Extract valid data
-            valid_heights = atm_heights[valid_layer_idx]  # Shape: (nValidLayers,)
-            valid_weights = atm_weights[valid_layer_idx]  # Shape: (nValidLayers,)
-            valid_deltaAngleE = deltaAngleE[valid_source_idx]  # Shape: (nValidSources,)
-            valid_deltaAngleL = deltaAngleL[valid_source_idx]  # Shape: (nValidSources,)
-
-            # Broadcast for vectorized computation
-            # Create grids: (nValidLayers, nValidSources)
-            heights_grid, deltaAngleE_grid = np.meshgrid(valid_heights, valid_deltaAngleE, indexing='ij')
-            weights_grid, deltaAngleL_grid = np.meshgrid(valid_weights, valid_deltaAngleL, indexing='ij')
-
-            # Calculate fCut and eqD for all valid combinations
-            fCut = rad2arc / (deltaAngleE_grid * heights_grid)  # Shape: (nValidLayers, nValidSources)
-            eqD = self.ao.tel.D - deltaAngleL_grid * heights_grid * (1/rad2arc)  # Shape: (nValidLayers, nValidSources)
-            eqD = np.minimum(eqD, self.ao.tel.D)
-
-            # Create mask for valid frequency cuts
-            valid_fcut_mask = (fCut < self.freq.kcMax_) & (eqD > 0)  # Shape: (nValidLayers, nValidSources)
-
-            if np.any(valid_fcut_mask):
-                # Extract z values for the AO correction area only
-                z_ao = z[id1:id2, id1:id2]  # Shape: (resAO, resAO)
-
-                # Process only valid combinations
-                for i, layer_idx in enumerate(valid_layer_idx):
-                    for j, source_idx in enumerate(valid_source_idx):
-                        if valid_fcut_mask[i, j]:
-                            fCut_val = fCut[i, j]
-                            eqD_val = eqD[i, j]
-                            weight_val = weights_grid[i, j]
-
-                            sPole = 2 * np.pi * fCut_val
-                            zPole = np.exp(sPole/fs)
-                            lpFilter = z_ao * (1 - zPole) / (z_ao - zPole)
-                            lpFilter2 = (1 - np.abs(lpFilter)**2) * (eqD_val/self.ao.tel.D)**2
-                            lpFilter2 = np.maximum(lpFilter2, 0)  # Equivalent to: lpFilter2[lpFilter2 < 0] = 0
-
-                            psd[id1:id2, id1:id2, source_idx] += weight_val * lpFilter2 * deltaPsdPf[:, :, source_idx]
-
+    def mcaoWFsensConePSD(self, psdRes):
+        """%% power spectrum density related to the reduced volume sensed
+            by the LGS WFS due to cone effect in MCAO systems.
+            This effect is related to the cone effect and it depends on
+            the LGS geometry and the uncorrected part of the input PSD
+            (the total correction, distributed on the layers by their Cn2
+            weight, as calibrated against end-to-end simulations).
+        """
+        tstart = time.time()
+        psd = np.zeros((self.freq.nOtf, self.freq.nOtf, self.ao.src.nSrc),
+                       dtype=self.dtype)
+        geom = self._mcaoConeGeometry()
+        if geom is not None:
+            id1, id2 = geom['id1'], geom['id2']
+            # atmo PSD and piston filter
+            psd_atmo = self.ao.atm.spectrum(np.sqrt(self.freq.k2_))
+            pf = FourierUtils.pistonFilter(self.ao.tel.D, np.sqrt(self.freq.k2_),
+                                           dtype=self.dtype)[id1:id2, id1:id2]
+            deltaPsd = np.maximum(psd_atmo[id1:id2, id1:id2, np.newaxis]
+                                  - psdRes[id1:id2, id1:id2, :], 0) * pf[:, :, np.newaxis]
+            weights = nnp.asarray(cpuArray(self.ao.atm.weights), dtype=float)[geom['layer_idx']]
+            for i, s in zip(*nnp.where(geom['mask'])):
+                psd[id1:id2, id1:id2, s] += weights[i] * self._mcaoConeFilter(geom, i, s) \
+                                            * deltaPsd[:, :, s]
         self.t_mcaoWFsensCone = 1000 * (time.time() - tstart)
-
         return np.real(psd)
 
     def extraErrorPSD(self):
@@ -2019,8 +2041,8 @@ class fourierModel:
             self.wfeDiffRef= np.atleast_1d(np.sqrt(self.psdDiffRef.sum(axis=(0,1))) * rad2nm)
             self.wfeChrom  = np.atleast_1d(np.sqrt(self.psdChromatism.sum(axis=(0,1))) * rad2nm)
             self.wfeJitter = 1e9*self.ao.tel.D*nnp.mean(self.ao.cam.spotFWHM[0][0:2])/rad2mas/4
-            if self.ao.addMcaoWFsensConeError:
-                self.wfeMcaoCone = np.sqrt(self.psdMcaoWFsensCone[:,:,0].sum())* rad2nm
+            if self._mcaoConeApplied():
+                self.wfeMcaoCone = np.atleast_1d(np.sqrt(self.psdMcaoWFsensCone.sum(axis=(0,1)))) * rad2nm
             else:
                 self.wfeMcaoCone = 0
             if self.applyTiltFilter is False and self.ao.windPsdFile != 0:
@@ -2087,8 +2109,8 @@ class fourierModel:
                     print('  (of which layers above LGS:\t%4.2fnm)'%self.wfeUnsensed)
                 print('.Wind-shake error:\t\t%4.2fnm'%self.wfeWindShake)
                 print('.Additionnal jitter:\t\t%4.2fmas / %4.2fnm'%(nnp.mean(self.ao.cam.spotFWHM[0][0:2]),self.wfeJitter))
-                if self.ao.addMcaoWFsensConeError:
-                    print('.Mcao Cone:\t\t\t%4.2fnm'%self.wfeMcaoCone)
+                if self._mcaoConeApplied():
+                    print('.Mcao Cone:\t\t\t%4.2fnm'%self.wfeMcaoCone[idCenter])
                 print('.Extra error:\t\t\t%4.2fnm'%self.wfeExtra)
                 print('-------------------------------------------')
                 print('.Sole servoLag error:\t\t%4.2fnm'%self.wfeS)
