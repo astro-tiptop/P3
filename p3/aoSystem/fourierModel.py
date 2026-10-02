@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 
 import time
 import os
+import warnings
 import pathlib
 from shutil import which
 
@@ -215,10 +216,14 @@ class fourierModel:
             # so that the NGS/high-LGS results are unchanged).
             self.sensedFraction = 1.0 if self.sensedLayers.all() else \
                 float(self.sensedWeights.sum() / nnp.sum(cpuArray(self.ao.atm.weights)))
-            if self.verbose and not self.sensedLayers.all():
-                print(f'{int((~self.sensedLayers).sum())} layer(s) at or above the LGS '
-                      f'altitude ({1 - self.sensedFraction:.3f} of Cn2) are not sensed '
-                      'and left uncorrected.')
+            if not self.sensedLayers.all():
+                msg = (f'{int((~self.sensedLayers).sum())} turbulent layer(s) at or above the LGS '
+                       f'altitude ({1 - self.sensedFraction:.3f} of the Cn2) are not sensed '
+                       'and are left uncorrected.')
+                if self.nGs > 1:
+                    msg += (' Their geometry cannot be reconstructed: for ground-layer '
+                            'correction consider NumberReconstructedLayers = 1.')
+                warnings.warn(msg, stacklevel=2)
             self.strechFactor = self._stretch_factor(self.ao.atm.heights)
 
             # DEFINING THE REFRACTIVE INDEX OF THE AIR AT THE REFERENCE AND GUIDE STAR WAVELENGTH

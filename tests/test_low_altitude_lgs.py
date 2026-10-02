@@ -3,6 +3,7 @@
 """Regression tests for LGS altitudes below some turbulent layers (e.g. Rayleigh LGS)."""
 
 from types import SimpleNamespace
+import warnings
 
 import numpy as nnp
 import pytest
@@ -199,6 +200,22 @@ def test_lgs_below_all_nonground_layers(tmp_path, mode):
     stretch = nnp.asarray(fao.strechFactor)
     assert nnp.all(nnp.isfinite(stretch)) and nnp.all(stretch > 0)
     assert fao.sensedFraction == pytest.approx(WEIGHTS[0] / sum(WEIGHTS))
+
+
+def test_unsensed_layers_warning(tmp_path, mode):
+    """A warning reports the unsensed layers; the nrec hint only for multi-LGS systems."""
+    with pytest.warns(UserWarning, match='not sensed') as rec:
+        _build(tmp_path, 1000.0, multi=mode)
+    hint = any('NumberReconstructedLayers = 1' in str(w.message) for w in rec)
+    assert hint == mode
+
+
+def test_no_warning_when_all_layers_sensed(tmp_path, mode):
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', UserWarning)
+        # only our warning is promoted to an error
+        warnings.filterwarnings('default', message='^(?!.*not sensed).*')
+        _build(tmp_path, 90000.0, multi=mode)
 
 
 def test_lgs_above_all_layers_is_unchanged(tmp_path, mode):
