@@ -1518,10 +1518,12 @@ class fourierModel:
         nH = self.ao.atm.nL
         Hs = np.asarray(self.ao.atm.heights) * np.asarray(self.strechFactor)
         Ws = np.asarray(self.ao.atm.weights)
-        # SCAO: unsensed layers drop out of the correlation term A and of the
-        # correction term |F|^2 h2, so they keep their full open-loop PSD.
+        # Unsensed layers keep their full open-loop PSD, without the piston
+        # filter: the long-exposure PSF does not depend on piston, and the
+        # filter would remove genuine low-order power of uncorrected turbulence.
         Ws_sensed = Ws * np.asarray(self.sensedLayers)
         w_sensed = self.sensedFraction
+        w_unsensed = 1 - w_sensed
         deltaT = self.ao.rtc.holoop['delay']/self.ao.rtc.holoop['rate']
         wDir_x = np.cos(np.asarray(self.ao.atm.wDir) * np.pi / 180)
         wDir_y = np.sin(np.asarray(self.ao.atm.wDir) * np.pi / 180)
@@ -1552,7 +1554,8 @@ class fourierModel:
                     psd[:, :, s] = abs(1-F)**2 * Watm
                 else:
                     psd[:, :, s] = self.freq.mskInAO_ * \
-                        (1 + w_sensed*abs(F)**2*self.h2 - 2*np.real(F*self.h1*A)) * Watm
+                        ((w_sensed + w_sensed*abs(F)**2*self.h2 - 2*np.real(F*self.h1*A)) * Watm
+                         + w_unsensed * self.Wphi)
             else:
                 # Tomographic case
                 Beta = [self.ao.src.direction[0,s],self.ao.src.direction[1,s]]
@@ -1577,8 +1580,13 @@ class fourierModel:
                 
                 # Cphi is now a 3D diagonal array (nK, nK, nL).
                 # proj @ Cphi @ proj_T massively simplifies to element-wise broadcasting:
-                tmp = np.sum(np.abs(proj[:, :, 0, :])**2 * self.Cphi, axis=-1)
                 # Cphi is already piston-filtered (see tomographicReconstructor)
+                if self.sensedLayers.all():
+                    tmp = np.sum(np.abs(proj[:, :, 0, :])**2 * self.Cphi, axis=-1)
+                else:
+                    sensed = np.asarray(nnp.where(self.sensedLayers)[0])
+                    tmp = np.sum(np.abs(proj[:, :, 0, sensed])**2 * self.Cphi[:, :, sensed], axis=-1) \
+                          + w_unsensed * self.Wphi
                 psd[:, :, s] = self.freq.mskInAO_ * tmp
         if self.reduce_memory:
             self.Walpha = None
@@ -2015,7 +2023,7 @@ class fourierModel:
             self.wfeST     = np.atleast_1d(np.sqrt(self.psdSpatioTemporal.sum(axis=(0,1))) * rad2nm)
             # open-loop residual of layers above the LGS (already part of wfeST)
             self.wfeUnsensed = float(np.sqrt((1 - self.sensedFraction) * np.sum(
-                self.freq.mskInAO_ * self.Wphi * self.freq.pistonFilterAO_))) * rad2nm
+                self.freq.mskInAO_ * self.Wphi))) * rad2nm
             self.wfeDiffRef= np.atleast_1d(np.sqrt(self.psdDiffRef.sum(axis=(0,1))) * rad2nm)
             self.wfeChrom  = np.atleast_1d(np.sqrt(self.psdChromatism.sum(axis=(0,1))) * rad2nm)
             self.wfeJitter = 1e9*self.ao.tel.D*nnp.mean(self.ao.cam.spotFWHM[0][0:2])/rad2mas/4
