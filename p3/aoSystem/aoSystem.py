@@ -8,6 +8,7 @@ Created on Mon Apr  5 14:42:49 2021
 
 # IMPORTING PYTHON LIBRAIRIES
 import copy
+import warnings
 import os.path as ospath
 import pathlib
 from configparser import ConfigParser
@@ -355,7 +356,10 @@ class aoSystem():
             wvlAtm = 500e-9
 
         if self.check_config_key('atmosphere','Seeing'):
-            r0 = 0.976*wvlAtm/self.get_config_value('atmosphere','Seeing')*3600*180/np.pi
+            seeing = self.get_config_value('atmosphere','Seeing')
+            if not (np.isfinite(seeing) and seeing > 0):
+                raise ValueError(f"'Seeing' in section 'atmosphere' must be > 0, got {seeing}")
+            r0 = 0.976*wvlAtm/seeing*3600*180/np.pi
         else:
             if self.check_config_key('atmosphere','r0_value'):
                 r0 = self.get_config_value('atmosphere','r0_value')
@@ -394,6 +398,8 @@ class aoSystem():
         if not len(weights) == len(heights) == len(wSpeed) == len(wDir):
             self.raiseNotSameLength('atmosphere',
                                     ['Cn2Weights','Cn2Heights','WindSpeed','WindDirection'])
+        weights, heights, wSpeed, wDir, L0 = self._validate_atmosphere(
+            wvlAtm, r0, L0, weights, heights, wSpeed, wDir)
 
         #----- class definition
         self.atm = atmosphere(wvlAtm, r0*airmass**(-3.0/5.0),
@@ -1003,6 +1009,47 @@ class aoSystem():
         s+= self.cam.__repr__()
 
         return s
+
+    @staticmethod
+    def _validate_atmosphere(wvl, r0, L0, weights, heights, wSpeed, wDir):
+        """Check the physical validity of the [atmosphere] parameters.
+
+        Invalid values used to propagate silently as inf/NaN or as wrong but
+        plausible results. Layers with zero Cn2 weight carry no turbulence and
+        are removed (with a warning), since they give an infinite layer r0.
+        """
+        def as_array(name, v):
+            a = np.atleast_1d(np.asarray(v, dtype=float))
+            if not np.all(np.isfinite(a)):
+                raise ValueError(f"'{name}' in section 'atmosphere' must be finite, got {list(a)}")
+            return a
+
+        def check(name, a, cond, text):
+            if not np.all(cond):
+                raise ValueError(f"'{name}' in section 'atmosphere' {text}, got {list(a)}")
+
+        wvl_a = as_array('Wavelength', wvl)
+        check('Wavelength', wvl_a, wvl_a > 0, 'must be > 0')
+        r0_a = as_array('Seeing/r0_value', r0)
+        check('Seeing/r0_value', r0_a, r0_a > 0, 'must give r0 > 0 (Seeing > 0)')
+        L0_a = as_array('L0', L0)
+        check('L0', L0_a, L0_a > 0, 'must be > 0')
+        w = as_array('Cn2Weights', weights)
+        check('Cn2Weights', w, w >= 0, 'must be >= 0')
+        h = as_array('Cn2Heights', heights)
+        check('Cn2Heights', h, h >= 0, 'must be >= 0 (altitude above the telescope)')
+        v = as_array('WindSpeed', wSpeed)
+        check('WindSpeed', v, v >= 0, 'must be >= 0 (use WindDirection + 180 to reverse the wind)')
+        d = as_array('WindDirection', wDir)
+
+        keep = w > 0
+        if not keep.all():
+            warnings.warn(f"{int((~keep).sum())} layer(s) with Cn2Weights = 0 removed "
+                          f"(heights {list(h[~keep])} m).", stacklevel=3)
+            if np.size(L0_a) == len(w):
+                L0 = list(L0_a[keep])
+            w, h, v, d = w[keep], h[keep], v[keep], d[keep]
+        return list(w), list(h), list(v), list(d), L0
 
     def errorBreakdown(self):
         """
