@@ -505,7 +505,8 @@ class aoSystem():
 
         if np.any(self.coo_stars):
             zenithSrc = np.hypot(self.coo_stars[0],self.coo_stars[1])
-            azimuthSrc = np.arctan2(self.coo_stars[0],self.coo_stars[1])
+            # source expects the azimuth in degrees
+            azimuthSrc = np.degrees(np.arctan2(self.coo_stars[0],self.coo_stars[1]))
 
         #----- verification
         if len(zenithSrc) != len(azimuthSrc):
