@@ -119,6 +119,34 @@ class aoSystem():
                  psdPerWavelength=False,
                  coo_stars=None, verbose=True,
                  config_dict=None):
+        """
+        Parameters
+        ----------
+        path_config : str
+            Path to the .ini or .yml parameter file (ignored if
+            ``config_dict`` is given).
+        path_root : str, optional
+            Root directory prepended to relative paths of auxiliary files
+            (pupil, static maps, ...) referenced in the parameter file.
+        getPSDatNGSpositions : bool, optional
+            Append the ``[sources_LO]`` directions to the science directions.
+        psdExpansion : bool, optional
+            Let frequencyDomain choose the PSD step from the wavelength with
+            the finest required step and a non-integer oversampling, so that
+            the science pixel scale is reproduced exactly.
+        psdPerWavelength : bool, optional
+            With more than one science wavelength, build one exact frequency
+            grid per wavelength (see fourierModel).
+        coo_stars : array_like, optional
+            Cartesian coordinates ``[y, x]`` (arcsec, shape (2, nSrc)) of the
+            science sources; if given they replace
+            ``[sources_science] Zenith/Azimuth``.
+        verbose : bool, optional
+            Print diagnostic messages.
+        config_dict : dict, optional
+            Parameter dictionary (same structure as the parameter file) used
+            instead of reading ``path_config``.
+        """
 
         if path_root is None:
             path_root = ''
@@ -477,7 +505,8 @@ class aoSystem():
 
         if np.any(self.coo_stars):
             zenithSrc = np.hypot(self.coo_stars[0],self.coo_stars[1])
-            azimuthSrc = np.arctan2(self.coo_stars[0],self.coo_stars[1])
+            # source expects the azimuth in degrees
+            azimuthSrc = np.degrees(np.arctan2(self.coo_stars[0],self.coo_stars[1]))
 
         #----- verification
         if len(zenithSrc) != len(azimuthSrc):
