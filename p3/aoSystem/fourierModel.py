@@ -72,6 +72,75 @@ class fourierModel:
                  computeFocalAnisoCov=True, TiltFilter=False, doComputations=True,
                  psdExpansion=False, psdPerWavelength=False,
                  reduce_memory=False, config_dict=None):
+        """
+        Parameters
+        ----------
+        path_ini : str
+            Path to the .ini or .yml parameter file (ignored if ``ao`` or
+            ``config_dict`` is given).
+        calcPSF : bool, optional
+            Compute the PSFs (and Strehl ratios) from the PSD. If False only
+            the PSD is computed.
+        verbose : bool, optional
+            Print diagnostic messages.
+        display : bool, optional
+            Display the controller transfer functions and, if ``calcPSF``,
+            the PSFs.
+        path_root : str, optional
+            Root directory prepended to relative paths of auxiliary files
+            (pupil, static maps, ...) referenced in the parameter file.
+        normalizePSD : bool, optional
+            Rescale the total PSD so that its integral matches
+            ``[RTC] ResidualError`` (in nm).
+        displayContour : bool, optional
+            Overplot Strehl contours in the field when displaying results.
+        getPSDatNGSpositions : bool, optional
+            Append the ``[sources_LO]`` directions to the science directions,
+            so that the PSD is also computed at the NGS positions.
+        getErrorBreakDown : bool, optional
+            Compute the error breakdown (fitting, aliasing, noise, ...).
+        getFWHM, getEnsquaredEnergy, getEncircledEnergy : bool, optional
+            Compute the corresponding PSF metric (requires ``calcPSF``).
+        fftphasor : bool, optional
+            Currently unused (accepted by ``point_spread_function`` but not
+            applied).
+        MV : int, optional
+            1 for the minimum-variance (noise-aware) reconstructor in single
+            conjugate systems, 0 for least squares.
+        nyquistSampling : bool, optional
+            Force a Nyquist-sampled PSF (lambda/2D) instead of
+            ``[sensor_science] PixelScale``.
+        addOtfPixel : bool, optional
+            Multiply the OTF by the pixel transfer function (sinc).
+        freq : frequencyDomain, optional
+            Pre-computed frequency domain to reuse instead of building a new one.
+        ao : aoSystem, optional
+            Pre-built aoSystem to reuse instead of reading the parameter file.
+        computeFocalAnisoCov : bool, optional
+            Compute the focal (cone effect) anisoplanatism term in SCAO/SLAO.
+        TiltFilter : bool, optional
+            Remove tilt from the PSD (used when tip/tilt is handled by a
+            separate LO loop, e.g. by TIPTOP) and skip the wind-shake PSD.
+        doComputations : bool, optional
+            Run ``initComputations()`` at construction. If False the caller
+            must call it explicitly.
+        psdExpansion : bool, optional
+            Choose the PSD step from the wavelength with the finest required
+            step and a non-integer oversampling, so that the science pixel
+            scale is reproduced exactly on the shared grid.
+        psdPerWavelength : bool, optional
+            With more than one science wavelength, compute one exact PSD grid
+            per wavelength: ``self.PSD`` becomes a list of arrays, one per
+            wavelength, each equal to a standalone single-wavelength run.
+            Cost grows roughly with the number of wavelengths. Not compatible
+            with ``calcPSF`` or ``getErrorBreakDown``.
+        reduce_memory : bool, optional
+            Free intermediate arrays (tomographic matrices, PSD components)
+            once they are no longer needed.
+        config_dict : dict, optional
+            Parameter dictionary (same structure as the parameter file) used
+            instead of reading ``path_ini``.
+        """
 
         tstart = time.time()
 
