@@ -47,6 +47,20 @@ def anisoplanatism_wfe(tel, atm, src, ngs, dtype=np.float64):
 
     return wfe
 
+# Piston-removed phase variance of a full layer, in units of (D/r0)^(5/3) (Noll 1976).
+_FULL_LAYER_VARIANCE = 1.0299
+
+def _height_ratio(atm, lgs) -> np.ndarray:
+    """h/z_LGS for each layer."""
+    return np.asarray(FourierUtils.cpuArray(atm.heights), dtype=float) / float(FourierUtils.cpuArray(lgs.height[0]))
+
+def _clip_layer_variance(var_sensed: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Per-layer cone variance: the small-h/z expansion is clipped to [0, full layer]
+    (it goes negative for h/z > 1.6), and layers at or above the LGS (x >= 1) are
+    not sensed, so they contribute the full open-loop variance."""
+    var = np.clip(var_sensed, 0, _FULL_LAYER_VARIANCE)
+    return np.where(x >= 1, _FULL_LAYER_VARIANCE, var)
+
 def focal_anisoplanatism_wfe(tel, atm, lgs):
     """
         Computes the wavefront error of the focal anisoplanatism due to the finite altitude
@@ -58,14 +72,9 @@ def focal_anisoplanatism_wfe(tel, atm, lgs):
             - wfe, the focal anisoplanatism error in nm
     """
 
-    var = 0
-    zLgs = float(lgs.height[0])
-
-    for k in range(atm.nL):
-        if atm.heights[k] > 0:
-            var1 = 0.5*(atm.heights[k]/zLgs)**(5/3)
-            var2 = 0.452*(atm.heights[k]/zLgs)**2
-            var += atm.weights[k] * (var1 - var2)/0.423
+    x = _height_ratio(atm, lgs)
+    var = np.sum(np.asarray(FourierUtils.cpuArray(atm.weights)) * _clip_layer_variance(
+        (0.5*x**(5/3) - 0.452*x**2)/0.423, x))
     wfe = np.sqrt(var * (tel.D/atm.r0)**(5/3)) * (atm.wvl*1e9/2/np.pi)
 
     return wfe
@@ -124,14 +133,9 @@ def focal_anisoplanatism_variance(tel,atm,lgs):
             - wfe, the focal anisoplanatism error in nm
     '''
     
-    var = 0
-    zLgs = float(lgs.height[0])
-    for k in range(atm.nL):
-        if atm.heights[k] > 0:
-            var1 = 0.5*(atm.heights[k]/zLgs)**(5/3)
-            var2 = 0.425*(atm.heights[k]/zLgs)**2
-            var  += atm.weights[k] * (var1 - var2)
-              
+    x = _height_ratio(atm, lgs)
+    var = np.sum(np.asarray(FourierUtils.cpuArray(atm.weights)) * _clip_layer_variance(
+        0.5*x**(5/3) - 0.425*x**2, x))
     wfe = np.sqrt(var * (tel.D/atm.r0)**(5/3)) * (atm.wvl*1e9/2/np.pi)
     return wfe
 
