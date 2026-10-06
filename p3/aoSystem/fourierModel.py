@@ -21,6 +21,7 @@ from p3.aoSystem.aoSystem import aoSystem
 from p3.aoSystem.atmosphere import atmosphere
 from p3.aoSystem.frequencyDomain import frequencyDomain
 from p3.aoSystem.airRefraction import MatharAirRefraction
+from p3.aoSystem.processing import is_auto_noise_var
 
 #%% DISPLAY FEATURES
 mpl.rcParams['font.size'] = 16
@@ -58,6 +59,10 @@ class fourierModel:
     fast analytic simulations.
     """
 
+    # Minimum tomographic regularization, relative to the largest diagonal
+    # term of the GS covariance at each spatial frequency.
+    tomoRelRegFloor = 1e-12
+
     # CONTRUCTOR
     def __init__(self, path_ini, calcPSF=True, verbose=False, display=True,
                  path_root=None, normalizePSD=False, displayContour=False,
@@ -67,6 +72,75 @@ class fourierModel:
                  computeFocalAnisoCov=True, TiltFilter=False, doComputations=True,
                  psdExpansion=False, psdPerWavelength=False,
                  reduce_memory=False, config_dict=None):
+        """
+        Parameters
+        ----------
+        path_ini : str
+            Path to the .ini or .yml parameter file (ignored if ``ao`` or
+            ``config_dict`` is given).
+        calcPSF : bool, optional
+            Compute the PSFs (and Strehl ratios) from the PSD. If False only
+            the PSD is computed.
+        verbose : bool, optional
+            Print diagnostic messages.
+        display : bool, optional
+            Display the controller transfer functions and, if ``calcPSF``,
+            the PSFs.
+        path_root : str, optional
+            Root directory prepended to relative paths of auxiliary files
+            (pupil, static maps, ...) referenced in the parameter file.
+        normalizePSD : bool, optional
+            Rescale the total PSD so that its integral matches
+            ``[RTC] ResidualError`` (in nm).
+        displayContour : bool, optional
+            Overplot Strehl contours in the field when displaying results.
+        getPSDatNGSpositions : bool, optional
+            Append the ``[sources_LO]`` directions to the science directions,
+            so that the PSD is also computed at the NGS positions.
+        getErrorBreakDown : bool, optional
+            Compute the error breakdown (fitting, aliasing, noise, ...).
+        getFWHM, getEnsquaredEnergy, getEncircledEnergy : bool, optional
+            Compute the corresponding PSF metric (requires ``calcPSF``).
+        fftphasor : bool, optional
+            Currently unused (accepted by ``point_spread_function`` but not
+            applied).
+        MV : int, optional
+            1 for the minimum-variance (noise-aware) reconstructor in single
+            conjugate systems, 0 for least squares.
+        nyquistSampling : bool, optional
+            Force a Nyquist-sampled PSF (lambda/2D) instead of
+            ``[sensor_science] PixelScale``.
+        addOtfPixel : bool, optional
+            Multiply the OTF by the pixel transfer function (sinc).
+        freq : frequencyDomain, optional
+            Pre-computed frequency domain to reuse instead of building a new one.
+        ao : aoSystem, optional
+            Pre-built aoSystem to reuse instead of reading the parameter file.
+        computeFocalAnisoCov : bool, optional
+            Compute the focal (cone effect) anisoplanatism term in SCAO/SLAO.
+        TiltFilter : bool, optional
+            Remove tilt from the PSD (used when tip/tilt is handled by a
+            separate LO loop, e.g. by TIPTOP) and skip the wind-shake PSD.
+        doComputations : bool, optional
+            Run ``initComputations()`` at construction. If False the caller
+            must call it explicitly.
+        psdExpansion : bool, optional
+            Choose the PSD step from the wavelength with the finest required
+            step and a non-integer oversampling, so that the science pixel
+            scale is reproduced exactly on the shared grid.
+        psdPerWavelength : bool, optional
+            With more than one science wavelength, compute one exact PSD grid
+            per wavelength: ``self.PSD`` becomes a list of arrays, one per
+            wavelength, each equal to a standalone single-wavelength run.
+            Cost grows roughly with the number of wavelengths. Not compatible
+            with ``calcPSF`` or ``getErrorBreakDown``.
+        reduce_memory : bool, optional
+            Free intermediate arrays (tomographic matrices, PSD components)
+            once they are no longer needed.
+        config_dict : dict, optional
+            Parameter dictionary (same structure as the parameter file) used
+            instead of reading ``path_ini``.
+        """
 
         tstart = time.time()
 
@@ -285,7 +359,7 @@ class fourierModel:
             # in place, so self.ao.atm.r0 stops being "at 500nm" afterwards).
             wvl_gs = self.gs.wvl[0]
             r0_at_500nm = self.ao.atm.r0
-            noiseVar_is_auto = (self.ao.wfs.processing.noiseVar == [None])
+            noiseVar_is_auto = is_auto_noise_var(self.ao.wfs.processing.noiseVar)
             if noiseVar_is_auto:
                 self.ao.wfs.processing.noiseVar = self.ao.wfs.computeNoiseVarianceAtWavelength(
                     wvl_science=self.freq.wvlRef,
@@ -670,25 +744,36 @@ class fourierModel:
         # Direct addition of noise on the diagonal (completely eliminates self.Cb allocation)
         noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.complex_dtype)
         idx = np.arange(nGs)
-        to_inv[:, :, idx, idx] += noise_var
+        # At low k all GS see the same turbulence (to_inv ~ rank 1): with a
+        # (nearly) noise-free WFS the system is singular and the solution
+        # backend-dependent. Floor the regularization to a fraction of the
+        # largest diagonal term at each k.
+        diag_max = np.max(np.abs(to_inv[:, :, idx, idx]), axis=-1, keepdims=True)
+        # where to_inv is identically zero (e.g. k=0, piston-filtered) rhs is zero
+        # too: any positive value gives Wtomo=0 there instead of NaN/LinAlgError
+        reg_floor = np.where(diag_max > 0, self.tomoRelRegFloor * diag_max, 1.0)
+        to_inv[:, :, idx, idx] += np.maximum(np.real(noise_var), reg_floor)
 
         # rhs = Cphi_mod @ MP_t
         rhs = self.Cphi_mod[:, :, :, None] * MP_t
 
-        # 4. Inversion
+        # 4. Inversion, in double precision: to_inv is badly conditioned at low k
+        # and a complex64 solve is wrong there (and differs between CPU and GPU).
+        # The small (nGs x nGs) systems make the cost negligible.
         try:
             if self.verbose:
                 print("Tomography: Using standard solve")
             Wtomo = np.linalg.solve(
-                to_inv.astype(np.complex64).transpose(0, 1, 3, 2),
-                rhs.astype(np.complex64).transpose(0, 1, 3, 2)
+                to_inv.astype(np.complex128).transpose(0, 1, 3, 2),
+                rhs.astype(np.complex128).transpose(0, 1, 3, 2)
             ).transpose(0, 1, 3, 2)
         except np.linalg.LinAlgError as e:
             if self.verbose:
                 print(f"Tomography: Standard solve failed ({e}), using pinv")
-            inv = np.linalg.pinv(to_inv.astype(np.complex64),
-                                 rcond=np.finfo(np.float32).eps)
-            Wtomo = np.matmul(rhs, inv)
+            inv = np.linalg.pinv(to_inv.astype(np.complex128),
+                                 rcond=np.finfo(np.float64).eps)
+            Wtomo = np.matmul(rhs.astype(np.complex128), inv)
+        Wtomo = np.ascontiguousarray(Wtomo.astype(self.complex_dtype))
 
         to_inv = None
         
@@ -699,9 +784,10 @@ class fourierModel:
         """
         Computes the projector from layers to DM from Neichel+09.
         
-        Here we forced single precision for the matrix multiplications
-        to save memory and speed up computations, as the optimal projector
-        is not very sensitive to precision.
+        Computed in double precision: the DM projections are nearly identical
+        at low k, and the Tikhonov normal equations square the condition number
+        of to_inv, beyond what complex64 can resolve. Popt is returned in
+        the model complex dtype.
         """
         tstart = time.time()
         k = np.sqrt(self.freq.k2AO_)
@@ -711,23 +797,23 @@ class fourierModel:
         h_mod = self.atm_mod.heights * cpuArray(self.strechFactor_mod)
         nL = len(h_mod)
         nK = self.freq.resAO
-        i = np.complex64(1j)
+        i = np.complex128(1j)
 
         mat1 = np.zeros([nK, nK, nDm, nL],
-                        dtype=np.complex64)
+                        dtype=np.complex128)
         to_inv = np.zeros([nK, nK, nDm, nDm],
-                          dtype=np.complex64)
+                          dtype=np.complex128)
         theta_x = self.ao.dms.opt_dir[0]/206264.8 \
                 * nnp.cos(self.ao.dms.opt_dir[1]*np.pi/180)
         theta_y = self.ao.dms.opt_dir[0]/206264.8 \
                 * nnp.sin(self.ao.dms.opt_dir[1]*np.pi/180)
 
         Pdm = np.zeros([nK, nK, 1, nDm],
-                       dtype=np.complex64)
+                       dtype=np.complex128)
         Pl = np.zeros([nK, nK, 1, nL],
-                      dtype=np.complex64)
+                      dtype=np.complex128)
         Pdm_t = np.zeros([nK, nK, nDm, 1],
-                         dtype=np.complex64)
+                         dtype=np.complex128)
         for d_o in range(nDir):                 #loop on optimization directions
             Pdm.fill(0)
             Pl.fill(0)
@@ -749,22 +835,22 @@ class fourierModel:
 
         # Popt
         if nDir == 1:
-            mat2 = np.linalg.pinv(to_inv.astype(np.complex64),
+            mat2 = np.linalg.pinv(to_inv.astype(np.complex128),
                                   rcond=1/self.ao.dms.opt_cond)
             to_inv = None
         else:
             # Tikhonov: use only the diagonal of to_inv for regularization
-            to_inv_t = to_inv.transpose(0, 1, 3, 2)
+            to_inv_t = np.conj(to_inv.transpose(0, 1, 3, 2))
             lambda_tikhonov = 1/self.ao.dms.opt_cond
             try:
                 # Build regularized system
-                A = to_inv_t.astype(np.complex64) @ to_inv.astype(np.complex64)
+                A = to_inv_t.astype(np.complex128) @ to_inv.astype(np.complex128)
                 # Add regularization on diagonal as a fraction of the trace
                 lambda_reg = (np.mean(np.diagonal(A, axis1=2, axis2=3)) \
                              * lambda_tikhonov).astype(self.complex_dtype)
                 idx = np.arange(nDm)
                 A[:, :, idx, idx] += lambda_reg
-                b = to_inv_t.astype(np.complex64)
+                b = to_inv_t.astype(np.complex128)
                 mat2 = np.linalg.solve(A, b)
                 A = None
                 b = None
@@ -774,10 +860,10 @@ class fourierModel:
                 # Fallback: use pinv on original to_inv
                 if self.verbose:
                     print(f"Optimal projector: Tikhonov failed ({e}), using pinv")
-                mat2 = np.linalg.pinv(to_inv.astype(np.complex64),
+                mat2 = np.linalg.pinv(to_inv.astype(np.complex128),
                                     rcond=1/self.ao.dms.opt_cond)
 
-        Popt = np.matmul(mat2, mat1)
+        Popt = np.matmul(mat2, mat1).astype(self.complex_dtype)
 
         self.t_opt = 1000*(time.time() - tstart)
         return Popt
@@ -1309,8 +1395,10 @@ class fourierModel:
         """Noise error power spectrum density
         """
         tstart = time.time()
-        psd = np.zeros((self.freq.resAO,self.freq.resAO),
-                       dtype=self.dtype)
+        # tomographic callers expect one PSD per science source, also when noise-free
+        shape = (self.freq.resAO, self.freq.resAO) if self.nGs < 2 else \
+                (self.freq.resAO, self.freq.resAO, self.ao.src.nSrc)
+        psd = np.zeros(shape, dtype=self.dtype)
         mean_noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype).mean()
         if float(self.ao.wfs.processing.noiseVar[0]) > 0:
             if self.nGs < 2:
@@ -1497,7 +1585,8 @@ class fourierModel:
                 # Cphi is now a 3D diagonal array (nK, nK, nL).
                 # proj @ Cphi @ proj_T massively simplifies to element-wise broadcasting:
                 tmp = np.sum(np.abs(proj[:, :, 0, :])**2 * self.Cphi, axis=-1)
-                psd[:, :, s] = self.freq.mskInAO_ * tmp * self.freq.pistonFilterAO_
+                # Cphi is already piston-filtered (see tomographicReconstructor)
+                psd[:, :, s] = self.freq.mskInAO_ * tmp
         if self.reduce_memory:
             self.Walpha = None
         self.t_spatioTemporalPSD = 1000*(time.time() - tstart)
