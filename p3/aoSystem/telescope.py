@@ -113,7 +113,11 @@ class telescope:
         else:
             # build an annular pupil model
             th = self.pupilAngle*nnp.pi/180
-            x = nnp.linspace(-D/2, D/2, resolution)
+            # pixel centres with pitch D/resolution, so that the array side is D, as
+            # assumed by telescopeOtf, MASTSEL and the Zernike static modes (zernike.py);
+            # linspace(-D/2, D/2, resolution) had pitch D/(resolution-1), i.e. a pupil
+            # short by D/resolution
+            x = (nnp.arange(resolution) - (resolution - 1) / 2) * D / resolution
             X,Y = nnp.meshgrid(x,x)
             Xr  = X*nnp.cos(th) + Y*nnp.sin(th)
             Yr  = Y*nnp.cos(th) - X*nnp.sin(th)
