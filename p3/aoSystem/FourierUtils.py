@@ -1441,6 +1441,75 @@ def find_contour_points(image, level):
     above_y, above_x = nnp.where(above_crop)
     above_y, above_x = above_y + y0, above_x + x0
 
+    # The vectorized version is bit-identical (float64) and faster up to a few
+    # thousand above-threshold pixels; beyond ~8000 the full distance matrix
+    # costs more than the Python loop it replaces.
+    if 4 < len(above_x) <= 6000 and image.dtype == nnp.float64 and nnp.asarray(level).dtype == nnp.float64:
+        contour_points = _contour_points_vectorized(image, level, boundary_x, boundary_y,
+                                                    above_x, above_y, peak_x, peak_y)
+    else:
+        contour_points = _contour_points_loop(image, level, boundary_x, boundary_y, distances,
+                                              above_x, above_y, peak_x, peak_y)
+
+    if not contour_points:
+        contour_points.append(0)
+        return contour_points
+
+    contour_points = nnp.array(contour_points)
+
+    # Filter outliers
+    distances_from_peak = nnp.sqrt(nnp.sum((contour_points - [peak_x, peak_y])**2, axis=1))
+    med_distance = nnp.median(distances_from_peak)
+    std_distance = nnp.std(distances_from_peak)
+    mask = nnp.abs(distances_from_peak - med_distance) < 2 * std_distance
+    contour_points = contour_points[mask]
+
+    return contour_points
+
+
+def _contour_points_vectorized(image, level, boundary_x, boundary_y, above_x, above_y, peak_x, peak_y,
+                               max_elements=4_000_000):
+    """Same computation as _contour_points_loop for float64 images, in blocks of
+    boundary points. Each row of the distance matrix goes through the same
+    argpartition kernel as the 1D call of the loop and every other operation is
+    elementwise in the same order, so the points are bit-identical."""
+    contour_points = []
+    n_above = len(above_x)
+    block = max(1, max_elements // n_above)
+    for i0 in range(0, len(boundary_x), block):
+        bx = boundary_x[i0:i0+block]
+        by = boundary_y[i0:i0+block]
+        # Find closest points above threshold
+        dists_to_above = nnp.sqrt((above_y[None, :] - by[:, None])**2 + (above_x[None, :] - bx[:, None])**2)
+        nearest_indices = nnp.argpartition(dists_to_above, 4, axis=1)[:, :4]
+        nx, ny = above_x[nearest_indices], above_y[nearest_indices]
+        # Farthest of them from the peak
+        dists_from_peak = nnp.sqrt((nx - peak_x)**2 + (ny - peak_y)**2)
+        farthest_idx = nnp.argmax(dists_from_peak, axis=1)
+        rows = nnp.arange(len(bx))
+        fx, fy = nx[rows, farthest_idx], ny[rows, farthest_idx]
+        far_val = image[fy, fx]
+        curr_val = image[by, bx]
+        # Direction vector from peak to farthest point
+        dx, dy = fx - peak_x, fy - peak_y
+        direction_norm = nnp.sqrt(dx**2 + dy**2)
+        safe_norm = nnp.where(direction_norm > 0, direction_norm, 1.0)
+        dir_x = nnp.where(direction_norm > 0, dx / safe_norm, dx)
+        dir_y = nnp.where(direction_norm > 0, dy / safe_norm, dy)
+        # Interpolation on the line
+        ok = (curr_val < level) & (level < far_val)
+        t = (level - curr_val[ok]) / (far_val[ok] - curr_val[ok])
+        curr_dist = nnp.sqrt((bx[ok] - peak_x)**2 + (by[ok] - peak_y)**2)
+        far_dist = direction_norm[ok]
+        interp_dist = curr_dist + t * (far_dist - curr_dist)
+        px = peak_x + dir_x[ok] * interp_dist
+        py = peak_y + dir_y[ok] * interp_dist
+        contour_points.extend(nnp.column_stack((px, py)).tolist())
+    return contour_points
+
+
+def _contour_points_loop(image, level, boundary_x, boundary_y, distances, above_x, above_y, peak_x, peak_y):
+    contour_points = []
     # For every edge point
     for x, y, d in zip(boundary_x, boundary_y, distances):
         # Find closest points above threshold
@@ -1486,20 +1555,6 @@ def find_contour_points(image, level):
             py = peak_y + direction[1] * interp_dist
 
             contour_points.append([px, py])
-
-    if not contour_points:
-        contour_points.append(0)
-        return contour_points
-
-    contour_points = nnp.array(contour_points)
-
-    # Filter outliers
-    distances_from_peak = nnp.sqrt(nnp.sum((contour_points - [peak_x, peak_y])**2, axis=1))
-    med_distance = nnp.median(distances_from_peak)
-    std_distance = nnp.std(distances_from_peak)
-    mask = nnp.abs(distances_from_peak - med_distance) < 2 * std_distance
-    contour_points = contour_points[mask]
-
     return contour_points
 
 
