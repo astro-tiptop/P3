@@ -11,7 +11,6 @@ from . import np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray, asnumpy
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import warnings
-from astropy.modeling import fitting, models
 from matplotlib.path import Path
 from scipy import ndimage
 from scipy.interpolate import CubicSpline, interp1d
@@ -1670,6 +1669,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
                 ym = wy[wr.argmax()]
                 theta = nnp.mean(180*nnp.arctan2(ym, xm)/nnp.pi)
         elif method == 'gaussian':
+            from astropy.modeling import fitting, models  # deferred: slow to import (~0.7 s)
             # initial guess of the FWHM
             fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
 
@@ -1686,6 +1686,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
             fwhmY = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.y_stddev.value*pixelScale)
             theta = g.theta.value*180/np.pi
         elif method == 'moffat':      
+            from astropy.modeling import fitting, models
             # initial guess of the FWHM
             fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
 
