@@ -263,7 +263,9 @@ def psd2psf(psd,pixelScale):
     return otf2psf(fft.fftshift(psd2otf(psd,pixelScale)))
 
 def psf2otf(psf):
-    return fft.fft2(fft.fftshift(psf))/psf.sum()
+    # ifftshift moves the centre pixel n//2 to the origin for both even and odd
+    # sizes (fftshift does it only for even sizes; inverse of otf2psf)
+    return fft.fft2(fft.ifftshift(psf))/psf.sum()
 
 def pupil2otf(pupil, phase, overSampling):
     if np.all(phase == 0):
@@ -395,14 +397,29 @@ def telescopeOtf(pupil,samp):
 
     samp = float(asnumpy(samp).ravel()[0])
 
+    # OTF = pupil autocorrelation = IFFT(|FFT(P)|^2). FFT(P)^2 would be the
+    # convolution P*P, equal to it only for a pupil centrosymmetric about the
+    # FFT origin, which an even-sized centred pupil is not: it gave negative
+    # PSF lobes and a 1-2 % too high diffraction-limited peak.
     if samp >1:
         pup_pad = enlargeSupport(pupil,samp)
-        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+        F = fft.fft2(fft.fftshift(pup_pad))
+        otf = fft.fftshift(fft.ifft2(F*F.conj()))
     else:
-        factor = nnp.ceil(1/samp)
+        # Pixels coarser than lambda/D: compute the DL PSF at samp*factor >= 1 and
+        # point-sample it every `factor` pixels, keeping the peak on the centre
+        # pixel (aliasing included). Resizing the OTF array instead kept the fine
+        # pixel scale, i.e. returned the PSF at samp*factor (Strehl ~3x too high).
+        factor = int(nnp.ceil(1/samp))
         pup_pad = enlargeSupport(pupil,samp*factor)
-        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
-        otf = interpolateSupport(otf,float(otf.shape[0]/factor),kind='bilinear')
+        F = fft.fft2(fft.fftshift(pup_pad))
+        otf = fft.fftshift(fft.ifft2(F*F.conj()))
+        psf_fine = otf2psf(otf/otf.max(), psfInOnePix=True)
+        c = psf_fine.shape[0]//2
+        half = c//factor
+        idx = c + factor*nnp.arange(-half, half)     # centre ends up on pixel half = n//2
+        psf_coarse = psf_fine[idx][:, idx]
+        otf = fft.fftshift(psf2otf(psf_coarse))
     return otf/otf.max()
 
 
@@ -704,21 +721,23 @@ def cropSupport(im,n):
 def enlargeSupport(cube, n):
 
     n = float(asnumpy(n).ravel()[0])
+    # round, not int(): (n-1)*nx/2 is often a float like 64.99999999999999,
+    # and truncating it shrinks the support (wrong sampling of the result)
 
     if np.ndim(cube) == 2:
         nx, ny = cube.shape
-        pad_x = int((n - 1) * nx / 2)
-        pad_y = int((n - 1) * ny / 2)
+        pad_x = int(round((n - 1) * nx / 2))
+        pad_y = int(round((n - 1) * ny / 2))
         return np.pad(cube, ((pad_x, pad_x), (pad_y, pad_y)))
     elif np.ndim(cube) == 3:
         nx, ny, nz = cube.shape
         if nx == ny:
-            pad_x = int((n - 1) * nx / 2)
-            pad_y = int((n - 1) * ny / 2)
+            pad_x = int(round((n - 1) * nx / 2))
+            pad_y = int(round((n - 1) * ny / 2))
             return np.pad(cube, ((pad_x, pad_x), (pad_y, pad_y), (0, 0)))
         elif ny == nz:
-            pad_y = int((n - 1) * ny / 2)
-            pad_z = int((n - 1) * nz / 2)
+            pad_y = int(round((n - 1) * ny / 2))
+            pad_z = int(round((n - 1) * nz / 2))
             return np.pad(cube, ((0, 0), (pad_y, pad_y), (pad_z, pad_z)))
 
     raise ValueError("enlargeSupport only supports 2D arrays and 3D cubes")
@@ -1028,7 +1047,9 @@ def getEnsquaredEnergy(psf):
 
     EE = nnp.zeros(nEE + 1, dtype=psf_cpu.dtype)
     for n in range(nEE + 1):
-        EE[n] = psf_cpu[y0 - n:y0 + n + 1, x0 - n:x0 + n + 1].sum()
+        # clamp at 0: a negative start would wrap around (empty or wrong box) for odd
+        # sizes or off-centre peaks; boxes crossing the edge are truncated there
+        EE[n] = psf_cpu[max(y0 - n, 0):y0 + n + 1, max(x0 - n, 0):x0 + n + 1].sum()
     return EE / S
 
 def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):
@@ -1410,12 +1431,23 @@ def fwhm_1d(profile):
     # Points at the left and right edges of the region above the threshold
     left, right = indices[0], indices[-1]
     
-    # Interpolation to obtain a more precise estimate
-    f = interp1d(profile[left-1:left+2], [left-1, left, left+1], kind='linear', bounds_error=False, fill_value="extrapolate")
-    x1 = f(half_max)
+    # Interpolation to obtain a more precise estimate. If the region above
+    # half maximum touches the array edge there is no crossing on that side:
+    # the edge is used and the FWHM is a lower bound (the 3-point window
+    # would otherwise be truncated and interp1d would raise).
+    if left == 0 or right == profile.size - 1:
+        print('fwhm_1d: half maximum not crossed inside the profile, FWHM truncated at the edge')
+    if left == 0:
+        x1 = 0.0
+    else:
+        f = interp1d(profile[left-1:left+2], [left-1, left, left+1], kind='linear', bounds_error=False, fill_value="extrapolate")
+        x1 = f(half_max)
 
-    f = interp1d(profile[right-1:right+2], [right-1, right, right+1], kind='linear', bounds_error=False, fill_value="extrapolate")
-    x2 = f(half_max)
+    if right == profile.size - 1:
+        x2 = float(right)
+    else:
+        f = interp1d(profile[right-1:right+2], [right-1, right, right+1], kind='linear', bounds_error=False, fill_value="extrapolate")
+        x2 = f(half_max)
     
     return abs(x2 - x1)  # Distance between the two points FWHM
 
@@ -1577,6 +1609,23 @@ def _contour_points_loop(image, level, boundary_x, boundary_y, distances, above_
     return contour_points
 
 
+def _zoom_peak_centred(image, factor, order=3):
+    """Cubic upsampling by an integer factor with the exact scale, mapping pixel
+    n//2 (where P3/MASTSEL put the PSF peak) onto pixel m//2.
+
+    scnd.zoom aligns the array corners instead: scale (m-1)/(n-1) and the peak
+    moved by half a pixel, so for an even factor it fell between pixels and the
+    contour FWHM (rays from the argmax pixel) collapsed (Airy at samp 1-1.9 with
+    rebin=2: 0.3-0.9 instead of 1.03 lambda/D).
+    """
+    factor = int(factor)
+    n_y, n_x = image.shape
+    m_y, m_x = factor * n_y, factor * n_x
+    offset = [n_y // 2 - (m_y // 2) / factor, n_x // 2 - (m_x // 2) / factor]
+    return scnd.affine_transform(np.asarray(image), np.asarray([1 / factor, 1 / factor]),
+                                 offset=offset, output_shape=(m_y, m_x), order=order)
+
+
 def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_guess=2):
             
     pixelScale = float(nnp.asarray(cpuArray(pixelScale)).reshape(-1)[0])
@@ -1589,7 +1638,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     # Interpolation            
     Ny,Nx = psf.shape
     if rebin > 1:
-        im_hr = cpuArray(interpolateSupport(psf,rebin*nnp.array([Nx,Ny])))
+        im_hr = cpuArray(_zoom_peak_centred(psf, rebin))
     else:
         im_hr = cpuArray(psf)
 
@@ -1764,10 +1813,10 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=Fa
         # Get the Strehl
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
-        psfDL   = otf2psf(otfDL,psfInOnePix=psfInOnePix)
-        psfDL.clip(0, None)
+        # clip returns a new array: this also leaves the caller's PSF untouched
+        psfDL   = otf2psf(otfDL,psfInOnePix=psfInOnePix).clip(0, None)
         psfDL  /= psfDL.sum()
-        psf.clip(0, None)
+        psf     = psf.clip(0, None)
         psf    /= psf.sum()
         # Get the Strehl
         SR      = psf.max()/psfDL.max()
