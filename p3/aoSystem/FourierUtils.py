@@ -1125,44 +1125,39 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
             return r_vals, profile
 
     # === Build radial coordinate array ===
-    y, x = nnp.indices(image.shape, dtype=float)
-    x -= center[0]
-    y -= center[1]
+    # 1D coordinates broadcast to 2D: avoids allocating two full index arrays
+    x = nnp.arange(image.shape[1], dtype=float)[None, :] - center[0]
+    y = nnp.arange(image.shape[0], dtype=float)[:, None] - center[1]
 
     r = nnp.sqrt(x ** 2 + y ** 2) * pixelscale / binsize  # radius in bin size steps
 
     image = cpuArray(image)
     if pa_range is None:
         # Use full image
-        ind = nnp.argsort(r.flat)
-        sr = r.flat[ind]  # sorted r
-        sim = image.flat[ind]  # sorted image
+        r_sel = r.ravel()
+        im_sel = image.ravel()
     else:
         # Apply the PA range restriction
         pa = nnp.rad2deg(nnp.arctan2(-x, y))  # Note the (-x,y) convention is needed for astronomical PA convention
         mask = (pa >= pa_range[0]) & (pa <= pa_range[1])
-        ind = nnp.argsort(r[mask].flat)
-        sr = r[mask].flat[ind]
-        sim = image[mask].flat[ind]
+        r_sel = r[mask]
+        im_sel = image[mask]
 
-    # DISCRETE BINNING: int conversion of radii
-    ri = nnp.round(sr).astype(int)  # sorted r as int
-    deltar = ri[1:] - ri[:-1]  # assume all radii represented (more work if not)
-    rind = nnp.where(deltar)[0]
-    nr = rind[1:] - rind[:-1]  # number in radius bin
-    csim = nnp.nan_to_num(sim).cumsum(dtype=float)  # cumulative sum to figure out sums for each bin
-    # nnp.nancumsum is implemented in >1.12
-    tbin = csim[rind[1:]] - csim[rind[:-1]]  # sum for image values in radius bins
-    radialprofile = tbin / nr
-
-    # pre-pend the initial element that the above code misses.
-    radialprofile2 = nnp.empty(len(radialprofile) + 1)
-    if rind[0] != 0:
-        radialprofile2[0] = csim[rind[0]] / (
-                rind[0] + 1)  # if there are multiple elements in the center bin, average them
-    else:
-        radialprofile2[0] = csim[0]  # otherwise if there's just one then just take it.
-    radialprofile2[1:] = radialprofile
+    # DISCRETE BINNING: int conversion of radii (np.round: half to even).
+    # Histogram with bincount, O(N), instead of sorting the pixels by radius.
+    # Only the radial bins that contain pixels are kept, in increasing radius
+    # order; as in the original sort-based algorithm, the outermost bin is
+    # dropped from both the profile and the EE.
+    ri = nnp.round(r_sel).astype(int)
+    counts = nnp.bincount(ri)
+    weights = im_sel.astype(float, copy=False)
+    if not nnp.isfinite(weights).all():  # nan_to_num copies: only pay for it when needed
+        weights = nnp.nan_to_num(weights)
+    sums = nnp.bincount(ri, weights=weights)
+    present = counts > 0
+    counts, sums = counts[present][:-1], sums[present][:-1]
+    csim_bins = nnp.cumsum(sums)  # encircled flux up to the end of each bin
+    radialprofile2 = sums / counts
 
     rr = nnp.arange(r.min(), r.min()+len(radialprofile2)) * binsize
     if maxradius is not None:
@@ -1200,7 +1195,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
     if nargout == 1:
         return radialprofile2
     if ee:
-        ee = csim[rind]
+        ee = csim_bins.copy()
         ee /= nnp.max(ee)
         return rr, radialprofile2, ee
     return rr, radialprofile2
