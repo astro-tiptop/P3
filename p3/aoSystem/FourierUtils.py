@@ -1411,13 +1411,26 @@ def find_contour_points(image, level):
     # Find points above threshold
     above_threshold = image > level
 
+    # Work on the bounding box of the above-threshold pixels plus a 1-pixel
+    # margin: it contains every boundary pixel, and the row-major order of the
+    # points (hence argpartition tie-breaking below) is unchanged, so the
+    # result is identical to processing the full image.
+    rows = nnp.flatnonzero(above_threshold.any(axis=1))
+    if rows.size == 0:
+        return [0]  # same as the no-contour-point exit below
+    cols = nnp.flatnonzero(above_threshold.any(axis=0))
+    y0, y1 = max(rows[0] - 1, 0), min(rows[-1] + 2, image.shape[0])
+    x0, x1 = max(cols[0] - 1, 0), min(cols[-1] + 2, image.shape[1])
+    above_crop = above_threshold[y0:y1, x0:x1]
+
     # Find boundary points
     kernel = nnp.array([[0,1,0], [1,1,1], [0,1,0]], dtype=bool)
-    dilated = ndimage.binary_dilation(above_threshold, kernel)
-    boundary_points = dilated & ~above_threshold
+    dilated = ndimage.binary_dilation(above_crop, kernel)
+    boundary_points = dilated & ~above_crop
 
     # Get coordinates of boundary points
     boundary_y, boundary_x = nnp.where(boundary_points)
+    boundary_y, boundary_x = boundary_y + y0, boundary_x + x0
 
     # Calculate distance from peak for each boundary point
     distances = nnp.sqrt((boundary_y - peak_y)**2 + (boundary_x - peak_x)**2)
@@ -1425,7 +1438,8 @@ def find_contour_points(image, level):
     contour_points = []
 
     # Get coordinates of above-threshold points
-    above_y, above_x = nnp.where(above_threshold)
+    above_y, above_x = nnp.where(above_crop)
+    above_y, above_x = above_y + y0, above_x + x0
 
     # For every edge point
     for x, y, d in zip(boundary_x, boundary_y, distances):
