@@ -1429,12 +1429,23 @@ def fwhm_1d(profile):
     # Points at the left and right edges of the region above the threshold
     left, right = indices[0], indices[-1]
     
-    # Interpolation to obtain a more precise estimate
-    f = interp1d(profile[left-1:left+2], [left-1, left, left+1], kind='linear', bounds_error=False, fill_value="extrapolate")
-    x1 = f(half_max)
+    # Interpolation to obtain a more precise estimate. If the region above
+    # half maximum touches the array edge there is no crossing on that side:
+    # the edge is used and the FWHM is a lower bound (the 3-point window
+    # would otherwise be truncated and interp1d would raise).
+    if left == 0 or right == profile.size - 1:
+        print('fwhm_1d: half maximum not crossed inside the profile, FWHM truncated at the edge')
+    if left == 0:
+        x1 = 0.0
+    else:
+        f = interp1d(profile[left-1:left+2], [left-1, left, left+1], kind='linear', bounds_error=False, fill_value="extrapolate")
+        x1 = f(half_max)
 
-    f = interp1d(profile[right-1:right+2], [right-1, right, right+1], kind='linear', bounds_error=False, fill_value="extrapolate")
-    x2 = f(half_max)
+    if right == profile.size - 1:
+        x2 = float(right)
+    else:
+        f = interp1d(profile[right-1:right+2], [right-1, right, right+1], kind='linear', bounds_error=False, fill_value="extrapolate")
+        x2 = f(half_max)
     
     return abs(x2 - x1)  # Distance between the two points FWHM
 

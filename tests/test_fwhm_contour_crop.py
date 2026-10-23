@@ -108,6 +108,10 @@ def test_getfwhm_contour_identical(old, name):
     img = CASES[name]()
     new = _run(getFWHM, img, 1.7, method='contour', nargout=4)
     ref = _run(old.getFWHM, img, 1.7, method='contour', nargout=4)
+    if ref[0] == 'err' and issubclass(ref[1], ValueError) and name.startswith('near_border'):
+        # half-max region touching the edge: the old fwhm_1d raised, the fixed one returns
+        assert new[0] == 'ok'
+        return
     _assert_identical(new, ref)
 
 
@@ -119,15 +123,16 @@ def test_getfwhm_contour_rebin2_identical(old, name):
     _assert_identical(new, ref)
 
 
-def test_peak_on_edge_raises_same_error(old):
-    # Pre-existing bug: a peak exactly on the edge row/column makes fwhm_1d
-    # raise ValueError (profile[left-1:left+2] is too short) in BOTH versions.
+def test_peak_on_edge_no_longer_raises(old):
+    # A peak exactly on the edge row made fwhm_1d raise ValueError
+    # (profile[left-1:left+2] too short) in the old code; fwhm_1d now uses the
+    # edge as the crossing on that side (FWHM truncated, a lower bound).
     img = _gauss(101, 101, 3, 3, cx=50, cy=0)
-    new = _run(getFWHM, img, 1.0, method='contour', nargout=4)
     ref = _run(old.getFWHM, img, 1.0, method='contour', nargout=4)
-    assert new[0] == ref[0] == 'err'
-    assert new[1] is ref[1]
-    assert issubclass(new[1], ValueError)
+    assert ref[0] == 'err' and issubclass(ref[1], ValueError)
+    new = _run(getFWHM, img, 1.0, method='contour', nargout=4)
+    assert new[0] != 'err'
+    assert all(np.isfinite(v) and v > 0 for v in new[1][:2])
 
 
 @pytest.mark.parametrize('name', ['round_odd', 'two_blobs', 'near_border'])
