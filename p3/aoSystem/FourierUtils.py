@@ -1047,7 +1047,9 @@ def getEnsquaredEnergy(psf):
 
     EE = nnp.zeros(nEE + 1, dtype=psf_cpu.dtype)
     for n in range(nEE + 1):
-        EE[n] = psf_cpu[y0 - n:y0 + n + 1, x0 - n:x0 + n + 1].sum()
+        # clamp at 0: a negative start would wrap around (empty or wrong box) for odd
+        # sizes or off-centre peaks; boxes crossing the edge are truncated there
+        EE[n] = psf_cpu[max(y0 - n, 0):y0 + n + 1, max(x0 - n, 0):x0 + n + 1].sum()
     return EE / S
 
 def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):
