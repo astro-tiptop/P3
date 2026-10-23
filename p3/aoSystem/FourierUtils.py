@@ -10,6 +10,7 @@ from . import np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray, asnumpy
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import functools
 import warnings
 from matplotlib.path import Path
 from scipy import ndimage
@@ -1039,6 +1040,22 @@ def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):
         return ee,rr
 
 
+@functools.lru_cache(maxsize=4)
+def _radial_grid(shape, cx, cy, pixelscale, binsize):
+    """Radius map in bin-size steps, its np.round integer bins (flattened), the
+    pixel count per bin and the minimum radius, for radial_profile. Returned
+    arrays are read-only."""
+    # 1D coordinates broadcast to 2D: avoids allocating two full index arrays
+    x = nnp.arange(shape[1], dtype=float)[None, :] - cx
+    y = nnp.arange(shape[0], dtype=float)[:, None] - cy
+    r = nnp.sqrt(x ** 2 + y ** 2) * pixelscale / binsize
+    ri = nnp.round(r.ravel()).astype(int)
+    counts = nnp.bincount(ri)
+    for a in (r, ri, counts):
+        a.flags.writeable = False
+    return r, ri, counts, r.min()
+
+
 def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=False, binsize=None, maxradius=None,
                    normalize='None', pa_range=None, nargout=2, supersamp=None, slice=slice, 
                    polar_grid=None, r_vals=None, verbose=False):
@@ -1124,31 +1141,34 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
             return r_vals, profile
 
     # === Build radial coordinate array ===
-    # 1D coordinates broadcast to 2D: avoids allocating two full index arrays
-    x = nnp.arange(image.shape[1], dtype=float)[None, :] - center[0]
-    y = nnp.arange(image.shape[0], dtype=float)[:, None] - center[1]
-
-    r = nnp.sqrt(x ** 2 + y ** 2) * pixelscale / binsize  # radius in bin size steps
+    # radius in bin size steps, its integer bins and their pixel counts: cached,
+    # since the many PSFs of a simulation share shape, centre and pixel scale
+    r, ri_full, counts_full, r_min = _radial_grid(image.shape, float(center[0]), float(center[1]),
+                                                  float(pixelscale), float(binsize))
 
     image = cpuArray(image)
     if pa_range is None:
         # Use full image
         r_sel = r.ravel()
         im_sel = image.ravel()
+        ri = ri_full
+        counts = counts_full
     else:
         # Apply the PA range restriction
+        x = nnp.arange(image.shape[1], dtype=float)[None, :] - center[0]
+        y = nnp.arange(image.shape[0], dtype=float)[:, None] - center[1]
         pa = nnp.rad2deg(nnp.arctan2(-x, y))  # Note the (-x,y) convention is needed for astronomical PA convention
         mask = (pa >= pa_range[0]) & (pa <= pa_range[1])
         r_sel = r[mask]
         im_sel = image[mask]
+        # DISCRETE BINNING: int conversion of radii (np.round: half to even).
+        ri = nnp.round(r_sel).astype(int)
+        counts = nnp.bincount(ri)
 
-    # DISCRETE BINNING: int conversion of radii (np.round: half to even).
     # Histogram with bincount, O(N), instead of sorting the pixels by radius.
     # Only the radial bins that contain pixels are kept, in increasing radius
     # order; as in the original sort-based algorithm, the outermost bin is
     # dropped from both the profile and the EE.
-    ri = nnp.round(r_sel).astype(int)
-    counts = nnp.bincount(ri)
     weights = im_sel.astype(float, copy=False)
     if not nnp.isfinite(weights).all():  # nan_to_num copies: only pay for it when needed
         weights = nnp.nan_to_num(weights)
@@ -1158,7 +1178,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
     csim_bins = nnp.cumsum(sums)  # encircled flux up to the end of each bin
     radialprofile2 = sums / counts
 
-    rr = nnp.arange(r.min(), r.min()+len(radialprofile2)) * binsize
+    rr = nnp.arange(r_min, r_min+len(radialprofile2)) * binsize
     if maxradius is not None:
         crop = rr < maxradius
         rr = rr[crop]
