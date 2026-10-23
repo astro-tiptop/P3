@@ -263,7 +263,9 @@ def psd2psf(psd,pixelScale):
     return otf2psf(fft.fftshift(psd2otf(psd,pixelScale)))
 
 def psf2otf(psf):
-    return fft.fft2(fft.fftshift(psf))/psf.sum()
+    # ifftshift moves the centre pixel n//2 to the origin for both even and odd
+    # sizes (fftshift does it only for even sizes; inverse of otf2psf)
+    return fft.fft2(fft.ifftshift(psf))/psf.sum()
 
 def pupil2otf(pupil, phase, overSampling):
     if np.all(phase == 0):
@@ -404,11 +406,20 @@ def telescopeOtf(pupil,samp):
         F = fft.fft2(fft.fftshift(pup_pad))
         otf = fft.fftshift(fft.ifft2(F*F.conj()))
     else:
-        factor = nnp.ceil(1/samp)
+        # Pixels coarser than lambda/D: compute the DL PSF at samp*factor >= 1 and
+        # point-sample it every `factor` pixels, keeping the peak on the centre
+        # pixel (aliasing included). Resizing the OTF array instead kept the fine
+        # pixel scale, i.e. returned the PSF at samp*factor (Strehl ~3x too high).
+        factor = int(nnp.ceil(1/samp))
         pup_pad = enlargeSupport(pupil,samp*factor)
         F = fft.fft2(fft.fftshift(pup_pad))
         otf = fft.fftshift(fft.ifft2(F*F.conj()))
-        otf = interpolateSupport(otf,float(otf.shape[0]/factor),kind='bilinear')
+        psf_fine = otf2psf(otf/otf.max(), psfInOnePix=True)
+        c = psf_fine.shape[0]//2
+        half = c//factor
+        idx = c + factor*nnp.arange(-half, half)     # centre ends up on pixel half = n//2
+        psf_coarse = psf_fine[idx][:, idx]
+        otf = fft.fftshift(psf2otf(psf_coarse))
     return otf/otf.max()
 
 
