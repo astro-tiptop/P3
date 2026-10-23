@@ -395,13 +395,19 @@ def telescopeOtf(pupil,samp):
 
     samp = float(asnumpy(samp).ravel()[0])
 
+    # OTF = pupil autocorrelation = IFFT(|FFT(P)|^2). FFT(P)^2 would be the
+    # convolution P*P, equal to it only for a pupil centrosymmetric about the
+    # FFT origin, which an even-sized centred pupil is not: it gave negative
+    # PSF lobes and a 1-2 % too high diffraction-limited peak.
     if samp >1:
         pup_pad = enlargeSupport(pupil,samp)
-        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+        F = fft.fft2(fft.fftshift(pup_pad))
+        otf = fft.fftshift(fft.ifft2(F*F.conj()))
     else:
         factor = nnp.ceil(1/samp)
         pup_pad = enlargeSupport(pupil,samp*factor)
-        otf = fft.fftshift(fft.ifft2(fft.fft2(fft.fftshift(pup_pad))**2))
+        F = fft.fft2(fft.fftshift(pup_pad))
+        otf = fft.fftshift(fft.ifft2(F*F.conj()))
         otf = interpolateSupport(otf,float(otf.shape[0]/factor),kind='bilinear')
     return otf/otf.max()
 
@@ -1764,10 +1770,10 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=Fa
         # Get the Strehl
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
-        psfDL   = otf2psf(otfDL,psfInOnePix=psfInOnePix)
-        psfDL.clip(0, None)
+        # clip returns a new array: this also leaves the caller's PSF untouched
+        psfDL   = otf2psf(otfDL,psfInOnePix=psfInOnePix).clip(0, None)
         psfDL  /= psfDL.sum()
-        psf.clip(0, None)
+        psf     = psf.clip(0, None)
         psf    /= psf.sum()
         # Get the Strehl
         SR      = psf.max()/psfDL.max()
