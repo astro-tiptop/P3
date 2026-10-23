@@ -710,21 +710,23 @@ def cropSupport(im,n):
 def enlargeSupport(cube, n):
 
     n = float(asnumpy(n).ravel()[0])
+    # round, not int(): (n-1)*nx/2 is often a float like 64.99999999999999,
+    # and truncating it shrinks the support (wrong sampling of the result)
 
     if np.ndim(cube) == 2:
         nx, ny = cube.shape
-        pad_x = int((n - 1) * nx / 2)
-        pad_y = int((n - 1) * ny / 2)
+        pad_x = int(round((n - 1) * nx / 2))
+        pad_y = int(round((n - 1) * ny / 2))
         return np.pad(cube, ((pad_x, pad_x), (pad_y, pad_y)))
     elif np.ndim(cube) == 3:
         nx, ny, nz = cube.shape
         if nx == ny:
-            pad_x = int((n - 1) * nx / 2)
-            pad_y = int((n - 1) * ny / 2)
+            pad_x = int(round((n - 1) * nx / 2))
+            pad_y = int(round((n - 1) * ny / 2))
             return np.pad(cube, ((pad_x, pad_x), (pad_y, pad_y), (0, 0)))
         elif ny == nz:
-            pad_y = int((n - 1) * ny / 2)
-            pad_z = int((n - 1) * nz / 2)
+            pad_y = int(round((n - 1) * ny / 2))
+            pad_z = int(round((n - 1) * nz / 2))
             return np.pad(cube, ((0, 0), (pad_y, pad_y), (pad_z, pad_z)))
 
     raise ValueError("enlargeSupport only supports 2D arrays and 3D cubes")
