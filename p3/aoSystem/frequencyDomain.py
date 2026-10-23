@@ -85,12 +85,15 @@ class frequencyDomain():
     def _computeStaticOtf(self):
         """Static (NCPA) and diffraction-limited OTFs and the static phase map, from
         the telescope state at the time of the first access (code that changes the
-        static aberrations afterwards assigns new OTFs explicitly)."""
-        self._otfNCPA, self._otfDL, self._phaseMap = getStaticOTF(self.ao.tel,
-                                                                  self.nOtf,
-                                                                  self.sampRef,
-                                                                  self.wvlRef,
-                                                                  dtype=self.dtype)
+        static aberrations afterwards assigns new OTFs explicitly). Only the fields
+        still unset are filled: e.g. sf_3D_to_psf_3D assigns otfNCPA/phaseMap and
+        then reads otfDL, which must not overwrite them."""
+        otfNCPA, otfDL, phaseMap = getStaticOTF(self.ao.tel, self.nOtf, self.sampRef,
+                                                self.wvlRef, dtype=self.dtype)
+        if self._otfNCPA is None:
+            self._otfNCPA, self._phaseMap = otfNCPA, phaseMap
+        if self._otfDL is None:
+            self._otfDL = otfDL
 
     @property
     def otfNCPA(self):
