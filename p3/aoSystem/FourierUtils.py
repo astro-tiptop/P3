@@ -1607,6 +1607,23 @@ def _contour_points_loop(image, level, boundary_x, boundary_y, distances, above_
     return contour_points
 
 
+def _zoom_peak_centred(image, factor, order=3):
+    """Cubic upsampling by an integer factor with the exact scale, mapping pixel
+    n//2 (where P3/MASTSEL put the PSF peak) onto pixel m//2.
+
+    scnd.zoom aligns the array corners instead: scale (m-1)/(n-1) and the peak
+    moved by half a pixel, so for an even factor it fell between pixels and the
+    contour FWHM (rays from the argmax pixel) collapsed (Airy at samp 1-1.9 with
+    rebin=2: 0.3-0.9 instead of 1.03 lambda/D).
+    """
+    factor = int(factor)
+    n_y, n_x = image.shape
+    m_y, m_x = factor * n_y, factor * n_x
+    offset = [n_y // 2 - (m_y // 2) / factor, n_x // 2 - (m_x // 2) / factor]
+    return scnd.affine_transform(np.asarray(image), np.asarray([1 / factor, 1 / factor]),
+                                 offset=offset, output_shape=(m_y, m_x), order=order)
+
+
 def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_guess=2):
             
     pixelScale = float(nnp.asarray(cpuArray(pixelScale)).reshape(-1)[0])
@@ -1619,7 +1636,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
     # Interpolation            
     Ny,Nx = psf.shape
     if rebin > 1:
-        im_hr = cpuArray(interpolateSupport(psf,rebin*nnp.array([Nx,Ny])))
+        im_hr = cpuArray(_zoom_peak_centred(psf, rebin))
     else:
         im_hr = cpuArray(psf)
 

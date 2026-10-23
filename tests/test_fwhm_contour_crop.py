@@ -115,12 +115,29 @@ def test_getfwhm_contour_identical(old, name):
     _assert_identical(new, ref)
 
 
-@pytest.mark.parametrize('name', ['round_odd', 'rotated', 'noisy', 'two_blobs'])
-def test_getfwhm_contour_rebin2_identical(old, name):
-    img = CASES[name]()
-    new = _run(getFWHM, img, 1.7, rebin=2, method='contour', nargout=4)
-    ref = _run(old.getFWHM, img, 1.7, rebin=2, method='contour', nargout=4)
-    _assert_identical(new, ref)
+@pytest.mark.parametrize('samp', [1.5, 1.9])
+def test_getfwhm_rebin2_airy(samp):
+    # rebin > 1 used to go through scnd.zoom (corner-aligned: wrong scale and the
+    # peak moved by half a pixel, between pixels for rebin=2): contour FWHM of a
+    # point-sampled Airy was 0.3-0.9 lambda/D. Now within 3 % of 1.029 lambda/D.
+    from scipy.special import j1
+    n = 128
+    y, x = np.indices((n, n))
+    v = np.pi * np.hypot(x - n // 2, y - n // 2) / samp
+    img = np.ones_like(v)
+    m = v > 0
+    img[m] = (2 * j1(v[m]) / v[m]) ** 2
+    fwhm = getFWHM(img, 1 / samp, method='contour', rebin=2, nargout=1)
+    assert fwhm == pytest.approx(1.029, rel=0.03)
+
+
+def test_getfwhm_rebin2_gaussian():
+    # Gaussian sigma = 1.2 px centred on pixel n//2: FWHM = 2 sqrt(2 ln 2) sigma
+    n, sigma = 64, 1.2
+    y, x = np.indices((n, n))
+    img = np.exp(-((x - n // 2) ** 2 + (y - n // 2) ** 2) / (2 * sigma ** 2))
+    fwhm = getFWHM(img, 1.0, method='contour', rebin=2, nargout=1)
+    assert fwhm == pytest.approx(2 * np.sqrt(2 * np.log(2)) * sigma, rel=0.03)
 
 
 def test_peak_on_edge_no_longer_raises(old):
