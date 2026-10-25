@@ -681,37 +681,43 @@ class fourierModel:
             clock_rate = [self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)]
             sampTime = 1/self.ao.rtc.holoop['rate']
 
+            # per-DM / per-GS host scalars broadcast on a third axis; masks instead of
+            # boolean indexing, which syncs the device at every call
+            def _last(v):
+                return np.asarray(nnp.asarray(cpuArray(v), dtype=float).reshape(1, 1, -1))
+
+            dm_mask = k[:, :, None] <= _last(self.freq.kc_[:nDm]) # note : circular masking
+            dm_coef = np.asarray(nnp.array([2*i*np.pi*h_dm[j] for j in range(nDm)],
+                                           dtype=self.complex_dtype))
             self.PbetaDM = []
             for s in range(self.ao.src.nSrc):
                 fx = self.ao.src.direction[0, s]*self.freq.kxAO_
                 fy = self.ao.src.direction[1, s]*self.freq.kyAO_
-                PbetaDM = np.zeros([nK, nK, 1, nDm],
-                                   dtype=self.complex_dtype)
-                for j in range(nDm): #loop on DMs
-                    index = k<=self.freq.kc_[j] # note : circular masking
-                    PbetaDM[index, 0, j] = np.exp(2*i*np.pi*h_dm[j]*(fx[index] + fy[index]))
-                self.PbetaDM.append(PbetaDM)
+                PbetaDM = np.where(dm_mask, np.exp(dm_coef*(fx + fy)[:, :, None]), 0)
+                self.PbetaDM.append(PbetaDM[:, :, None, :].astype(self.complex_dtype, copy=False))
 
-            # Computation of the Malpha matrix
+            # Computation of the Malpha matrix (all guide stars of a layer at once)
             wDir_x = nnp.cos(self.ao.atm.wDir*np.pi/180)
             wDir_y = nnp.sin(self.ao.atm.wDir*np.pi/180)
+            kx = self.freq.kxAO_[:, :, None]
+            ky = self.freq.kyAO_[:, :, None]
+            gs_dir = nnp.asarray(cpuArray(self.gs.direction), dtype=float)
+            fxfy = _last(gs_dir[0])*kx + _last(gs_dir[1])*ky
+            d_sub_g = _last(d_sub)
+            sinc_x = np.sinc(d_sub_g*kx)
+            sinc_y = np.sinc(d_sub_g*ky)
+            two_pi_i_k = (2*i*np.pi*k)[:, :, None]
+            t_clock = nnp.asarray([sampTime*clock_rate[g] for g in range(self.nGs)], dtype=float)
             self.MPalphaL = np.zeros([nK, nK, self.nGs, nH],
                                      dtype=self.complex_dtype)
             for h in range(nH):
                 # unsensed layers: zero WFS response -> full residual in spatioTemporalPSD
                 if not self.sensedLayers[h]:
                     continue
-                freq_t = wDir_x[h]*self.freq.kxAO_ + wDir_y[h]*self.freq.kyAO_
-                for g in range(self.nGs):
-                    Alpha = [self.gs.direction[0, g],self.gs.direction[1, g]]
-                    fx = Alpha[0]*self.freq.kxAO_
-                    fy = Alpha[1]*self.freq.kyAO_
-                    www = 2*i*np.pi*k * np.sinc(sampTime*clock_rate[g]*self.ao.atm.wSpeed[h]*freq_t)
-                    self.MPalphaL[:, :, g, h] = www*np.sinc(d_sub[g]*self.freq.kxAO_)\
-                                                   *np.sinc(d_sub[g]*self.freq.kyAO_)\
-                                                   *np.exp(i*2*np.pi*Hs[h]*(fx+fy))
-            fx = None
-            fy = None
+                freq_t = (wDir_x[h]*self.freq.kxAO_ + wDir_y[h]*self.freq.kyAO_)[:, :, None]
+                www = two_pi_i_k * np.sinc(_last(t_clock*float(self.ao.atm.wSpeed[h]))*freq_t)
+                self.MPalphaL[:, :, :, h] = www*sinc_x*sinc_y*np.exp(i*2*np.pi*Hs[h]*fxfy)
+            fx = fy = fxfy = sinc_x = sinc_y = two_pi_i_k = None
             self.Walpha = _small_matmul(self.W,self.MPalphaL)
         if self.reduce_memory:
             self.MPalphaL = None
