@@ -649,6 +649,20 @@ class fourierModel:
         return (bounds_down,bounds_up)
 
 #%% RECONSTRUCTOR DEFINITION
+    def _dmPhasors(self, ax, ay, dtype):
+        """exp(2i pi h_dm (ax kx + ay ky)) inside each DM cut-off (circular), else 0.
+
+        Shape (resAO, resAO, nDm). Masks instead of boolean indexing, which syncs the
+        device at every call.
+        """
+        h_dm = self.ao.dms.heights
+        i = dtype(1j)
+        coef = np.asarray(nnp.array([2*i*np.pi*h for h in h_dm], dtype=dtype))
+        kc = np.asarray(nnp.asarray(cpuArray(self.freq.kc_[:len(h_dm)]), dtype=float))
+        k = np.sqrt(self.freq.k2AO_)[:, :, None]
+        fxfy = (ax*self.freq.kxAO_ + ay*self.freq.kyAO_)[:, :, None]
+        return np.where(k <= kc, np.exp(coef*fxfy), 0).astype(dtype, copy=False)
+
     def spatialReconstructor(self, MV=0):
         """
         Computes the WFS spatial reconstructor and the tomographic reconstructor
@@ -670,8 +684,6 @@ class fourierModel:
 
             # Computation of the Pbeta^DM matrix
             k = np.sqrt(self.freq.k2AO_)
-            h_dm = self.ao.dms.heights
-            nDm = len(h_dm)
             nK = self.freq.resAO
             i = self.complex_dtype(1j)
             nH = self.ao.atm.nL
@@ -681,20 +693,13 @@ class fourierModel:
             clock_rate = [self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)]
             sampTime = 1/self.ao.rtc.holoop['rate']
 
-            # per-DM / per-GS host scalars broadcast on a third axis; masks instead of
-            # boolean indexing, which syncs the device at every call
+            # per-GS host scalars broadcast on a third axis
             def _last(v):
                 return np.asarray(nnp.asarray(cpuArray(v), dtype=float).reshape(1, 1, -1))
 
-            dm_mask = k[:, :, None] <= _last(self.freq.kc_[:nDm]) # note : circular masking
-            dm_coef = np.asarray(nnp.array([2*i*np.pi*h_dm[j] for j in range(nDm)],
-                                           dtype=self.complex_dtype))
-            self.PbetaDM = []
-            for s in range(self.ao.src.nSrc):
-                fx = self.ao.src.direction[0, s]*self.freq.kxAO_
-                fy = self.ao.src.direction[1, s]*self.freq.kyAO_
-                PbetaDM = np.where(dm_mask, np.exp(dm_coef*(fx + fy)[:, :, None]), 0)
-                self.PbetaDM.append(PbetaDM[:, :, None, :].astype(self.complex_dtype, copy=False))
+            self.PbetaDM = [self._dmPhasors(self.ao.src.direction[0, s], self.ao.src.direction[1, s],
+                                            self.complex_dtype)[:, :, None, :]
+                            for s in range(self.ao.src.nSrc)]
 
             # Computation of the Malpha matrix (all guide stars of a layer at once)
             wDir_x = nnp.cos(self.ao.atm.wDir*np.pi/180)
@@ -878,9 +883,7 @@ class fourierModel:
         the model complex dtype.
         """
         tstart = time.time()
-        k = np.sqrt(self.freq.k2AO_)
-        h_dm = self.ao.dms.heights
-        nDm = len(h_dm)
+        nDm = len(self.ao.dms.heights)
         nDir = len(self.ao.dms.opt_dir[0])
         h_mod = self.atm_mod.heights * cpuArray(self.strechFactor_mod)
         nL = len(h_mod)
@@ -896,30 +899,18 @@ class fourierModel:
         theta_y = self.ao.dms.opt_dir[0]/206264.8 \
                 * nnp.sin(self.ao.dms.opt_dir[1]*np.pi/180)
 
-        Pdm = np.zeros([nK, nK, 1, nDm],
-                       dtype=np.complex128)
-        Pl = np.zeros([nK, nK, 1, nL],
-                      dtype=np.complex128)
-        Pdm_t = np.zeros([nK, nK, nDm, 1],
-                         dtype=np.complex128)
+        l_coef = np.asarray(nnp.array([i*2*np.pi*h for h in h_mod], dtype=np.complex128))
         for d_o in range(nDir):                 #loop on optimization directions
-            Pdm.fill(0)
-            Pl.fill(0)
-            fx = theta_x[d_o]*self.freq.kxAO_
-            fy = theta_y[d_o]*self.freq.kyAO_
-            for j in range(nDm):                # loop on DM
-                index = k <= self.freq.kc_[j] # note : circular masking here
-                Pdm[index, 0, j] = np.exp(i*2*np.pi*h_dm[j]*(fx[index]+fy[index]))
-            Pdm_t[:] = np.conj(Pdm.transpose(0, 1, 3, 2))
-            for l in range(nL):                 #loop on atmosphere layers
-                Pl[:, :, 0, l] = np.exp(i*2*np.pi*h_mod[l]*(fx + fy))
+            Pdm = self._dmPhasors(theta_x[d_o], theta_y[d_o], np.complex128)[:, :, None, :]
+            Pdm_t = np.conj(Pdm.transpose(0, 1, 3, 2))
+            fxfy = (theta_x[d_o]*self.freq.kxAO_ + theta_y[d_o]*self.freq.kyAO_)[:, :, None, None]
+            Pl = np.exp(l_coef*fxfy)
             mat1 += _small_matmul(Pdm_t, Pl)*self.ao.dms.opt_weights[d_o]
             to_inv += _small_matmul(Pdm_t, Pdm)*self.ao.dms.opt_weights[d_o]
         Pdm = None
         Pl = None
         Pdm_t = None
-        fx = None
-        fy = None
+        fxfy = None
 
         # Popt
         if nDir == 1:
