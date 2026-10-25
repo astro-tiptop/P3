@@ -2027,11 +2027,18 @@ class fourierModel:
                     z_ao=z_ao, fs=fs, id1=id1, id2=id2)
 
     @staticmethod
-    def _mcaoConeFilter(geom, i, s):
-        """G^2 (1-|H|^2) for layer i (index in geom) and source s, on the AO grid."""
-        zPole = np.exp(2 * np.pi * float(geom['f_cut'][i, s]) / geom['fs'])
-        lpFilter = geom['z_ao'] * (1 - zPole) / (geom['z_ao'] - zPole)
-        return np.maximum((1 - np.abs(lpFilter)**2) * float(geom['G2'][i, s]), 0)
+    def _mcaoConeFilter(geom, idx, s):
+        """G^2 (1-|H|^2) for the layers idx (indices in geom) and source s, on the AO grid.
+
+        Returns an array of shape (resAO, resAO, len(idx)); the layers are batched so a
+        source costs a handful of kernels instead of a handful per (layer, source) pair.
+        """
+        f_cut = nnp.asarray(cpuArray(geom['f_cut']), dtype=float)[idx, s]
+        G2 = nnp.asarray(cpuArray(geom['G2']), dtype=float)[idx, s]
+        zPole = np.asarray(nnp.exp(2 * nnp.pi * f_cut / float(cpuArray(geom['fs']))))
+        z_ao = geom['z_ao'][:, :, None]
+        lpFilter = z_ao * (1 - zPole) / (z_ao - zPole)
+        return np.maximum((1 - np.abs(lpFilter)**2) * np.asarray(G2), 0)
 
     def mcaoWFsensConePSD(self, psdRes):
         """%% power spectrum density related to the reduced volume sensed
@@ -2054,8 +2061,11 @@ class fourierModel:
             deltaPsd = np.maximum(psd_atmo[id1:id2, id1:id2, np.newaxis]
                                   - psdRes[id1:id2, id1:id2, :], 0) * pf[:, :, np.newaxis]
             weights = nnp.asarray(cpuArray(self.ao.atm.weights), dtype=float)[geom['layer_idx']]
-            for i, s in zip(*nnp.where(geom['mask'])):
-                psd[id1:id2, id1:id2, s] += weights[i] * self._mcaoConeFilter(geom, i, s) \
+            mask = nnp.asarray(cpuArray(geom['mask']))
+            for s in nnp.where(mask.any(axis=0))[0]:
+                idx = nnp.where(mask[:, s])[0]
+                filt = self._mcaoConeFilter(geom, idx, s)
+                psd[id1:id2, id1:id2, s] += np.sum(filt * np.asarray(weights[idx]), axis=-1) \
                                             * deltaPsd[:, :, s]
         self.t_mcaoWFsensCone = 1000 * (time.time() - tstart)
         return np.real(psd)
