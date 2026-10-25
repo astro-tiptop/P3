@@ -1862,39 +1862,95 @@ class fourierModel:
 
         c_src = centres(self.ao.src.zenith, self.ao.src.azimuth)   # (nSrc, 2)
         c_gs = centres(self.gs.zenith, self.gs.azimuth)            # (nGs, 2)
-        r_gs = D/2 * (1 - h/z)
-        r_env = nnp.max(nnp.hypot(c_gs[:, 0], c_gs[:, 1])) + r_gs
+        r_gs = float(D/2 * (1 - h/z))
+        r_env = float(nnp.max(nnp.hypot(c_gs[:, 0], c_gs[:, 1])) + r_gs)
+
+        # Heavy arrays on the model backend (cupy on GPU: ~10x faster than numpy
+        # here); the small geometric quantities stay on the host as floats.
+        xp = np
+        c_src_x = xp.asarray(c_src)
 
         def boundary_distance(P):
             """P: (nSrc, m, 2) points in footprint coordinates -> (nSrc, m);
             negative when outside the footprint/envelope or inside an LGS footprint."""
-            A = P + c_src[:, None, :]
-            d_src = D/2 - nnp.hypot(P[..., 0], P[..., 1])
-            d_env = r_env - nnp.hypot(A[..., 0], A[..., 1])
+            A = P + c_src_x[:, None, :]
+            d_src = D/2 - xp.hypot(P[..., 0], P[..., 1])
+            d_env = r_env - xp.hypot(A[..., 0], A[..., 1])
             # min over the LGSs as a loop of elementwise minima on contiguous
             # arrays: same values as .min(axis=-1) over a trailing axis of
             # length nGs, ~2.5x faster
-            Ax, Ay = nnp.ascontiguousarray(A[..., 0]), nnp.ascontiguousarray(A[..., 1])
-            d_gs = nnp.hypot(Ax - c_gs[0, 0], Ay - c_gs[0, 1]) - r_gs
+            Ax, Ay = xp.ascontiguousarray(A[..., 0]), xp.ascontiguousarray(A[..., 1])
+            d_gs = xp.hypot(Ax - float(c_gs[0, 0]), Ay - float(c_gs[0, 1])) - r_gs
             for k in range(1, len(c_gs)):
-                nnp.minimum(d_gs, nnp.hypot(Ax - c_gs[k, 0], Ay - c_gs[k, 1]) - r_gs, out=d_gs)
-            return nnp.minimum(nnp.minimum(d_src, d_env), d_gs)
+                xp.minimum(d_gs, xp.hypot(Ax - float(c_gs[k, 0]), Ay - float(c_gs[k, 1])) - r_gs, out=d_gs)
+            return xp.minimum(xp.minimum(d_src, d_env), d_gs)
 
         pix = D / n_grid
-        u = (nnp.arange(n_grid) - n_grid/2 + 0.5) * pix
-        X, Y = nnp.meshgrid(u, u, indexing='ij')
-        P = nnp.broadcast_to(nnp.stack([X.ravel(), Y.ravel()], axis=-1),
-                             (len(c_src), n_grid**2, 2))
+        u = (xp.arange(n_grid) - n_grid/2 + 0.5) * pix
+        X, Y = xp.meshgrid(u, u, indexing='ij')
+        P = xp.broadcast_to(xp.stack([X.ravel(), Y.ravel()], axis=-1),
+                            (len(c_src), n_grid**2, 2))
         d = boundary_distance(P)
         d_max = d.max(axis=1)
         has_gap = d_max > 0
-        if has_gap.any():
-            best = P[nnp.arange(len(c_src)), d.argmax(axis=1)]
-            v = nnp.linspace(-pix, pix, n_refine)
-            dx, dy = nnp.meshgrid(v, v, indexing='ij')
-            Q = best[:, None, :] + nnp.stack([dx.ravel(), dy.ravel()], axis=-1)[None]
-            d_max = nnp.maximum(d_max, boundary_distance(Q).max(axis=1))
-        return 2 * nnp.maximum(d_max, 0.0)
+        if bool(has_gap.any()):
+            best = P[xp.arange(len(c_src)), d.argmax(axis=1)]
+            v = xp.linspace(-pix, pix, n_refine)
+            dx, dy = xp.meshgrid(v, v, indexing='ij')
+            Q = best[:, None, :] + xp.stack([dx.ravel(), dy.ravel()], axis=-1)[None]
+            d_max = xp.maximum(d_max, boundary_distance(Q).max(axis=1))
+        return 2 * nnp.maximum(nnp.asarray(cpuArray(d_max)), 0.0)
+
+    def _footprint_inner_gap_layers_gpu(self, h, n_grid=48, n_refine=12):
+        """_footprint_inner_gap for all layer altitudes h at once -> (nLayers, nSrc), on
+        the GPU backend: one batch of kernels instead of ~10 small ones per layer.
+        Same elementwise operations as the per-layer version; on CPU this batching
+        was slower (memory-bound), so it is used only with cupy."""
+        xp = np
+        D = float(self.ao.tel.D)
+        z = float(cpuArray(self.gs.height[0]))
+        h = nnp.asarray(h, dtype=float)
+
+        def centres(zen, az):
+            zen = nnp.asarray(cpuArray(zen), dtype=float) / rad2arc
+            az = nnp.deg2rad(nnp.asarray(cpuArray(az), dtype=float))
+            return nnp.stack([zen*nnp.cos(az), zen*nnp.sin(az)], axis=-1)[None] * h[:, None, None]
+
+        c_src = centres(self.ao.src.zenith, self.ao.src.azimuth)   # (nH, nSrc, 2)
+        c_gs = centres(self.gs.zenith, self.gs.azimuth)            # (nH, nGs, 2)
+        r_gs = D/2 * (1 - h/z)                                     # (nH,)
+        r_env = nnp.max(nnp.hypot(c_gs[..., 0], c_gs[..., 1]), axis=1) + r_gs
+        c_src_x, c_gs_x = xp.asarray(c_src), xp.asarray(c_gs)
+        r_gs_x, r_env_x = xp.asarray(r_gs)[:, None, None], xp.asarray(r_env)[:, None, None]
+
+        def boundary_distance(P):
+            """P: (nH, nSrc, m, 2) -> (nH, nSrc, m)"""
+            A = P + c_src_x[:, :, None, :]
+            d_src = D/2 - xp.hypot(P[..., 0], P[..., 1])
+            d_env = r_env_x - xp.hypot(A[..., 0], A[..., 1])
+            Ax, Ay = xp.ascontiguousarray(A[..., 0]), xp.ascontiguousarray(A[..., 1])
+            d_gs = xp.hypot(Ax - c_gs_x[:, 0, 0][:, None, None], Ay - c_gs_x[:, 0, 1][:, None, None]) - r_gs_x
+            for k in range(1, c_gs.shape[1]):
+                xp.minimum(d_gs, xp.hypot(Ax - c_gs_x[:, k, 0][:, None, None],
+                                          Ay - c_gs_x[:, k, 1][:, None, None]) - r_gs_x, out=d_gs)
+            return xp.minimum(xp.minimum(d_src, d_env), d_gs)
+
+        nH, nSrc = len(h), c_src.shape[1]
+        pix = D / n_grid
+        u = (xp.arange(n_grid) - n_grid/2 + 0.5) * pix
+        X, Y = xp.meshgrid(u, u, indexing='ij')
+        P = xp.broadcast_to(xp.stack([X.ravel(), Y.ravel()], axis=-1), (nH, nSrc, n_grid**2, 2))
+        d = boundary_distance(P)
+        d_max = d.max(axis=-1)
+        refine = (d_max > 0).any(axis=1)        # per layer, as the per-layer `if has_gap.any()`
+        if bool(refine.any()):
+            idx = d.argmax(axis=-1)
+            best = xp.take_along_axis(P, idx[..., None, None], axis=2)[:, :, 0, :]
+            v = xp.linspace(-pix, pix, n_refine)
+            dx, dy = xp.meshgrid(v, v, indexing='ij')
+            Q = best[:, :, None, :] + xp.stack([dx.ravel(), dy.ravel()], axis=-1)[None, None]
+            d_max = xp.where(refine[:, None], xp.maximum(d_max, boundary_distance(Q).max(axis=-1)), d_max)
+        return 2 * nnp.maximum(nnp.asarray(cpuArray(d_max)), 0.0)
 
     def _mcaoConeApplied(self) -> bool:
         """True if the reduced sensing volume term is requested and applicable (multi-LGS)."""
@@ -1928,7 +1984,10 @@ class fourierModel:
             return None
         h = heights[layer_idx]
         err_ana = nnp.maximum(deltaAngleE[None, :] * h[:, None] / rad2arc, 0)
-        err_gap = nnp.stack([self._footprint_inner_gap(hh) for hh in h])
+        if hasattr(np, 'fuse'):     # cupy backend: all layers in one batch
+            err_gap = self._footprint_inner_gap_layers_gpu(h)
+        else:
+            err_gap = nnp.stack([self._footprint_inner_gap(hh) for hh in h])
         err = nnp.maximum(err_ana, err_gap)                         # (nLayers, nSrc)
         with nnp.errstate(divide='ignore'):
             f_cut = 1 / err
