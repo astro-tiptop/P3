@@ -54,6 +54,22 @@ def besselj__n(n, z):
     elif n>=2:
         return 2*(n-1)*besselj__n(int(n)-1, z)/z - besselj__n(int(n)-2, z)
 
+def _small_matmul(a, b, max_k=16):
+    """Batched a (..., m, K) @ b (..., K, n) for a small inner dimension K.
+
+    With the frequency grid as batch dimensions (e.g. 226 x 226 tiny matrices),
+    batched matmul is very inefficient on GPU (and on CPU); a loop over K of
+    broadcast products is 4-10x faster. Same sum, possibly in a different order
+    than BLAS: results agree to rounding (~1e-16)."""
+    K = a.shape[-1]
+    if K > max_k or a.ndim < 2 or b.ndim < 2:
+        return np.matmul(a, b)
+    out = a[..., :, 0:1] * b[..., 0:1, :]
+    for k in range(1, K):
+        out = out + a[..., :, k:k+1] * b[..., k:k+1, :]
+    return out
+
+
 def _aliasing_layer_term(avr, km, kn, vx, vy, w, T, td, tf, two_pi_i):
     """avr + w * sinc(km vx T) sinc(kn vy T) exp(2 pi i (km vx + kn vy) td) tf, one layer
     of the aliasing average (same expression as _aliasing_psd_chunked)."""
@@ -647,7 +663,7 @@ class fourierModel:
             # TOMOGRAPHIC SYSTEM
             self.Wtomo = self.tomographicReconstructor()
             self.Popt = self.optimalProjector()
-            self.W = np.matmul(self.Popt, self.Wtomo)
+            self.W = _small_matmul(self.Popt, self.Wtomo)
             if self.reduce_memory:
                 self.Popt = None
                 self.Wtomo = None
@@ -696,7 +712,7 @@ class fourierModel:
                                                    *np.exp(i*2*np.pi*Hs[h]*(fx+fy))
             fx = None
             fy = None
-            self.Walpha = np.matmul(self.W,self.MPalphaL)
+            self.Walpha = _small_matmul(self.W,self.MPalphaL)
         if self.reduce_memory:
             self.MPalphaL = None
         self.t_finalReconstructor = 1000*(time.time() - tstart)
@@ -805,7 +821,7 @@ class fourierModel:
         
         # MP @ Cphi_mod @ MP_t
         MP_Cphi = MP * self.Cphi_mod[:, :, None, :]
-        to_inv  = np.matmul(MP_Cphi, MP_t)
+        to_inv  = _small_matmul(MP_Cphi, MP_t)
         
         # Direct addition of noise on the diagonal (completely eliminates self.Cb allocation)
         noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.complex_dtype)
@@ -838,7 +854,7 @@ class fourierModel:
                 print(f"Tomography: Standard solve failed ({e}), using pinv")
             inv = np.linalg.pinv(to_inv.astype(np.complex128),
                                  rcond=np.finfo(np.float64).eps)
-            Wtomo = np.matmul(rhs.astype(np.complex128), inv)
+            Wtomo = _small_matmul(rhs.astype(np.complex128), inv)
         Wtomo = np.ascontiguousarray(Wtomo.astype(self.complex_dtype))
 
         to_inv = None
@@ -891,8 +907,8 @@ class fourierModel:
             Pdm_t[:] = np.conj(Pdm.transpose(0, 1, 3, 2))
             for l in range(nL):                 #loop on atmosphere layers
                 Pl[:, :, 0, l] = np.exp(i*2*np.pi*h_mod[l]*(fx + fy))
-            mat1 += np.matmul(Pdm_t, Pl)*self.ao.dms.opt_weights[d_o]
-            to_inv += np.matmul(Pdm_t, Pdm)*self.ao.dms.opt_weights[d_o]
+            mat1 += _small_matmul(Pdm_t, Pl)*self.ao.dms.opt_weights[d_o]
+            to_inv += _small_matmul(Pdm_t, Pdm)*self.ao.dms.opt_weights[d_o]
         Pdm = None
         Pl = None
         Pdm_t = None
@@ -910,7 +926,7 @@ class fourierModel:
             lambda_tikhonov = 1/self.ao.dms.opt_cond
             try:
                 # Build regularized system
-                A = to_inv_t.astype(np.complex128) @ to_inv.astype(np.complex128)
+                A = _small_matmul(to_inv_t.astype(np.complex128), to_inv.astype(np.complex128))
                 # Add regularization on diagonal as a fraction of the trace
                 lambda_reg = (np.mean(np.diagonal(A, axis1=2, axis2=3)) \
                              * lambda_tikhonov).astype(self.complex_dtype)
@@ -929,7 +945,7 @@ class fourierModel:
                 mat2 = np.linalg.pinv(to_inv.astype(np.complex128),
                                     rcond=1/self.ao.dms.opt_cond)
 
-        Popt = np.matmul(mat2, mat1).astype(self.complex_dtype)
+        Popt = _small_matmul(mat2, mat1).astype(self.complex_dtype)
 
         self.t_opt = 1000*(time.time() - tstart)
         return Popt
@@ -1505,7 +1521,7 @@ class fourierModel:
                 noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype)
                 
                 for j in range(self.ao.src.nSrc):
-                    PW = np.matmul(self.PbetaDM[j], self.W)
+                    PW = _small_matmul(self.PbetaDM[j], self.W)
                     
                     # Since Cb was strictly diagonal across GS, PW @ Cb @ PW^T 
                     # mathematically simplifies to the weighted sum of squared moduli
@@ -1623,6 +1639,7 @@ class fourierModel:
         Watm = self.Wphi * self.freq.pistonFilterAO_
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
         two_pi_i = 2 * i * np.pi
+        lag_term = None
 
         for s in range(self.ao.src.nSrc):
             if self.nGs<2:
@@ -1654,21 +1671,25 @@ class fourierModel:
                 fx = Beta[0]*self.freq.kxAO_
                 fy = Beta[1]*self.freq.kyAO_
                 
-                # Native construction with shape (nK, nK, 1, nH) to avoid .transpose()
-                # wDir_x is (nH,) -> [None, None, None, :]
-                # self.freq.kxAO_ is (nK, nK) -> [:, :, None, None]
-                freq_t = (
-                    wDir_x[None, None, None, :] * self.freq.kxAO_[:, :, None, None]
-                    + wDir_y[None, None, None, :] * self.freq.kyAO_[:, :, None, None]
-                )
+                if lag_term is None:
+                    # source independent, computed once (same operations as before)
+                    # Native construction with shape (nK, nK, 1, nH) to avoid .transpose()
+                    # wDir_x is (nH,) -> [None, None, None, :]
+                    # self.freq.kxAO_ is (nK, nK) -> [:, :, None, None]
+                    freq_t = (
+                        wDir_x[None, None, None, :] * self.freq.kxAO_[:, :, None, None]
+                        + wDir_y[None, None, None, :] * self.freq.kyAO_[:, :, None, None]
+                    )
+                    lag_term = deltaT * wSpeed[None, None, None, :] * freq_t
+                    sensed = np.asarray(nnp.where(self.sensedLayers)[0])
                 delta_h = (
                     Hs[None, None, None, :] * (fx + fy)[:, :, None, None]
-                    - deltaT * wSpeed[None, None, None, :] * freq_t
+                    - lag_term
                 )
                 
                 PbetaL = np.exp(two_pi_i * delta_h)
 
-                proj = PbetaL - np.matmul(self.PbetaDM[s], self.Walpha)
+                proj = PbetaL - _small_matmul(self.PbetaDM[s], self.Walpha)
                 
                 # Cphi is now a 3D diagonal array (nK, nK, nL).
                 # proj @ Cphi @ proj_T massively simplifies to element-wise broadcasting:
@@ -1676,7 +1697,6 @@ class fourierModel:
                 if self.sensedLayers.all():
                     tmp = np.sum(np.abs(proj[:, :, 0, :])**2 * self.Cphi, axis=-1)
                 else:
-                    sensed = np.asarray(nnp.where(self.sensedLayers)[0])
                     tmp = np.sum(np.abs(proj[:, :, 0, sensed])**2 * self.Cphi[:, :, sensed], axis=-1) \
                           + w_unsensed * self.Wphi
                 psd[:, :, s] = self.freq.mskInAO_ * tmp
