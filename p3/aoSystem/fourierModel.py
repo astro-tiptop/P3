@@ -800,15 +800,15 @@ class fourierModel:
 
         # 1. WFS operator and projection matrices
         # Calculate MP directly via broadcasting, avoiding the dense M matrix allocation
+        # all sensed layers of a guide star at once
+        h_coef = np.asarray(nnp.array([i*2*np.pi*h_mod[n] for n in range(nL_mod)]))
+        sensed_mod = np.asarray(nnp.asarray(sensed_mod))
         MP = np.zeros([nK, nK, nGs, nL_mod], dtype=self.complex_dtype)
         for j in range(nGs):
             M_diag_j = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_) * np.sinc(d[j]*self.freq.kyAO_)
-            for n in range(nL_mod):
-                if not sensed_mod[n]:
-                    continue
-                P_jn = np.exp(i*2*np.pi*h_mod[n]*(self.freq.kxAO_*self.gs.direction[0, j] \
-                     + self.freq.kyAO_*self.gs.direction[1, j]))
-                MP[:, :, j, n] = M_diag_j * P_jn
+            P_j = np.exp(h_coef*(self.freq.kxAO_*self.gs.direction[0, j] \
+                  + self.freq.kyAO_*self.gs.direction[1, j])[:, :, None])
+            MP[:, :, j, :] = np.where(sensed_mod, M_diag_j[:, :, None] * P_j, 0)
 
         # 2. Atmospheric PSD (Diagonal with respect to the layers)
         atm_weights = np.asarray(self.ao.atm.weights, dtype=self.dtype)
