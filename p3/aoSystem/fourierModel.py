@@ -82,6 +82,29 @@ _aliasing_layer_fused = (np.fuse(kernel_name='p3_aliasing_layer')(_aliasing_laye
                          if hasattr(np, 'fuse') else None)
 
 
+def _controller_layer_term(h1, h2, hn, kx, ky, ax, ay, c, delay, gain, eps, w):
+    """One (layer, wind angle) term of the integrator transfer functions of controller.
+
+    z = exp(c (ax kx + ay ky)), with c = 2 i pi Ts and (ax, ay) the wind velocity along
+    the angle (Taylor: f = -v.k). Returns h1 + w ATF, h2 + w |ATF|^2, hn + w |NTF|^2,
+    with ATF = H z^-d / (1 + H z^-d), H = g / (1 - z^-1), NTF = ATF / z.
+    """
+    z = np.exp(c * (ax * kx + ay * ky))
+    denom = 1.0 - z**(-1.0)
+    denom = np.where(np.abs(denom) < eps, eps, denom)
+    hInt = gain / denom
+    zd = z**(-delay)
+    denom2 = 1.0 + hInt * zd
+    denom2 = np.where(np.abs(denom2) < eps, eps, denom2)
+    atf = hInt * zd / denom2
+    return h1 + w * atf, h2 + w * np.abs(atf)**2, hn + w * np.abs(atf / z)**2
+
+
+# fused into a single elementwise kernel when the backend is cupy (plain call on CPU)
+_controller_layer = (np.fuse(kernel_name='p3_controller_layer')(_controller_layer_term)
+                     if hasattr(np, 'fuse') else _controller_layer_term)
+
+
 class fourierModel:
     """
     Fourier class gathering the PSD calculation for PSF reconstruction and
@@ -1011,46 +1034,20 @@ class fourierModel:
 
             self.noiseGain = trapz(abs(self.ntfInt)**2, f)*2*Ts
 
-            # Get transfer functions
+            # Get transfer functions: Cn2-weighted average over layers and wind angles
+            # (loopGain != 0 here, so NTF = ATF/z)
+            c = complex(2j*nnp.pi*Ts)
+            costh_h = cpuArray(costh)
             for l in range(self.ao.atm.nL):
-                h1buf = np.zeros((nPts, nPts, nTh),
-                                 dtype=self.complex_dtype)
-                h2buf = np.zeros((nPts, nPts, nTh),
-                                 dtype=self.dtype)
-                hnbuf = np.zeros((nPts, nPts, nTh),
-                                 dtype=self.dtype)
+                w = float(cpuArray(weights[l])) / nTh
                 for iTheta in range(nTh):
-                    fi = -vx[l]*self.freq.kxAO_*costh[iTheta] - vy[l]*self.freq.kyAO_*costh[iTheta]
-                    z  = np.exp(-2*i*np.pi*fi*Ts)
+                    h1, h2, hn = _controller_layer(h1, h2, hn, self.freq.kxAO_, self.freq.kyAO_,
+                                                   float(vx[l]*costh_h[iTheta]), float(vy[l]*costh_h[iTheta]),
+                                                   c, delay, loopGain, eps, w)
 
-                    # Safe division for spatially varying transfer functions
-                    denom = 1.0 - z**(-1.0)
-                    denom = np.where(np.abs(denom) < eps, eps, denom)
-                    hInt = loopGain / denom
-
-                    denom2 = 1.0 + hInt * z**(-delay)
-                    denom2 = np.where(np.abs(denom2) < eps, eps, denom2)
-                    rtfInt = 1.0 / denom2
-
-                    atfInt = hInt * z**(-delay) * rtfInt
-
-                    # AO transfer function
-                    h2buf[:, :, iTheta] = abs(atfInt)**2
-                    h1buf[:, :, iTheta] = atfInt
-                    # noise transfer function
-                    if loopGain == 0:
-                        ntfInt = 1
-                    else:
-                        ntfInt = atfInt/z
-                    hnbuf[:, :, iTheta] = abs(ntfInt)**2
-
-                h1 += weights[l]*np.sum(h1buf, axis=2)/nTh
-                h2 += weights[l]*np.sum(h2buf, axis=2)/nTh
-                hn += weights[l]*np.sum(hnbuf, axis=2)/nTh
-
-            self.h1 = h1
-            self.h2 = h2
-            self.hn = hn
+            self.h1 = h1.astype(self.complex_dtype, copy=False)
+            self.h2 = h2.astype(self.dtype, copy=False)
+            self.hn = hn.astype(self.dtype, copy=False)
 
             if display:
                 plt.figure()
