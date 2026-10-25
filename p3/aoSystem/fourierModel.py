@@ -54,6 +54,18 @@ def besselj__n(n, z):
     elif n>=2:
         return 2*(n-1)*besselj__n(int(n)-1, z)/z - besselj__n(int(n)-2, z)
 
+def _aliasing_layer_term(avr, km, kn, vx, vy, w, T, td, tf, two_pi_i):
+    """avr + w * sinc(km vx T) sinc(kn vy T) exp(2 pi i (km vx + kn vy) td) tf, one layer
+    of the aliasing average (same expression as _aliasing_psd_chunked)."""
+    return avr + w * (np.sinc(km * vx * T) * np.sinc(kn * vy * T)
+                      * np.exp(two_pi_i * (km * vx + kn * vy) * td) * tf)
+
+
+# fused into a single elementwise kernel when the backend is cupy (None on CPU)
+_aliasing_layer_fused = (np.fuse(kernel_name='p3_aliasing_layer')(_aliasing_layer_term)
+                         if hasattr(np, 'fuse') else None)
+
+
 class fourierModel:
     """
     Fourier class gathering the PSD calculation for PSF reconstruction and
@@ -1340,6 +1352,17 @@ class fourierModel:
         layer_chunk = max(1, min(layer_chunk, self.ao.atm.nL))
         avr_sum = np.zeros((m_flat.size, kxAO.size), dtype=self.complex_dtype)
         two_pi_i = 2 * self.complex_dtype(1j) * np.pi
+
+        if _aliasing_layer_fused is not None:
+            # GPU: one fused kernel per layer accumulating into avr_sum, without the
+            # (layers, shifts, k) temporaries of the chunked expression below (which
+            # is memory-bound): ~2x faster, same result to ~1e-15 (summation order).
+            tf_row = tf_flat[None, :]
+            for layer in range(self.ao.atm.nL):
+                avr_sum = _aliasing_layer_fused(avr_sum, km, kn, vx[layer], vy[layer], weights[layer],
+                                                T, td, tf_row, two_pi_i)
+            psd = np.sum(PR * W_mn * np.abs(Q * avr_sum) ** 2, axis=0)
+            return np.reshape(psd, self.Rx.shape)
 
         for chunk_start in range(0, self.ao.atm.nL, layer_chunk):
             chunk_end = min(chunk_start + layer_chunk, self.ao.atm.nL)
