@@ -55,14 +55,24 @@ def besselj__n(n, z):
         return 2*(n-1)*besselj__n(int(n)-1, z)/z - besselj__n(int(n)-2, z)
 
 def _small_matmul(a, b, max_k=16):
-    """Batched a (..., m, K) @ b (..., K, n) for a small inner dimension K.
+    """Batched a (..., m, K) @ b (..., K, n), i.e. matmul over the last two axes.
 
-    With the frequency grid as batch dimensions (e.g. 226 x 226 tiny matrices),
-    batched matmul is very inefficient on GPU (and on CPU); a loop over K of
-    broadcast products is 4-10x faster. Same sum, possibly in a different order
-    than BLAS: results agree to rounding (~1e-16)."""
+    The leading axes are batch axes (here the AO frequency grid, e.g. 226 x 226)
+    and must be equal or broadcastable; the result has shape (..., m, n).
+
+    On GPU (cupy) with a small inner dimension K, the product is computed as a sum
+    of K outer products, column k of a times row k of b:
+        out[..., p, q] = sum_k a[..., p, k] * b[..., k, q]
+    i.e. 2K-1 elementwise kernels over the whole output. For ~1e5 tiny matrices
+    this is 4-10x faster than cuBLAS batched matmul, which uses the GPU poorly on
+    such small matrices. The sum runs over k in order, possibly not the BLAS
+    order: results agree with matmul to rounding (~1e-16).
+
+    On CPU (numpy), and for K > max_k, np.matmul is used: its compiled loop over
+    the stack is 2-5x faster than the K full-size broadcast passes.
+    """
     K = a.shape[-1]
-    if K > max_k or a.ndim < 2 or b.ndim < 2:
+    if not hasattr(np, 'fuse') or K > max_k or a.ndim < 2 or b.ndim < 2:
         return np.matmul(a, b)
     out = a[..., :, 0:1] * b[..., 0:1, :]
     for k in range(1, K):
