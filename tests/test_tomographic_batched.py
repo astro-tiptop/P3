@@ -115,4 +115,6 @@ def test_walpha_is_w_times_mpalpha(tomo_all_sensed):
     fao = tomo_all_sensed
     W, M, Wa = _host(fao.W), _host(fao.MPalphaL), _host(fao.Walpha)
     ref = nnp.einsum('xyij,xyjk->xyik', W, M)
-    assert nnp.max(nnp.abs(Wa - ref)) <= 1e-10*nnp.abs(ref).max() or Wa.dtype == nnp.complex64
+    assert Wa.dtype in (nnp.complex64, nnp.complex128)
+    tol = 1e-5 if Wa.dtype == nnp.complex64 else 1e-10
+    assert nnp.max(nnp.abs(Wa - ref)) <= tol*nnp.abs(ref).max()

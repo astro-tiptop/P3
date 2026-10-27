@@ -15,7 +15,7 @@ from p3.aoSystem import np, cpuArray
 from p3.aoSystem import fourierModel as fm
 from p3.aoSystem.fourierModel import fourierModel
 
-from test_low_altitude_lgs import _build as _build_lgs
+from test_low_altitude_lgs import _build as _build_lgs, _write_ini
 from test_mcao_cone_sensing import _build as _build_cone
 
 
@@ -27,10 +27,16 @@ def _rand_c(rng, shape):
     return rng.standard_normal(shape) + 1j*rng.standard_normal(shape)
 
 
+# On the numpy backend _small_matmul is np.matmul and _controller_layer is
+# _controller_layer_term: comparing them with themselves proves nothing.
+_ON_CPU = not hasattr(np, 'fuse')
+skip_on_cpu = pytest.mark.skipif(_ON_CPU, reason='numpy backend: the function under test is the reference itself')
+
 # ---------------------------------------------------------------------------
 # 1. _small_matmul
 # ---------------------------------------------------------------------------
 
+@skip_on_cpu
 @pytest.mark.parametrize('K', [1, 3, 16])
 @pytest.mark.parametrize('a_batch', [(5, 7), (5, 1), (1, 7)])
 def test_small_matmul_matches_matmul(K, a_batch):
@@ -44,6 +50,7 @@ def test_small_matmul_matches_matmul(K, a_batch):
     assert nnp.max(nnp.abs(out - ref)) <= 1e-13*nnp.max(nnp.abs(ref))
 
 
+@skip_on_cpu
 def test_small_matmul_broadcast_b():
     rng = nnp.random.default_rng(0)
     a = _rand_c(rng, (5, 7, 2, 3))
@@ -53,6 +60,7 @@ def test_small_matmul_broadcast_b():
     assert nnp.max(nnp.abs(out - ref)) <= 1e-13*nnp.max(nnp.abs(ref))
 
 
+@skip_on_cpu
 def test_small_matmul_large_k_falls_back_exactly():
     rng = nnp.random.default_rng(1)
     a = _rand_c(rng, (5, 7, 3, 17))
@@ -61,6 +69,7 @@ def test_small_matmul_large_k_falls_back_exactly():
     assert nnp.array_equal(_host(fm._small_matmul(ad, bd)), _host(np.matmul(ad, bd)))
 
 
+@skip_on_cpu
 def test_small_matmul_max_k_argument():
     rng = nnp.random.default_rng(2)
     a = _rand_c(rng, (5, 7, 3, 4))
@@ -70,6 +79,7 @@ def test_small_matmul_max_k_argument():
     assert nnp.array_equal(_host(fm._small_matmul(ad, bd, max_k=3)), _host(np.matmul(ad, bd)))
 
 
+@skip_on_cpu
 def test_small_matmul_2d_inputs():
     rng = nnp.random.default_rng(3)
     a, b = _rand_c(rng, (4, 3)), _rand_c(rng, (3, 5))
@@ -140,12 +150,13 @@ def _synthetic_grid(n=33, dk=0.4):
     return nnp.meshgrid(k1, k1, indexing='ij')
 
 
-@pytest.mark.parametrize('delay', [2, 1.5])
+# 1.7 and 2.3 are not exactly representable in float16 (see the comment in controller())
+@pytest.mark.parametrize('delay', [2, 1.5, 1.7, 2.3])
 def test_controller_layer_term_vs_explicit(delay):
     kx, ky = _synthetic_grid()
     Ts, gain, eps, w = 1e-3, 0.4, nnp.finfo(float).eps, 0.37
     ax, ay = 11.0, -5.0
-    c = complex(2j*nnp.pi*Ts)
+    c = nnp.complex128(2j*nnp.pi*Ts)
     rng = nnp.random.default_rng(0)
     h1_0 = _rand_c(rng, kx.shape)
     h2_0 = rng.random(kx.shape)
@@ -159,12 +170,17 @@ def test_controller_layer_term_vs_explicit(delay):
     assert nnp.allclose(hn, hn_0 + w*nnp.abs(atf/z)**2, rtol=1e-12, atol=1e-12)
 
 
-def test_controller_layer_fused_equals_term():
+@skip_on_cpu
+@pytest.mark.parametrize('delay', [2, 1.5, 1.7, 2.3])
+def test_controller_layer_fused_equals_term(delay):
+    """Fused kernel called with numpy scalars, as controller() does: inside cp.fuse a
+    unary op on a Python scalar alone (-delay) would be computed in float16."""
     kx, ky = _synthetic_grid()
-    Ts, gain, eps, w, delay = 1e-3, 0.5, nnp.finfo(float).eps, 0.25, 2
-    c = complex(2j*nnp.pi*Ts)
+    Ts, gain, eps, w = 1e-3, 0.5, nnp.finfo(float).eps, 0.25
+    c = nnp.complex128(2j*nnp.pi*Ts)
     args = (np.zeros(kx.shape, dtype=complex), np.zeros(kx.shape), np.zeros(kx.shape),
-            np.asarray(kx), np.asarray(ky), 7.0, 3.0, c, delay, gain, eps, w)
+            np.asarray(kx), np.asarray(ky), nnp.float64(7.0), nnp.float64(3.0), c,
+            nnp.float64(delay), nnp.float64(gain), nnp.float64(eps), nnp.float64(w))
     for a, b in zip(fm._controller_layer(*args), fm._controller_layer_term(*args)):
         a, b = _host(a), _host(b)
         assert nnp.max(nnp.abs(a - b)) <= 1e-12*max(nnp.max(nnp.abs(b)), 1e-300)
@@ -214,6 +230,28 @@ def test_controller_one_layer(one_layer_model, wdir):
     low = vk[vk > 0].min()
     assert nnp.all(h2[nnp.isclose(vk, low)] > 0.9)
     assert h2.max() <= (nnp.abs(atf)**2).max()*(1 + tol)
+
+
+@pytest.mark.parametrize('delay', [1.7, 2.3])
+def test_controller_one_layer_fractional_delay(one_layer_model, delay):
+    """End to end: a delay that is not float16-exact must reach the kernel unrounded."""
+    fao = one_layer_model
+    holoop = fao.ao.rtc.holoop
+    old = holoop['delay']
+    fao.ao.atm.wDir = nnp.array([0.0])
+    holoop['delay'] = delay
+    try:
+        fao.controller(nTh=1)
+        h1, h2 = _host(fao.h1), _host(fao.h2)
+    finally:
+        holoop['delay'] = old
+    kx, ky = _host(fao.freq.kxAO_), _host(fao.freq.kyAO_)
+    Ts = 1/holoop['rate']
+    v = float(_host(fao.ao.atm.wSpeed)[0])
+    atf, _ = _ref_controller_term(kx, ky, v, 0.0, Ts, delay, holoop['gain'], nnp.finfo(float).eps)
+    tol = 1e-12 if h2.dtype == nnp.float64 else 1e-5
+    assert nnp.max(nnp.abs(h1 - atf)) <= tol*nnp.max(nnp.abs(atf))
+    assert nnp.max(nnp.abs(h2 - nnp.abs(atf)**2)) <= tol*nnp.max(nnp.abs(atf)**2)
 
 
 def test_controller_wind_angle_average(one_layer_model):
@@ -294,6 +332,61 @@ def test_aliasing_chunked_gpu_branch_equals_cpu_branch(monkeypatch):
     assert nnp.max(nnp.abs(psd_fused - psd_cpu)) <= 1e-12*nnp.max(nnp.abs(psd_cpu))
 
 
+@pytest.fixture(scope='module')
+def aliasing_single_double(tmp_path_factory):
+    """Aliasing PSD of the same model in double and single precision; for the single one
+    the dtypes returned by the per-layer fused kernel (the avr_sum accumulator) are recorded."""
+    if fm._aliasing_layer_fused is None:
+        pytest.skip('fused aliasing kernel only exists on the cupy backend')
+    out = {}
+    orig = fm._aliasing_layer_fused
+    for prec in ('double', 'single'):
+        td = tmp_path_factory.mktemp('alias_' + prec)
+        ini = _write_ini(td, 90e3, multi=False)
+        with open(ini, 'a') as f:
+            f.write('\n[COMPUTATION]\nprecision = %s\n' % prec)
+        fao = fourierModel(ini, calcPSF=False, verbose=False, display=False,
+                           reduce_memory=False, computeFocalAnisoCov=False,
+                           getErrorBreakDown=False)
+        assert fao.complex_dtype == (np.complex64 if prec == 'single' else np.complex128)
+        fao.controller()
+        acc_dtypes = []
+
+        def spy(*a, **k):
+            r = orig(*a, **k)
+            acc_dtypes.append(r.dtype)
+            return r
+
+        fm._aliasing_layer_fused = spy
+        try:
+            out[prec] = (fao._aliasing_psd_chunked(), acc_dtypes)
+        finally:
+            fm._aliasing_layer_fused = orig
+    return out
+
+
+def test_aliasing_chunked_gpu_single_precision_accumulator(aliasing_single_double):
+    """row, phase_shift, T and d (via km, kn, Q) keep the model precision, so avr_sum stays complex64
+    over all layers (before the fix it was promoted to complex128 by the first layer)."""
+    _, acc32 = aliasing_single_double['single']
+    _, acc64 = aliasing_single_double['double']
+    assert len(acc32) > 0 and all(dt == nnp.complex64 for dt in acc32)
+    assert all(dt == nnp.complex128 for dt in acc64)
+
+
+def test_aliasing_chunked_gpu_single_precision_matches_double(aliasing_single_double):
+    """Single vs double PSD: float32 eps = 1.2e-7 per operation, accumulated over the layers
+    and the shifts and amplified by the squared modulus; tolerance 1e-4 of the maximum."""
+    p32 = _host(aliasing_single_double['single'][0]).astype(float)
+    p64 = _host(aliasing_single_double['double'][0])
+    assert p64.max() > 0
+    assert nnp.max(nnp.abs(p32 - p64)) <= 1e-4*nnp.max(p64)
+
+
+def test_aliasing_chunked_gpu_single_precision_result_dtype(aliasing_single_double):
+    assert aliasing_single_double['single'][0].dtype == nnp.float32
+
+
 # ---------------------------------------------------------------------------
 # 6. MCAO cone filter (batched over layers)
 # ---------------------------------------------------------------------------
@@ -328,3 +421,35 @@ def test_mcao_cone_filter_batched_vs_per_layer(cone_geom):
             assert out[:, :, j].max() <= G2*(1 + 1e-12)
             n_checked += 1
     assert n_checked > 0
+
+
+# ---------------------------------------------------------------------------
+# 7. footprint inner gap, batched over layers (GPU) vs per layer
+# ---------------------------------------------------------------------------
+
+def _gap_geometry(D, gs_zen, gs_az, src_zen, src_az, z=90e3):
+    fao = object.__new__(fourierModel)
+    fao.ao = SimpleNamespace(tel=SimpleNamespace(D=D),
+                             src=SimpleNamespace(zenith=nnp.asarray(src_zen, float),
+                                                 azimuth=nnp.asarray(src_az, float)))
+    fao.gs = SimpleNamespace(height=nnp.full(len(gs_zen), z), zenith=nnp.asarray(gs_zen, float),
+                             azimuth=nnp.asarray(gs_az, float))
+    return fao
+
+
+@pytest.mark.skipif(_ON_CPU, reason='batched version is only used (and meaningful) on the cupy backend')
+@pytest.mark.parametrize('gs_zen, gs_az, src_zen, src_az, h', [
+    # 3 LGS at 30" (footprints separate at high altitude), layer at h = 0 and a high layer
+    ([30, 30, 30], [0, 120, 240], [0, 20, 40], [0, 90, 200], [0.0, 500.0, 4000.0, 12000.0, 20000.0]),
+    # 4 LGS on a wider asterism, off-axis sources, cones shrinking towards the LGS height
+    ([60, 60, 60, 60], [0, 90, 180, 270], [0, 35, 50], [0, 45, 300], [0.0, 2000.0, 9000.0, 30000.0, 60000.0]),
+    # wide 3-LGS asterism: central hole and fully separated footprints at high altitude
+    ([120, 120, 120], [10, 130, 250], [0, 40, 100], [0, 0, 120], [0.0, 1000.0, 15000.0, 40000.0]),
+])
+def test_footprint_inner_gap_batched_equals_per_layer(gs_zen, gs_az, src_zen, src_az, h):
+    fao = _gap_geometry(8.0, gs_zen, gs_az, src_zen, src_az)
+    batched = nnp.asarray(fao._footprint_inner_gap_layers_gpu(h))
+    assert batched.shape == (len(h), len(src_zen))
+    per_layer = nnp.stack([fao._footprint_inner_gap(hi) for hi in h])
+    assert nnp.max(nnp.abs(batched - per_layer)) <= 1e-12*8.0
+    assert batched.max() > 0     # the geometry exercises non-trivial gaps
