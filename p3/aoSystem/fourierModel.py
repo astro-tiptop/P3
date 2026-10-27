@@ -46,7 +46,8 @@ deg2rad = np.pi/180
 
 def besselj__n(n, z):
     if n<0:
-        return -1**(-n) * besselj__n(-n, z)
+        # J_{-n} = (-1)^n J_n for integer n (-1**(-n) parsed as -(1**(-n)) = -1)
+        return (-1)**int(n) * besselj__n(-n, z)
     if n==0:
         return spc.j0(z)
     elif n==1:
