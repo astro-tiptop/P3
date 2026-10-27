@@ -82,6 +82,49 @@ class frequencyDomain():
         """"""
         return min(4,max(2,int(np.ceil(self.nOtf/self.resAO/2))))
 
+    def _computeStaticOtf(self):
+        """Static (NCPA) and diffraction-limited OTFs and the static phase map, from
+        the telescope state at the time of the first access (code that changes the
+        static aberrations afterwards assigns new OTFs explicitly). Only the fields
+        still unset are filled: e.g. sf_3D_to_psf_3D assigns otfNCPA/phaseMap and
+        then reads otfDL, which must not overwrite them."""
+        otfNCPA, otfDL, phaseMap = getStaticOTF(self.ao.tel, self.nOtf, self.sampRef,
+                                                self.wvlRef, dtype=self.dtype)
+        if self._otfNCPA is None:
+            self._otfNCPA, self._phaseMap = otfNCPA, phaseMap
+        if self._otfDL is None:
+            self._otfDL = otfDL
+
+    @property
+    def otfNCPA(self):
+        if self._otfNCPA is None:
+            self._computeStaticOtf()
+        return self._otfNCPA
+
+    @otfNCPA.setter
+    def otfNCPA(self, val):
+        self._otfNCPA = val
+
+    @property
+    def otfDL(self):
+        if self._otfDL is None:
+            self._computeStaticOtf()
+        return self._otfDL
+
+    @otfDL.setter
+    def otfDL(self, val):
+        self._otfDL = val
+
+    @property
+    def phaseMap(self):
+        if self._phaseMap is None and self._otfNCPA is None:
+            self._computeStaticOtf()
+        return self._phaseMap
+
+    @phaseMap.setter
+    def phaseMap(self, val):
+        self._phaseMap = val
+
     def __init__(self, aoSys, kcExt=None, nyquistSampling=False,
                  Hfilter=1, computeFocalAnisoCov=True, dtype=np.float64):
 
@@ -203,12 +246,10 @@ class frequencyDomain():
                                                                             fact=2,
                                                                             dtype=self.dtype)
 
-        # COMPUTING THE STATIC OTF IF A PHASE MAP IS GIVEN
-        self.otfNCPA, self.otfDL, self.phaseMap = getStaticOTF(self.ao.tel,
-                                                               self.nOtf,
-                                                               self.sampRef,
-                                                               self.wvlRef,
-                                                               dtype=self.dtype)
+        # STATIC OTF (otfNCPA, otfDL, phaseMap): computed on first access (see
+        # _computeStaticOtf). Users that only need PSDs (e.g. TIPTOP, calcPSF=False)
+        # never pay for it (~50 ms of FFTs per model).
+        self._otfNCPA = self._otfDL = self._phaseMap = None
         self.totf = 1000*(time.time()-t0)
 
         # ANISOPLANATISM PHASE STRUCTURE FUNCTION

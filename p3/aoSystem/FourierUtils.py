@@ -10,8 +10,8 @@ from . import np, nnp, scnd, RectBivariateSpline, fft, spc, cpuArray, asnumpy
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import functools
 import warnings
-from astropy.modeling import fitting, models
 from matplotlib.path import Path
 from scipy import ndimage
 from scipy.interpolate import CubicSpline, interp1d
@@ -1040,6 +1040,22 @@ def getEncircledEnergy(psf,pixelscale=1,center=None,nargout=1):
         return ee,rr
 
 
+@functools.lru_cache(maxsize=4)
+def _radial_grid(shape, cx, cy, pixelscale, binsize):
+    """Radius map in bin-size steps, its np.round integer bins (flattened), the
+    pixel count per bin and the minimum radius, for radial_profile. Returned
+    arrays are read-only."""
+    # 1D coordinates broadcast to 2D: avoids allocating two full index arrays
+    x = nnp.arange(shape[1], dtype=float)[None, :] - cx
+    y = nnp.arange(shape[0], dtype=float)[:, None] - cy
+    r = nnp.sqrt(x ** 2 + y ** 2) * pixelscale / binsize
+    ri = nnp.round(r.ravel()).astype(int)
+    counts = nnp.bincount(ri)
+    for a in (r, ri, counts):
+        a.flags.writeable = False
+    return r, ri, counts, r.min()
+
+
 def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=False, binsize=None, maxradius=None,
                    normalize='None', pa_range=None, nargout=2, supersamp=None, slice=slice, 
                    polar_grid=None, r_vals=None, verbose=False):
@@ -1125,46 +1141,44 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
             return r_vals, profile
 
     # === Build radial coordinate array ===
-    y, x = nnp.indices(image.shape, dtype=float)
-    x -= center[0]
-    y -= center[1]
-
-    r = nnp.sqrt(x ** 2 + y ** 2) * pixelscale / binsize  # radius in bin size steps
+    # radius in bin size steps, its integer bins and their pixel counts: cached,
+    # since the many PSFs of a simulation share shape, centre and pixel scale
+    r, ri_full, counts_full, r_min = _radial_grid(image.shape, float(center[0]), float(center[1]),
+                                                  float(pixelscale), float(binsize))
 
     image = cpuArray(image)
     if pa_range is None:
         # Use full image
-        ind = nnp.argsort(r.flat)
-        sr = r.flat[ind]  # sorted r
-        sim = image.flat[ind]  # sorted image
+        r_sel = r.ravel()
+        im_sel = image.ravel()
+        ri = ri_full
+        counts = counts_full
     else:
         # Apply the PA range restriction
+        x = nnp.arange(image.shape[1], dtype=float)[None, :] - center[0]
+        y = nnp.arange(image.shape[0], dtype=float)[:, None] - center[1]
         pa = nnp.rad2deg(nnp.arctan2(-x, y))  # Note the (-x,y) convention is needed for astronomical PA convention
         mask = (pa >= pa_range[0]) & (pa <= pa_range[1])
-        ind = nnp.argsort(r[mask].flat)
-        sr = r[mask].flat[ind]
-        sim = image[mask].flat[ind]
+        r_sel = r[mask]
+        im_sel = image[mask]
+        # DISCRETE BINNING: int conversion of radii (np.round: half to even).
+        ri = nnp.round(r_sel).astype(int)
+        counts = nnp.bincount(ri)
 
-    # DISCRETE BINNING: int conversion of radii
-    ri = nnp.round(sr).astype(int)  # sorted r as int
-    deltar = ri[1:] - ri[:-1]  # assume all radii represented (more work if not)
-    rind = nnp.where(deltar)[0]
-    nr = rind[1:] - rind[:-1]  # number in radius bin
-    csim = nnp.nan_to_num(sim).cumsum(dtype=float)  # cumulative sum to figure out sums for each bin
-    # nnp.nancumsum is implemented in >1.12
-    tbin = csim[rind[1:]] - csim[rind[:-1]]  # sum for image values in radius bins
-    radialprofile = tbin / nr
+    # Histogram with bincount, O(N), instead of sorting the pixels by radius.
+    # Only the radial bins that contain pixels are kept, in increasing radius
+    # order; as in the original sort-based algorithm, the outermost bin is
+    # dropped from both the profile and the EE.
+    weights = im_sel.astype(float, copy=False)
+    if not nnp.isfinite(weights).all():  # nan_to_num copies: only pay for it when needed
+        weights = nnp.nan_to_num(weights)
+    sums = nnp.bincount(ri, weights=weights)
+    present = counts > 0
+    counts, sums = counts[present][:-1], sums[present][:-1]
+    csim_bins = nnp.cumsum(sums)  # encircled flux up to the end of each bin
+    radialprofile2 = sums / counts
 
-    # pre-pend the initial element that the above code misses.
-    radialprofile2 = nnp.empty(len(radialprofile) + 1)
-    if rind[0] != 0:
-        radialprofile2[0] = csim[rind[0]] / (
-                rind[0] + 1)  # if there are multiple elements in the center bin, average them
-    else:
-        radialprofile2[0] = csim[0]  # otherwise if there's just one then just take it.
-    radialprofile2[1:] = radialprofile
-
-    rr = nnp.arange(r.min(), r.min()+len(radialprofile2)) * binsize
+    rr = nnp.arange(r_min, r_min+len(radialprofile2)) * binsize
     if maxradius is not None:
         crop = rr < maxradius
         rr = rr[crop]
@@ -1200,7 +1214,7 @@ def radial_profile(image, ext=0, pixelscale=1,ee=False, center=None, stddev=Fals
     if nargout == 1:
         return radialprofile2
     if ee:
-        ee = csim[rind]
+        ee = csim_bins.copy()
         ee /= nnp.max(ee)
         return rr, radialprofile2, ee
     return rr, radialprofile2
@@ -1416,13 +1430,26 @@ def find_contour_points(image, level):
     # Find points above threshold
     above_threshold = image > level
 
+    # Work on the bounding box of the above-threshold pixels plus a 1-pixel
+    # margin: it contains every boundary pixel, and the row-major order of the
+    # points (hence argpartition tie-breaking below) is unchanged, so the
+    # result is identical to processing the full image.
+    rows = nnp.flatnonzero(above_threshold.any(axis=1))
+    if rows.size == 0:
+        return [0]  # same as the no-contour-point exit below
+    cols = nnp.flatnonzero(above_threshold.any(axis=0))
+    y0, y1 = max(rows[0] - 1, 0), min(rows[-1] + 2, image.shape[0])
+    x0, x1 = max(cols[0] - 1, 0), min(cols[-1] + 2, image.shape[1])
+    above_crop = above_threshold[y0:y1, x0:x1]
+
     # Find boundary points
     kernel = nnp.array([[0,1,0], [1,1,1], [0,1,0]], dtype=bool)
-    dilated = ndimage.binary_dilation(above_threshold, kernel)
-    boundary_points = dilated & ~above_threshold
+    dilated = ndimage.binary_dilation(above_crop, kernel)
+    boundary_points = dilated & ~above_crop
 
     # Get coordinates of boundary points
     boundary_y, boundary_x = nnp.where(boundary_points)
+    boundary_y, boundary_x = boundary_y + y0, boundary_x + x0
 
     # Calculate distance from peak for each boundary point
     distances = nnp.sqrt((boundary_y - peak_y)**2 + (boundary_x - peak_x)**2)
@@ -1430,8 +1457,78 @@ def find_contour_points(image, level):
     contour_points = []
 
     # Get coordinates of above-threshold points
-    above_y, above_x = nnp.where(above_threshold)
+    above_y, above_x = nnp.where(above_crop)
+    above_y, above_x = above_y + y0, above_x + x0
 
+    # The vectorized version is bit-identical (float64) and faster up to a few
+    # thousand above-threshold pixels; beyond ~8000 the full distance matrix
+    # costs more than the Python loop it replaces.
+    if 4 < len(above_x) <= 6000 and image.dtype == nnp.float64 and nnp.asarray(level).dtype == nnp.float64:
+        contour_points = _contour_points_vectorized(image, level, boundary_x, boundary_y,
+                                                    above_x, above_y, peak_x, peak_y)
+    else:
+        contour_points = _contour_points_loop(image, level, boundary_x, boundary_y, distances,
+                                              above_x, above_y, peak_x, peak_y)
+
+    if not contour_points:
+        contour_points.append(0)
+        return contour_points
+
+    contour_points = nnp.array(contour_points)
+
+    # Filter outliers
+    distances_from_peak = nnp.sqrt(nnp.sum((contour_points - [peak_x, peak_y])**2, axis=1))
+    med_distance = nnp.median(distances_from_peak)
+    std_distance = nnp.std(distances_from_peak)
+    mask = nnp.abs(distances_from_peak - med_distance) < 2 * std_distance
+    contour_points = contour_points[mask]
+
+    return contour_points
+
+
+def _contour_points_vectorized(image, level, boundary_x, boundary_y, above_x, above_y, peak_x, peak_y,
+                               max_elements=4_000_000):
+    """Same computation as _contour_points_loop for float64 images, in blocks of
+    boundary points. Each row of the distance matrix goes through the same
+    argpartition kernel as the 1D call of the loop and every other operation is
+    elementwise in the same order, so the points are bit-identical."""
+    contour_points = []
+    n_above = len(above_x)
+    block = max(1, max_elements // n_above)
+    for i0 in range(0, len(boundary_x), block):
+        bx = boundary_x[i0:i0+block]
+        by = boundary_y[i0:i0+block]
+        # Find closest points above threshold
+        dists_to_above = nnp.sqrt((above_y[None, :] - by[:, None])**2 + (above_x[None, :] - bx[:, None])**2)
+        nearest_indices = nnp.argpartition(dists_to_above, 4, axis=1)[:, :4]
+        nx, ny = above_x[nearest_indices], above_y[nearest_indices]
+        # Farthest of them from the peak
+        dists_from_peak = nnp.sqrt((nx - peak_x)**2 + (ny - peak_y)**2)
+        farthest_idx = nnp.argmax(dists_from_peak, axis=1)
+        rows = nnp.arange(len(bx))
+        fx, fy = nx[rows, farthest_idx], ny[rows, farthest_idx]
+        far_val = image[fy, fx]
+        curr_val = image[by, bx]
+        # Direction vector from peak to farthest point
+        dx, dy = fx - peak_x, fy - peak_y
+        direction_norm = nnp.sqrt(dx**2 + dy**2)
+        safe_norm = nnp.where(direction_norm > 0, direction_norm, 1.0)
+        dir_x = nnp.where(direction_norm > 0, dx / safe_norm, dx)
+        dir_y = nnp.where(direction_norm > 0, dy / safe_norm, dy)
+        # Interpolation on the line
+        ok = (curr_val < level) & (level < far_val)
+        t = (level - curr_val[ok]) / (far_val[ok] - curr_val[ok])
+        curr_dist = nnp.sqrt((bx[ok] - peak_x)**2 + (by[ok] - peak_y)**2)
+        far_dist = direction_norm[ok]
+        interp_dist = curr_dist + t * (far_dist - curr_dist)
+        px = peak_x + dir_x[ok] * interp_dist
+        py = peak_y + dir_y[ok] * interp_dist
+        contour_points.extend(nnp.column_stack((px, py)).tolist())
+    return contour_points
+
+
+def _contour_points_loop(image, level, boundary_x, boundary_y, distances, above_x, above_y, peak_x, peak_y):
+    contour_points = []
     # For every edge point
     for x, y, d in zip(boundary_x, boundary_y, distances):
         # Find closest points above threshold
@@ -1477,20 +1574,6 @@ def find_contour_points(image, level):
             py = peak_y + direction[1] * interp_dist
 
             contour_points.append([px, py])
-
-    if not contour_points:
-        contour_points.append(0)
-        return contour_points
-
-    contour_points = nnp.array(contour_points)
-
-    # Filter outliers
-    distances_from_peak = nnp.sqrt(nnp.sum((contour_points - [peak_x, peak_y])**2, axis=1))
-    med_distance = nnp.median(distances_from_peak)
-    std_distance = nnp.std(distances_from_peak)
-    mask = nnp.abs(distances_from_peak - med_distance) < 2 * std_distance
-    contour_points = contour_points[mask]
-
     return contour_points
 
 
@@ -1606,6 +1689,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
                 ym = wy[wr.argmax()]
                 theta = nnp.mean(180*nnp.arctan2(ym, xm)/nnp.pi)
         elif method == 'gaussian':
+            from astropy.modeling import fitting, models  # deferred: slow to import (~0.7 s)
             # initial guess of the FWHM
             fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
 
@@ -1622,6 +1706,7 @@ def getFWHM(psf,pixelScale,rebin=1,method='contour',nargout=2,center=None,std_gu
             fwhmY = 2 * nnp.sqrt(2 * nnp.log(2)) * nnp.abs(g.y_stddev.value*pixelScale)
             theta = g.theta.value*180/np.pi
         elif method == 'moffat':      
+            from astropy.modeling import fitting, models
             # initial guess of the FWHM
             fwhm_guess = 2*nnp.sqrt((im_hr > peak_val/2).sum()/np.pi)
 
