@@ -30,6 +30,10 @@ class TestMemoryUsage(unittest.TestCase):
                             verbose=False, display=False)
         return fao
 
+    # On GPU the arrays are in device memory: tracemalloc sees only ~10 kB of Python
+    # bookkeeping and peak_MB is a heuristic for it, so their ratio is not a test of
+    # the estimate (the device model is model_peak_MB).
+    @unittest.skipIf(aoSystemMain.gpuEnabled, 'tracemalloc does not see device memory')
     def test_nirc2_memory_estimation(self):
         """Test memory estimation for NIRC2 system"""
         path_ini = self.path_ao + '/parFiles/nirc2.ini'
@@ -54,6 +58,10 @@ class TestMemoryUsage(unittest.TestCase):
                        f"Estimation too high: {estimated_mb:.1f}MB vs {actual_mb:.1f}MB")
         print(f"NIRC2: Estimated={estimated_mb:.1f}MB, Actual={actual_mb:.1f}MB, Ratio={ratio:.2f}")
 
+    # On GPU the arrays are in device memory: tracemalloc sees only ~10 kB of Python
+    # bookkeeping and peak_MB is a heuristic for it, so their ratio is not a test of
+    # the estimate (the device model is model_peak_MB).
+    @unittest.skipIf(aoSystemMain.gpuEnabled, 'tracemalloc does not see device memory')
     def test_irdis_memory_estimation(self):
         """Test memory estimation for IRDIS system"""
         path_ini = self.path_ao + '/parFiles/irdis.ini'
@@ -74,6 +82,10 @@ class TestMemoryUsage(unittest.TestCase):
         self.assertGreater(ratio, 0.5)
         self.assertLess(ratio, 2.0)
 
+    # On GPU the arrays are in device memory: tracemalloc sees only ~10 kB of Python
+    # bookkeeping and peak_MB is a heuristic for it, so their ratio is not a test of
+    # the estimate (the device model is model_peak_MB).
+    @unittest.skipIf(aoSystemMain.gpuEnabled, 'tracemalloc does not see device memory')
     def test_mavis_memory_estimation(self):
         """Test memory estimation for MAVIS MCAO system"""
         path_ini = self.path_ao + '/parFiles/MavisMCAO.ini'
