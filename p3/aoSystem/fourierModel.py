@@ -1051,14 +1051,18 @@ class fourierModel:
 
             # Get transfer functions: Cn2-weighted average over layers and wind angles
             # (loopGain != 0 here, so NTF = ATF/z)
-            c = complex(2j*nnp.pi*Ts)
+            # numpy scalars, not Python ones: inside cp.fuse a unary op on a Python
+            # scalar alone (here -delay) is computed in float16 (2.3 -> 2.30078)
+            c = nnp.complex128(2j*nnp.pi*Ts)
             costh_h = cpuArray(costh)
             for l in range(self.ao.atm.nL):
-                w = float(cpuArray(weights[l])) / nTh
+                w = nnp.float64(cpuArray(weights[l])) / nTh
                 for iTheta in range(nTh):
                     h1, h2, hn = _controller_layer(h1, h2, hn, self.freq.kxAO_, self.freq.kyAO_,
-                                                   float(vx[l]*costh_h[iTheta]), float(vy[l]*costh_h[iTheta]),
-                                                   c, delay, loopGain, eps, w)
+                                                   nnp.float64(vx[l]*costh_h[iTheta]),
+                                                   nnp.float64(vy[l]*costh_h[iTheta]),
+                                                   c, nnp.float64(delay), nnp.float64(loopGain),
+                                                   nnp.float64(eps), w)
 
             self.h1 = h1.astype(self.complex_dtype, copy=False)
             self.h2 = h2.astype(self.dtype, copy=False)
@@ -1253,7 +1257,9 @@ class fourierModel:
 
     def _aliasing_common(self):
         i = self.complex_dtype(1j)
-        d = self.ao.wfs.optics[0].dsub
+        # Python float: an np.float64 scalar would promote m / d, km, kn, Q (and so the
+        # aliasing accumulator) to double in single precision
+        d = float(self.ao.wfs.optics[0].dsub)
         clock_rate = np.array([self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)])
         T = np.mean(clock_rate / self.ao.rtc.holoop['rate'])
         td = T * self.ao.rtc.holoop['delay']
@@ -1383,11 +1389,15 @@ class fourierModel:
             # (layers, shifts, k) temporaries of the chunked expression below, and with
             # the delay phase factorized into per-frequency and per-shift terms (see
             # _aliasing_layer_term): ~3.5x faster, same result to ~1e-15.
+            # td and T are float64: cast so that single precision stays complex64
             for layer in range(self.ao.atm.nL):
-                row = (weights[layer] * tf_flat) \
-                      * np.exp(two_pi_i * (kxAO * vx[layer] + kyAO * vy[layer]) * td)
-                phase_shift = np.exp(-two_pi_i * (m_flat * vx[layer] + n_flat * vy[layer]) * td / d)
-                avr_sum = _aliasing_layer_fused(avr_sum, km, kn, vx[layer], vy[layer], T,
+                row = ((weights[layer] * tf_flat)
+                       * np.exp(two_pi_i * (kxAO * vx[layer] + kyAO * vy[layer]) * td)
+                       ).astype(self.complex_dtype, copy=False)
+                phase_shift = np.exp(-two_pi_i * (m_flat * vx[layer] + n_flat * vy[layer]) * td / d
+                                     ).astype(self.complex_dtype, copy=False)
+                avr_sum = _aliasing_layer_fused(avr_sum, km, kn, vx[layer], vy[layer],
+                                                np.asarray(T, dtype=self.dtype),
                                                 phase_shift[:, None], row[None, :])
             psd = np.sum(PR * W_mn * np.abs(Q * avr_sum) ** 2, axis=0)
             return np.reshape(psd, self.Rx.shape)
