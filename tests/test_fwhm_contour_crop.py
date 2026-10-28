@@ -108,26 +108,48 @@ def test_getfwhm_contour_identical(old, name):
     img = CASES[name]()
     new = _run(getFWHM, img, 1.7, method='contour', nargout=4)
     ref = _run(old.getFWHM, img, 1.7, method='contour', nargout=4)
+    if ref[0] == 'err' and issubclass(ref[1], ValueError) and name.startswith('near_border'):
+        # half-max region touching the edge: the old fwhm_1d raised, the fixed one returns
+        assert new[0] == 'ok'
+        return
     _assert_identical(new, ref)
 
 
-@pytest.mark.parametrize('name', ['round_odd', 'rotated', 'noisy', 'two_blobs'])
-def test_getfwhm_contour_rebin2_identical(old, name):
-    img = CASES[name]()
-    new = _run(getFWHM, img, 1.7, rebin=2, method='contour', nargout=4)
-    ref = _run(old.getFWHM, img, 1.7, rebin=2, method='contour', nargout=4)
-    _assert_identical(new, ref)
+@pytest.mark.parametrize('samp', [1.5, 1.9])
+def test_getfwhm_rebin2_airy(samp):
+    # rebin > 1 used to go through scnd.zoom (corner-aligned: wrong scale and the
+    # peak moved by half a pixel, between pixels for rebin=2): contour FWHM of a
+    # point-sampled Airy was 0.3-0.9 lambda/D. Now within 3 % of 1.029 lambda/D.
+    from scipy.special import j1
+    n = 128
+    y, x = np.indices((n, n))
+    v = np.pi * np.hypot(x - n // 2, y - n // 2) / samp
+    img = np.ones_like(v)
+    m = v > 0
+    img[m] = (2 * j1(v[m]) / v[m]) ** 2
+    fwhm = getFWHM(img, 1 / samp, method='contour', rebin=2, nargout=1)
+    assert fwhm == pytest.approx(1.029, rel=0.03)
 
 
-def test_peak_on_edge_raises_same_error(old):
-    # Pre-existing bug: a peak exactly on the edge row/column makes fwhm_1d
-    # raise ValueError (profile[left-1:left+2] is too short) in BOTH versions.
+def test_getfwhm_rebin2_gaussian():
+    # Gaussian sigma = 1.2 px centred on pixel n//2: FWHM = 2 sqrt(2 ln 2) sigma
+    n, sigma = 64, 1.2
+    y, x = np.indices((n, n))
+    img = np.exp(-((x - n // 2) ** 2 + (y - n // 2) ** 2) / (2 * sigma ** 2))
+    fwhm = getFWHM(img, 1.0, method='contour', rebin=2, nargout=1)
+    assert fwhm == pytest.approx(2 * np.sqrt(2 * np.log(2)) * sigma, rel=0.03)
+
+
+def test_peak_on_edge_no_longer_raises(old):
+    # A peak exactly on the edge row made fwhm_1d raise ValueError
+    # (profile[left-1:left+2] too short) in the old code; fwhm_1d now uses the
+    # edge as the crossing on that side (FWHM truncated, a lower bound).
     img = _gauss(101, 101, 3, 3, cx=50, cy=0)
-    new = _run(getFWHM, img, 1.0, method='contour', nargout=4)
     ref = _run(old.getFWHM, img, 1.0, method='contour', nargout=4)
-    assert new[0] == ref[0] == 'err'
-    assert new[1] is ref[1]
-    assert issubclass(new[1], ValueError)
+    assert ref[0] == 'err' and issubclass(ref[1], ValueError)
+    new = _run(getFWHM, img, 1.0, method='contour', nargout=4)
+    assert new[0] != 'err'
+    assert all(np.isfinite(v) and v > 0 for v in new[1][:2])
 
 
 @pytest.mark.parametrize('name', ['round_odd', 'two_blobs', 'near_border'])
