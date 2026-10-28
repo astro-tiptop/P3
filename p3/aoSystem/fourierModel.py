@@ -46,13 +46,80 @@ deg2rad = np.pi/180
 
 def besselj__n(n, z):
     if n<0:
-        return -1**(-n) * besselj__n(-n, z)
+        # J_{-n} = (-1)^n J_n for integer n (-1**(-n) parsed as -(1**(-n)) = -1)
+        return (-1)**int(n) * besselj__n(-n, z)
     if n==0:
         return spc.j0(z)
     elif n==1:
         return spc.j1(z)
     elif n>=2:
         return 2*(n-1)*besselj__n(int(n)-1, z)/z - besselj__n(int(n)-2, z)
+
+def _small_matmul(a, b, max_k=16):
+    """Batched a (..., m, K) @ b (..., K, n), i.e. matmul over the last two axes.
+
+    The leading axes are batch axes (here the AO frequency grid, e.g. 226 x 226)
+    and must be equal or broadcastable; the result has shape (..., m, n).
+
+    On GPU (cupy) with a small inner dimension K, the product is computed as a sum
+    of K outer products, column k of a times row k of b:
+        out[..., p, q] = sum_k a[..., p, k] * b[..., k, q]
+    i.e. 2K-1 elementwise kernels over the whole output. For ~1e5 tiny matrices
+    this is 4-10x faster than cuBLAS batched matmul, which uses the GPU poorly on
+    such small matrices. The sum runs over k in order, possibly not the BLAS
+    order: results agree with matmul to rounding (~1e-16).
+
+    On CPU (numpy), and for K > max_k, np.matmul is used: its compiled loop over
+    the stack is 2-5x faster than the K full-size broadcast passes.
+    """
+    K = a.shape[-1]
+    if not hasattr(np, 'fuse') or K > max_k or a.ndim < 2 or b.ndim < 2:
+        return np.matmul(a, b)
+    out = a[..., :, 0:1] * b[..., 0:1, :]
+    for k in range(1, K):
+        out = out + a[..., :, k:k+1] * b[..., k:k+1, :]
+    return out
+
+
+def _aliasing_layer_term(avr, km, kn, vx, vy, T, phase_shift, row):
+    """avr + sinc(km vx T) sinc(kn vy T) phase_shift row, one layer of the aliasing average.
+
+    With km = kx - m/d, kn = ky - n/d the delay phase factorizes exactly:
+    exp(2 pi i (km vx + kn vy) td) = exp(2 pi i (kx vx + ky vy) td) exp(-2 pi i (m vx + n vy) td / d),
+    so the caller passes row = w tf exp(2 pi i (kx vx + ky vy) td) (one per frequency) and
+    phase_shift = exp(-2 pi i (m vx + n vy) td / d) (one per shift), and the complex
+    exponential is not evaluated on the (shifts, frequencies) grid.
+    """
+    return avr + np.sinc(km * vx * T) * np.sinc(kn * vy * T) * (phase_shift * row)
+
+
+# fused into a single elementwise kernel when the backend is cupy (None on CPU)
+_aliasing_layer_fused = (np.fuse(kernel_name='p3_aliasing_layer')(_aliasing_layer_term)
+                         if hasattr(np, 'fuse') else None)
+
+
+def _controller_layer_term(h1, h2, hn, kx, ky, ax, ay, c, delay, gain, eps, w):
+    """One (layer, wind angle) term of the integrator transfer functions of controller.
+
+    z = exp(c (ax kx + ay ky)), with c = 2 i pi Ts and (ax, ay) the wind velocity along
+    the angle (Taylor: f = -v.k). Returns h1 + w ATF, h2 + w |ATF|^2, hn + w |NTF|^2,
+    with ATF = H z^-d / (1 + H z^-d), H = g / (1 - z^-1), NTF = ATF / z.
+    """
+    z = np.exp(c * (ax * kx + ay * ky))
+    denom = 1.0 - z**(-1.0)
+    denom = np.where(np.abs(denom) < eps, eps, denom)
+    hInt = gain / denom
+    zd = z**(-delay)
+    denom2 = 1.0 + hInt * zd
+    denom2 = np.where(np.abs(denom2) < eps, eps, denom2)
+    atf = hInt * zd / denom2
+    return h1 + w * atf, h2 + w * np.abs(atf)**2, hn + w * np.abs(atf / z)**2
+
+
+# fused into a single elementwise kernel when the backend is cupy (plain call on CPU)
+_controller_layer = (np.fuse(kernel_name='p3_controller_layer')(_controller_layer_term)
+                     if hasattr(np, 'fuse') else _controller_layer_term)
+
 
 class fourierModel:
     """
@@ -621,6 +688,20 @@ class fourierModel:
         return (bounds_down,bounds_up)
 
 #%% RECONSTRUCTOR DEFINITION
+    def _dmPhasors(self, ax, ay, dtype):
+        """exp(2i pi h_dm (ax kx + ay ky)) inside each DM cut-off (circular), else 0.
+
+        Shape (resAO, resAO, nDm). Masks instead of boolean indexing, which syncs the
+        device at every call.
+        """
+        h_dm = self.ao.dms.heights
+        i = dtype(1j)
+        coef = np.asarray(nnp.array([2*i*np.pi*h for h in h_dm], dtype=dtype))
+        kc = np.asarray(nnp.asarray(cpuArray(self.freq.kc_[:len(h_dm)]), dtype=float))
+        k = np.sqrt(self.freq.k2AO_)[:, :, None]
+        fxfy = (ax*self.freq.kxAO_ + ay*self.freq.kyAO_)[:, :, None]
+        return np.where(k <= kc, np.exp(coef*fxfy), 0).astype(dtype, copy=False)
+
     def spatialReconstructor(self, MV=0):
         """
         Computes the WFS spatial reconstructor and the tomographic reconstructor
@@ -635,15 +716,13 @@ class fourierModel:
             # TOMOGRAPHIC SYSTEM
             self.Wtomo = self.tomographicReconstructor()
             self.Popt = self.optimalProjector()
-            self.W = np.matmul(self.Popt, self.Wtomo)
+            self.W = _small_matmul(self.Popt, self.Wtomo)
             if self.reduce_memory:
                 self.Popt = None
                 self.Wtomo = None
 
             # Computation of the Pbeta^DM matrix
             k = np.sqrt(self.freq.k2AO_)
-            h_dm = self.ao.dms.heights
-            nDm = len(h_dm)
             nK = self.freq.resAO
             i = self.complex_dtype(1j)
             nH = self.ao.atm.nL
@@ -653,38 +732,37 @@ class fourierModel:
             clock_rate = [self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)]
             sampTime = 1/self.ao.rtc.holoop['rate']
 
-            self.PbetaDM = []
-            for s in range(self.ao.src.nSrc):
-                fx = self.ao.src.direction[0, s]*self.freq.kxAO_
-                fy = self.ao.src.direction[1, s]*self.freq.kyAO_
-                PbetaDM = np.zeros([nK, nK, 1, nDm],
-                                   dtype=self.complex_dtype)
-                for j in range(nDm): #loop on DMs
-                    index = k<=self.freq.kc_[j] # note : circular masking
-                    PbetaDM[index, 0, j] = np.exp(2*i*np.pi*h_dm[j]*(fx[index] + fy[index]))
-                self.PbetaDM.append(PbetaDM)
+            # per-GS host scalars broadcast on a third axis
+            def _last(v):
+                return np.asarray(nnp.asarray(cpuArray(v), dtype=float).reshape(1, 1, -1))
 
-            # Computation of the Malpha matrix
+            self.PbetaDM = [self._dmPhasors(self.ao.src.direction[0, s], self.ao.src.direction[1, s],
+                                            self.complex_dtype)[:, :, None, :]
+                            for s in range(self.ao.src.nSrc)]
+
+            # Computation of the Malpha matrix (all guide stars of a layer at once)
             wDir_x = nnp.cos(self.ao.atm.wDir*np.pi/180)
             wDir_y = nnp.sin(self.ao.atm.wDir*np.pi/180)
+            kx = self.freq.kxAO_[:, :, None]
+            ky = self.freq.kyAO_[:, :, None]
+            gs_dir = nnp.asarray(cpuArray(self.gs.direction), dtype=float)
+            fxfy = _last(gs_dir[0])*kx + _last(gs_dir[1])*ky
+            d_sub_g = _last(d_sub)
+            sinc_x = np.sinc(d_sub_g*kx)
+            sinc_y = np.sinc(d_sub_g*ky)
+            two_pi_i_k = (2*i*np.pi*k)[:, :, None]
+            t_clock = nnp.asarray([sampTime*clock_rate[g] for g in range(self.nGs)], dtype=float)
             self.MPalphaL = np.zeros([nK, nK, self.nGs, nH],
                                      dtype=self.complex_dtype)
             for h in range(nH):
                 # unsensed layers: zero WFS response -> full residual in spatioTemporalPSD
                 if not self.sensedLayers[h]:
                     continue
-                freq_t = wDir_x[h]*self.freq.kxAO_ + wDir_y[h]*self.freq.kyAO_
-                for g in range(self.nGs):
-                    Alpha = [self.gs.direction[0, g],self.gs.direction[1, g]]
-                    fx = Alpha[0]*self.freq.kxAO_
-                    fy = Alpha[1]*self.freq.kyAO_
-                    www = 2*i*np.pi*k * np.sinc(sampTime*clock_rate[g]*self.ao.atm.wSpeed[h]*freq_t)
-                    self.MPalphaL[:, :, g, h] = www*np.sinc(d_sub[g]*self.freq.kxAO_)\
-                                                   *np.sinc(d_sub[g]*self.freq.kyAO_)\
-                                                   *np.exp(i*2*np.pi*Hs[h]*(fx+fy))
-            fx = None
-            fy = None
-            self.Walpha = np.matmul(self.W,self.MPalphaL)
+                freq_t = (wDir_x[h]*self.freq.kxAO_ + wDir_y[h]*self.freq.kyAO_)[:, :, None]
+                www = two_pi_i_k * np.sinc(_last(t_clock*float(self.ao.atm.wSpeed[h]))*freq_t)
+                self.MPalphaL[:, :, :, h] = www*sinc_x*sinc_y*np.exp(i*2*np.pi*Hs[h]*fxfy)
+            fx = fy = fxfy = sinc_x = sinc_y = two_pi_i_k = None
+            self.Walpha = _small_matmul(self.W,self.MPalphaL)
         if self.reduce_memory:
             self.MPalphaL = None
         self.t_finalReconstructor = 1000*(time.time() - tstart)
@@ -761,15 +839,15 @@ class fourierModel:
 
         # 1. WFS operator and projection matrices
         # Calculate MP directly via broadcasting, avoiding the dense M matrix allocation
+        # all sensed layers of a guide star at once
+        h_coef = np.asarray(nnp.array([i*2*np.pi*h_mod[n] for n in range(nL_mod)]))
+        sensed_mod = np.asarray(nnp.asarray(sensed_mod))
         MP = np.zeros([nK, nK, nGs, nL_mod], dtype=self.complex_dtype)
         for j in range(nGs):
             M_diag_j = 2*i*np.pi*k * np.sinc(d[j]*self.freq.kxAO_) * np.sinc(d[j]*self.freq.kyAO_)
-            for n in range(nL_mod):
-                if not sensed_mod[n]:
-                    continue
-                P_jn = np.exp(i*2*np.pi*h_mod[n]*(self.freq.kxAO_*self.gs.direction[0, j] \
-                     + self.freq.kyAO_*self.gs.direction[1, j]))
-                MP[:, :, j, n] = M_diag_j * P_jn
+            P_j = np.exp(h_coef*(self.freq.kxAO_*self.gs.direction[0, j] \
+                  + self.freq.kyAO_*self.gs.direction[1, j])[:, :, None])
+            MP[:, :, j, :] = np.where(sensed_mod, M_diag_j[:, :, None] * P_j, 0)
 
         # 2. Atmospheric PSD (Diagonal with respect to the layers)
         atm_weights = np.asarray(self.ao.atm.weights, dtype=self.dtype)
@@ -793,7 +871,7 @@ class fourierModel:
         
         # MP @ Cphi_mod @ MP_t
         MP_Cphi = MP * self.Cphi_mod[:, :, None, :]
-        to_inv  = np.matmul(MP_Cphi, MP_t)
+        to_inv  = _small_matmul(MP_Cphi, MP_t)
         
         # Direct addition of noise on the diagonal (completely eliminates self.Cb allocation)
         noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.complex_dtype)
@@ -826,7 +904,7 @@ class fourierModel:
                 print(f"Tomography: Standard solve failed ({e}), using pinv")
             inv = np.linalg.pinv(to_inv.astype(np.complex128),
                                  rcond=np.finfo(np.float64).eps)
-            Wtomo = np.matmul(rhs.astype(np.complex128), inv)
+            Wtomo = _small_matmul(rhs.astype(np.complex128), inv)
         Wtomo = np.ascontiguousarray(Wtomo.astype(self.complex_dtype))
 
         to_inv = None
@@ -844,9 +922,7 @@ class fourierModel:
         the model complex dtype.
         """
         tstart = time.time()
-        k = np.sqrt(self.freq.k2AO_)
-        h_dm = self.ao.dms.heights
-        nDm = len(h_dm)
+        nDm = len(self.ao.dms.heights)
         nDir = len(self.ao.dms.opt_dir[0])
         h_mod = self.atm_mod.heights * cpuArray(self.strechFactor_mod)
         nL = len(h_mod)
@@ -862,30 +938,18 @@ class fourierModel:
         theta_y = self.ao.dms.opt_dir[0]/206264.8 \
                 * nnp.sin(self.ao.dms.opt_dir[1]*np.pi/180)
 
-        Pdm = np.zeros([nK, nK, 1, nDm],
-                       dtype=np.complex128)
-        Pl = np.zeros([nK, nK, 1, nL],
-                      dtype=np.complex128)
-        Pdm_t = np.zeros([nK, nK, nDm, 1],
-                         dtype=np.complex128)
+        l_coef = np.asarray(nnp.array([i*2*np.pi*h for h in h_mod], dtype=np.complex128))
         for d_o in range(nDir):                 #loop on optimization directions
-            Pdm.fill(0)
-            Pl.fill(0)
-            fx = theta_x[d_o]*self.freq.kxAO_
-            fy = theta_y[d_o]*self.freq.kyAO_
-            for j in range(nDm):                # loop on DM
-                index = k <= self.freq.kc_[j] # note : circular masking here
-                Pdm[index, 0, j] = np.exp(i*2*np.pi*h_dm[j]*(fx[index]+fy[index]))
-            Pdm_t[:] = np.conj(Pdm.transpose(0, 1, 3, 2))
-            for l in range(nL):                 #loop on atmosphere layers
-                Pl[:, :, 0, l] = np.exp(i*2*np.pi*h_mod[l]*(fx + fy))
-            mat1 += np.matmul(Pdm_t, Pl)*self.ao.dms.opt_weights[d_o]
-            to_inv += np.matmul(Pdm_t, Pdm)*self.ao.dms.opt_weights[d_o]
+            Pdm = self._dmPhasors(theta_x[d_o], theta_y[d_o], np.complex128)[:, :, None, :]
+            Pdm_t = np.conj(Pdm.transpose(0, 1, 3, 2))
+            fxfy = (theta_x[d_o]*self.freq.kxAO_ + theta_y[d_o]*self.freq.kyAO_)[:, :, None, None]
+            Pl = np.exp(l_coef*fxfy)
+            mat1 += _small_matmul(Pdm_t, Pl)*self.ao.dms.opt_weights[d_o]
+            to_inv += _small_matmul(Pdm_t, Pdm)*self.ao.dms.opt_weights[d_o]
         Pdm = None
         Pl = None
         Pdm_t = None
-        fx = None
-        fy = None
+        fxfy = None
 
         # Popt
         if nDir == 1:
@@ -898,7 +962,7 @@ class fourierModel:
             lambda_tikhonov = 1/self.ao.dms.opt_cond
             try:
                 # Build regularized system
-                A = to_inv_t.astype(np.complex128) @ to_inv.astype(np.complex128)
+                A = _small_matmul(to_inv_t.astype(np.complex128), to_inv.astype(np.complex128))
                 # Add regularization on diagonal as a fraction of the trace
                 lambda_reg = (np.mean(np.diagonal(A, axis1=2, axis2=3)) \
                              * lambda_tikhonov).astype(self.complex_dtype)
@@ -917,7 +981,7 @@ class fourierModel:
                 mat2 = np.linalg.pinv(to_inv.astype(np.complex128),
                                     rcond=1/self.ao.dms.opt_cond)
 
-        Popt = np.matmul(mat2, mat1).astype(self.complex_dtype)
+        Popt = _small_matmul(mat2, mat1).astype(self.complex_dtype)
 
         self.t_opt = 1000*(time.time() - tstart)
         return Popt
@@ -986,46 +1050,24 @@ class fourierModel:
 
             self.noiseGain = trapz(abs(self.ntfInt)**2, f)*2*Ts
 
-            # Get transfer functions
+            # Get transfer functions: Cn2-weighted average over layers and wind angles
+            # (loopGain != 0 here, so NTF = ATF/z)
+            # numpy scalars, not Python ones: inside cp.fuse a unary op on a Python
+            # scalar alone (here -delay) is computed in float16 (2.3 -> 2.30078)
+            c = nnp.complex128(2j*nnp.pi*Ts)
+            costh_h = cpuArray(costh)
             for l in range(self.ao.atm.nL):
-                h1buf = np.zeros((nPts, nPts, nTh),
-                                 dtype=self.complex_dtype)
-                h2buf = np.zeros((nPts, nPts, nTh),
-                                 dtype=self.dtype)
-                hnbuf = np.zeros((nPts, nPts, nTh),
-                                 dtype=self.dtype)
+                w = nnp.float64(cpuArray(weights[l])) / nTh
                 for iTheta in range(nTh):
-                    fi = -vx[l]*self.freq.kxAO_*costh[iTheta] - vy[l]*self.freq.kyAO_*costh[iTheta]
-                    z  = np.exp(-2*i*np.pi*fi*Ts)
+                    h1, h2, hn = _controller_layer(h1, h2, hn, self.freq.kxAO_, self.freq.kyAO_,
+                                                   nnp.float64(vx[l]*costh_h[iTheta]),
+                                                   nnp.float64(vy[l]*costh_h[iTheta]),
+                                                   c, nnp.float64(delay), nnp.float64(loopGain),
+                                                   nnp.float64(eps), w)
 
-                    # Safe division for spatially varying transfer functions
-                    denom = 1.0 - z**(-1.0)
-                    denom = np.where(np.abs(denom) < eps, eps, denom)
-                    hInt = loopGain / denom
-
-                    denom2 = 1.0 + hInt * z**(-delay)
-                    denom2 = np.where(np.abs(denom2) < eps, eps, denom2)
-                    rtfInt = 1.0 / denom2
-
-                    atfInt = hInt * z**(-delay) * rtfInt
-
-                    # AO transfer function
-                    h2buf[:, :, iTheta] = abs(atfInt)**2
-                    h1buf[:, :, iTheta] = atfInt
-                    # noise transfer function
-                    if loopGain == 0:
-                        ntfInt = 1
-                    else:
-                        ntfInt = atfInt/z
-                    hnbuf[:, :, iTheta] = abs(ntfInt)**2
-
-                h1 += weights[l]*np.sum(h1buf, axis=2)/nTh
-                h2 += weights[l]*np.sum(h2buf, axis=2)/nTh
-                hn += weights[l]*np.sum(hnbuf, axis=2)/nTh
-
-            self.h1 = h1
-            self.h2 = h2
-            self.hn = hn
+            self.h1 = h1.astype(self.complex_dtype, copy=False)
+            self.h2 = h2.astype(self.dtype, copy=False)
+            self.hn = hn.astype(self.dtype, copy=False)
 
             if display:
                 plt.figure()
@@ -1216,7 +1258,9 @@ class fourierModel:
 
     def _aliasing_common(self):
         i = self.complex_dtype(1j)
-        d = self.ao.wfs.optics[0].dsub
+        # Python float: an np.float64 scalar would promote m / d, km, kn, Q (and so the
+        # aliasing accumulator) to double in single precision
+        d = float(self.ao.wfs.optics[0].dsub)
         clock_rate = np.array([self.ao.wfs.detector[j].clock_rate for j in range(self.nGs)])
         T = np.mean(clock_rate / self.ao.rtc.holoop['rate'])
         td = T * self.ao.rtc.holoop['delay']
@@ -1340,6 +1384,24 @@ class fourierModel:
         layer_chunk = max(1, min(layer_chunk, self.ao.atm.nL))
         avr_sum = np.zeros((m_flat.size, kxAO.size), dtype=self.complex_dtype)
         two_pi_i = 2 * self.complex_dtype(1j) * np.pi
+
+        if _aliasing_layer_fused is not None:
+            # GPU: one fused kernel per layer accumulating into avr_sum, without the
+            # (layers, shifts, k) temporaries of the chunked expression below, and with
+            # the delay phase factorized into per-frequency and per-shift terms (see
+            # _aliasing_layer_term): ~3.5x faster, same result to ~1e-15.
+            # td and T are float64: cast so that single precision stays complex64
+            for layer in range(self.ao.atm.nL):
+                row = ((weights[layer] * tf_flat)
+                       * np.exp(two_pi_i * (kxAO * vx[layer] + kyAO * vy[layer]) * td)
+                       ).astype(self.complex_dtype, copy=False)
+                phase_shift = np.exp(-two_pi_i * (m_flat * vx[layer] + n_flat * vy[layer]) * td / d
+                                     ).astype(self.complex_dtype, copy=False)
+                avr_sum = _aliasing_layer_fused(avr_sum, km, kn, vx[layer], vy[layer],
+                                                np.asarray(T, dtype=self.dtype),
+                                                phase_shift[:, None], row[None, :])
+            psd = np.sum(PR * W_mn * np.abs(Q * avr_sum) ** 2, axis=0)
+            return np.reshape(psd, self.Rx.shape)
 
         for chunk_start in range(0, self.ao.atm.nL, layer_chunk):
             chunk_end = min(chunk_start + layer_chunk, self.ao.atm.nL)
@@ -1482,7 +1544,7 @@ class fourierModel:
                 noise_var = np.asarray(self.ao.wfs.processing.noiseVar, dtype=self.dtype)
                 
                 for j in range(self.ao.src.nSrc):
-                    PW = np.matmul(self.PbetaDM[j], self.W)
+                    PW = _small_matmul(self.PbetaDM[j], self.W)
                     
                     # Since Cb was strictly diagonal across GS, PW @ Cb @ PW^T 
                     # mathematically simplifies to the weighted sum of squared moduli
@@ -1600,6 +1662,7 @@ class fourierModel:
         Watm = self.Wphi * self.freq.pistonFilterAO_
         F = self.Rx*self.SxAv + self.Ry*self.SyAv
         two_pi_i = 2 * i * np.pi
+        lag_term = None
 
         for s in range(self.ao.src.nSrc):
             if self.nGs<2:
@@ -1631,21 +1694,25 @@ class fourierModel:
                 fx = Beta[0]*self.freq.kxAO_
                 fy = Beta[1]*self.freq.kyAO_
                 
-                # Native construction with shape (nK, nK, 1, nH) to avoid .transpose()
-                # wDir_x is (nH,) -> [None, None, None, :]
-                # self.freq.kxAO_ is (nK, nK) -> [:, :, None, None]
-                freq_t = (
-                    wDir_x[None, None, None, :] * self.freq.kxAO_[:, :, None, None]
-                    + wDir_y[None, None, None, :] * self.freq.kyAO_[:, :, None, None]
-                )
+                if lag_term is None:
+                    # source independent, computed once (same operations as before)
+                    # Native construction with shape (nK, nK, 1, nH) to avoid .transpose()
+                    # wDir_x is (nH,) -> [None, None, None, :]
+                    # self.freq.kxAO_ is (nK, nK) -> [:, :, None, None]
+                    freq_t = (
+                        wDir_x[None, None, None, :] * self.freq.kxAO_[:, :, None, None]
+                        + wDir_y[None, None, None, :] * self.freq.kyAO_[:, :, None, None]
+                    )
+                    lag_term = deltaT * wSpeed[None, None, None, :] * freq_t
+                    sensed = np.asarray(nnp.where(self.sensedLayers)[0])
                 delta_h = (
                     Hs[None, None, None, :] * (fx + fy)[:, :, None, None]
-                    - deltaT * wSpeed[None, None, None, :] * freq_t
+                    - lag_term
                 )
                 
                 PbetaL = np.exp(two_pi_i * delta_h)
 
-                proj = PbetaL - np.matmul(self.PbetaDM[s], self.Walpha)
+                proj = PbetaL - _small_matmul(self.PbetaDM[s], self.Walpha)
                 
                 # Cphi is now a 3D diagonal array (nK, nK, nL).
                 # proj @ Cphi @ proj_T massively simplifies to element-wise broadcasting:
@@ -1653,7 +1720,6 @@ class fourierModel:
                 if self.sensedLayers.all():
                     tmp = np.sum(np.abs(proj[:, :, 0, :])**2 * self.Cphi, axis=-1)
                 else:
-                    sensed = np.asarray(nnp.where(self.sensedLayers)[0])
                     tmp = np.sum(np.abs(proj[:, :, 0, sensed])**2 * self.Cphi[:, :, sensed], axis=-1) \
                           + w_unsensed * self.Wphi
                 psd[:, :, s] = self.freq.mskInAO_ * tmp
@@ -1839,39 +1905,95 @@ class fourierModel:
 
         c_src = centres(self.ao.src.zenith, self.ao.src.azimuth)   # (nSrc, 2)
         c_gs = centres(self.gs.zenith, self.gs.azimuth)            # (nGs, 2)
-        r_gs = D/2 * (1 - h/z)
-        r_env = nnp.max(nnp.hypot(c_gs[:, 0], c_gs[:, 1])) + r_gs
+        r_gs = float(D/2 * (1 - h/z))
+        r_env = float(nnp.max(nnp.hypot(c_gs[:, 0], c_gs[:, 1])) + r_gs)
+
+        # Heavy arrays on the model backend (cupy on GPU: ~10x faster than numpy
+        # here); the small geometric quantities stay on the host as floats.
+        xp = np
+        c_src_x = xp.asarray(c_src)
 
         def boundary_distance(P):
             """P: (nSrc, m, 2) points in footprint coordinates -> (nSrc, m);
             negative when outside the footprint/envelope or inside an LGS footprint."""
-            A = P + c_src[:, None, :]
-            d_src = D/2 - nnp.hypot(P[..., 0], P[..., 1])
-            d_env = r_env - nnp.hypot(A[..., 0], A[..., 1])
+            A = P + c_src_x[:, None, :]
+            d_src = D/2 - xp.hypot(P[..., 0], P[..., 1])
+            d_env = r_env - xp.hypot(A[..., 0], A[..., 1])
             # min over the LGSs as a loop of elementwise minima on contiguous
             # arrays: same values as .min(axis=-1) over a trailing axis of
             # length nGs, ~2.5x faster
-            Ax, Ay = nnp.ascontiguousarray(A[..., 0]), nnp.ascontiguousarray(A[..., 1])
-            d_gs = nnp.hypot(Ax - c_gs[0, 0], Ay - c_gs[0, 1]) - r_gs
+            Ax, Ay = xp.ascontiguousarray(A[..., 0]), xp.ascontiguousarray(A[..., 1])
+            d_gs = xp.hypot(Ax - float(c_gs[0, 0]), Ay - float(c_gs[0, 1])) - r_gs
             for k in range(1, len(c_gs)):
-                nnp.minimum(d_gs, nnp.hypot(Ax - c_gs[k, 0], Ay - c_gs[k, 1]) - r_gs, out=d_gs)
-            return nnp.minimum(nnp.minimum(d_src, d_env), d_gs)
+                xp.minimum(d_gs, xp.hypot(Ax - float(c_gs[k, 0]), Ay - float(c_gs[k, 1])) - r_gs, out=d_gs)
+            return xp.minimum(xp.minimum(d_src, d_env), d_gs)
 
         pix = D / n_grid
-        u = (nnp.arange(n_grid) - n_grid/2 + 0.5) * pix
-        X, Y = nnp.meshgrid(u, u, indexing='ij')
-        P = nnp.broadcast_to(nnp.stack([X.ravel(), Y.ravel()], axis=-1),
-                             (len(c_src), n_grid**2, 2))
+        u = (xp.arange(n_grid) - n_grid/2 + 0.5) * pix
+        X, Y = xp.meshgrid(u, u, indexing='ij')
+        P = xp.broadcast_to(xp.stack([X.ravel(), Y.ravel()], axis=-1),
+                            (len(c_src), n_grid**2, 2))
         d = boundary_distance(P)
         d_max = d.max(axis=1)
         has_gap = d_max > 0
-        if has_gap.any():
-            best = P[nnp.arange(len(c_src)), d.argmax(axis=1)]
-            v = nnp.linspace(-pix, pix, n_refine)
-            dx, dy = nnp.meshgrid(v, v, indexing='ij')
-            Q = best[:, None, :] + nnp.stack([dx.ravel(), dy.ravel()], axis=-1)[None]
-            d_max = nnp.maximum(d_max, boundary_distance(Q).max(axis=1))
-        return 2 * nnp.maximum(d_max, 0.0)
+        if bool(has_gap.any()):
+            best = P[xp.arange(len(c_src)), d.argmax(axis=1)]
+            v = xp.linspace(-pix, pix, n_refine)
+            dx, dy = xp.meshgrid(v, v, indexing='ij')
+            Q = best[:, None, :] + xp.stack([dx.ravel(), dy.ravel()], axis=-1)[None]
+            d_max = xp.maximum(d_max, boundary_distance(Q).max(axis=1))
+        return 2 * nnp.maximum(nnp.asarray(cpuArray(d_max)), 0.0)
+
+    def _footprint_inner_gap_layers_gpu(self, h, n_grid=48, n_refine=12):
+        """_footprint_inner_gap for all layer altitudes h at once -> (nLayers, nSrc), on
+        the GPU backend: one batch of kernels instead of ~10 small ones per layer.
+        Same elementwise operations as the per-layer version; on CPU this batching
+        was slower (memory-bound), so it is used only with cupy."""
+        xp = np
+        D = float(self.ao.tel.D)
+        z = float(cpuArray(self.gs.height[0]))
+        h = nnp.asarray(h, dtype=float)
+
+        def centres(zen, az):
+            zen = nnp.asarray(cpuArray(zen), dtype=float) / rad2arc
+            az = nnp.deg2rad(nnp.asarray(cpuArray(az), dtype=float))
+            return nnp.stack([zen*nnp.cos(az), zen*nnp.sin(az)], axis=-1)[None] * h[:, None, None]
+
+        c_src = centres(self.ao.src.zenith, self.ao.src.azimuth)   # (nH, nSrc, 2)
+        c_gs = centres(self.gs.zenith, self.gs.azimuth)            # (nH, nGs, 2)
+        r_gs = D/2 * (1 - h/z)                                     # (nH,)
+        r_env = nnp.max(nnp.hypot(c_gs[..., 0], c_gs[..., 1]), axis=1) + r_gs
+        c_src_x, c_gs_x = xp.asarray(c_src), xp.asarray(c_gs)
+        r_gs_x, r_env_x = xp.asarray(r_gs)[:, None, None], xp.asarray(r_env)[:, None, None]
+
+        def boundary_distance(P):
+            """P: (nH, nSrc, m, 2) -> (nH, nSrc, m)"""
+            A = P + c_src_x[:, :, None, :]
+            d_src = D/2 - xp.hypot(P[..., 0], P[..., 1])
+            d_env = r_env_x - xp.hypot(A[..., 0], A[..., 1])
+            Ax, Ay = xp.ascontiguousarray(A[..., 0]), xp.ascontiguousarray(A[..., 1])
+            d_gs = xp.hypot(Ax - c_gs_x[:, 0, 0][:, None, None], Ay - c_gs_x[:, 0, 1][:, None, None]) - r_gs_x
+            for k in range(1, c_gs.shape[1]):
+                xp.minimum(d_gs, xp.hypot(Ax - c_gs_x[:, k, 0][:, None, None],
+                                          Ay - c_gs_x[:, k, 1][:, None, None]) - r_gs_x, out=d_gs)
+            return xp.minimum(xp.minimum(d_src, d_env), d_gs)
+
+        nH, nSrc = len(h), c_src.shape[1]
+        pix = D / n_grid
+        u = (xp.arange(n_grid) - n_grid/2 + 0.5) * pix
+        X, Y = xp.meshgrid(u, u, indexing='ij')
+        P = xp.broadcast_to(xp.stack([X.ravel(), Y.ravel()], axis=-1), (nH, nSrc, n_grid**2, 2))
+        d = boundary_distance(P)
+        d_max = d.max(axis=-1)
+        refine = (d_max > 0).any(axis=1)        # per layer, as the per-layer `if has_gap.any()`
+        if bool(refine.any()):
+            idx = d.argmax(axis=-1)
+            best = xp.take_along_axis(P, idx[..., None, None], axis=2)[:, :, 0, :]
+            v = xp.linspace(-pix, pix, n_refine)
+            dx, dy = xp.meshgrid(v, v, indexing='ij')
+            Q = best[:, :, None, :] + xp.stack([dx.ravel(), dy.ravel()], axis=-1)[None, None]
+            d_max = xp.where(refine[:, None], xp.maximum(d_max, boundary_distance(Q).max(axis=-1)), d_max)
+        return 2 * nnp.maximum(nnp.asarray(cpuArray(d_max)), 0.0)
 
     def _mcaoConeApplied(self) -> bool:
         """True if the reduced sensing volume term is requested and applicable (multi-LGS)."""
@@ -1905,7 +2027,10 @@ class fourierModel:
             return None
         h = heights[layer_idx]
         err_ana = nnp.maximum(deltaAngleE[None, :] * h[:, None] / rad2arc, 0)
-        err_gap = nnp.stack([self._footprint_inner_gap(hh) for hh in h])
+        if hasattr(np, 'fuse'):     # cupy backend: all layers in one batch
+            err_gap = self._footprint_inner_gap_layers_gpu(h)
+        else:
+            err_gap = nnp.stack([self._footprint_inner_gap(hh) for hh in h])
         err = nnp.maximum(err_ana, err_gap)                         # (nLayers, nSrc)
         with nnp.errstate(divide='ignore'):
             f_cut = 1 / err
@@ -1925,11 +2050,18 @@ class fourierModel:
                     z_ao=z_ao, fs=fs, id1=id1, id2=id2)
 
     @staticmethod
-    def _mcaoConeFilter(geom, i, s):
-        """G^2 (1-|H|^2) for layer i (index in geom) and source s, on the AO grid."""
-        zPole = np.exp(2 * np.pi * float(geom['f_cut'][i, s]) / geom['fs'])
-        lpFilter = geom['z_ao'] * (1 - zPole) / (geom['z_ao'] - zPole)
-        return np.maximum((1 - np.abs(lpFilter)**2) * float(geom['G2'][i, s]), 0)
+    def _mcaoConeFilter(geom, idx, s):
+        """G^2 (1-|H|^2) for the layers idx (indices in geom) and source s, on the AO grid.
+
+        Returns an array of shape (resAO, resAO, len(idx)); the layers are batched so a
+        source costs a handful of kernels instead of a handful per (layer, source) pair.
+        """
+        f_cut = nnp.asarray(cpuArray(geom['f_cut']), dtype=float)[idx, s]
+        G2 = nnp.asarray(cpuArray(geom['G2']), dtype=float)[idx, s]
+        zPole = np.asarray(nnp.exp(2 * nnp.pi * f_cut / float(cpuArray(geom['fs']))))
+        z_ao = geom['z_ao'][:, :, None]
+        lpFilter = z_ao * (1 - zPole) / (z_ao - zPole)
+        return np.maximum((1 - np.abs(lpFilter)**2) * np.asarray(G2), 0)
 
     def mcaoWFsensConePSD(self, psdRes):
         """%% power spectrum density related to the reduced volume sensed
@@ -1952,8 +2084,11 @@ class fourierModel:
             deltaPsd = np.maximum(psd_atmo[id1:id2, id1:id2, np.newaxis]
                                   - psdRes[id1:id2, id1:id2, :], 0) * pf[:, :, np.newaxis]
             weights = nnp.asarray(cpuArray(self.ao.atm.weights), dtype=float)[geom['layer_idx']]
-            for i, s in zip(*nnp.where(geom['mask'])):
-                psd[id1:id2, id1:id2, s] += weights[i] * self._mcaoConeFilter(geom, i, s) \
+            mask = nnp.asarray(cpuArray(geom['mask']))
+            for s in nnp.where(mask.any(axis=0))[0]:
+                idx = nnp.where(mask[:, s])[0]
+                filt = self._mcaoConeFilter(geom, idx, s)
+                psd[id1:id2, id1:id2, s] += np.sum(filt * np.asarray(weights[idx]), axis=-1) \
                                             * deltaPsd[:, :, s]
         self.t_mcaoWFsensCone = 1000 * (time.time() - tstart)
         return np.real(psd)

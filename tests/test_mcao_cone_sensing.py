@@ -179,6 +179,9 @@ def _cone_wfe(psd_cone):
 def _zero_gap(monkeypatch):
     monkeypatch.setattr(fourierModel, '_footprint_inner_gap',
                         lambda self, h, **kw: nnp.zeros(len(self.ao.src.zenith)))
+    # on the GPU backend _mcaoConeGeometry uses the layer-batched version
+    monkeypatch.setattr(fourierModel, '_footprint_inner_gap_layers_gpu',
+                        lambda self, h, **kw: nnp.zeros((len(h), len(self.ao.src.zenith))))
 
 
 def _old_cone_psd(fao, psd_res):
