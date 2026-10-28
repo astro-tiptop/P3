@@ -127,6 +127,41 @@ class TestGetStrehl(unittest.TestCase):
         # after clipping the negative pixel is 0, so the PSF is the ideal one
         self.assertAlmostEqual(sr, 1.0, delta=1e-4)
 
+    def test_max_half_pixel_reference_requires_samp_ge_2(self):
+        pupil = make_pupil(64)
+        psf = dl_psf_numpy(pupil, 2.0)
+        for samp in (0.5, 1.0, 1.5):
+            with self.subTest(samp=samp):
+                with self.assertRaises(ValueError):
+                    getStrehl(xp.asarray(psf), xp.asarray(pupil), samp, method='max', psfInOnePix=False)
+
+    def test_max_strehl_of_half_pixel_centred_dl_psf_is_one(self):
+        n = 64
+        pupil = make_pupil(n)
+        xs = np.arange(n) - n / 2  # pupil coordinates in pixels, as in make_pupil
+        for samp in (2.0, 3.0):
+            with self.subTest(samp=samp):
+                m = telescopeOtf(xp.asarray(pupil), samp).shape[0]
+                # exact DFT with the PSF peak midway between pixels m//2-1 and m//2 on both axes
+                e = np.exp(-2j * np.pi * np.outer(np.arange(m) - m // 2 - 0.5, xs) / m)
+                psf = np.abs(e @ pupil @ e.T) ** 2
+                psf /= psf.sum()
+                sr = float(cpuArray(getStrehl(xp.asarray(psf), xp.asarray(pupil), samp, method='max',
+                                              psfInOnePix=False)))
+                self.assertAlmostEqual(sr, 1.0, delta=1e-3)
+
+    def test_max_strehl_in_one_pix_works_below_nyquist(self):
+        pupil = make_pupil(64)
+        # DL PSF at samp 1.5 point-sampled every 2 pixels = samp 0.75, peak on the centre pixel
+        fine = dl_psf_numpy(pupil, 1.5)
+        c = fine.shape[0] // 2
+        idx = c + 2 * np.arange(-(c // 2), c // 2)
+        psf = fine[idx][:, idx]
+        psf /= psf.sum()
+        sr = float(cpuArray(getStrehl(xp.asarray(psf), xp.asarray(pupil), 0.75, method='max',
+                                      psfInOnePix=True)))
+        self.assertAlmostEqual(sr, 1.0, delta=1e-3)
+
 
 if __name__ == '__main__':
     unittest.main()

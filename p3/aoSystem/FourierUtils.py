@@ -1813,6 +1813,11 @@ def getStrehl(psf0,pupil,samp,recentering=False,nR=5,method='otf',psfInOnePix=Fa
         # Get the Strehl
         SR      = np.real(otf.sum()/otfDL.sum())
     elif method == 'max':
+        if not psfInOnePix and float(asnumpy(samp).ravel()[0]) < 2:
+            # the half-pixel shift of the reference is a phase ramp on the OTF,
+            # which is aliased for samp < 2: the reference peak is wrong (SR 1.6-3)
+            raise ValueError("getStrehl(method='max', psfInOnePix=False) requires samp >= 2; "
+                             "use psfInOnePix=True for a PSF centred on a pixel")
         # clip returns a new array: this also leaves the caller's PSF untouched
         psfDL   = otf2psf(otfDL,psfInOnePix=psfInOnePix).clip(0, None)
         psfDL  /= psfDL.sum()
