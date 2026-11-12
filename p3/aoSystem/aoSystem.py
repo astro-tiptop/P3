@@ -361,6 +361,10 @@ class aoSystem():
                              extraErrorLoMax=extraErrorLoMax,
                              precision=self.precision)
 
+        #----- pupils of the LO and focus sensors (NGS PSFs in TIPTOP)
+        self.pupilLO = self.sensorPupil('sensor_LO', self.tel.pupil)
+        self.pupilFocus = self.sensorPupil('sensor_Focus', self.pupilLO)
+
         if self.check_config_key('telescope', 'TechnicalFoV'):
             self.TechnicalFoV = self.get_config_value('telescope','TechnicalFoV')
         else:
@@ -908,6 +912,32 @@ class aoSystem():
             self.ngs = source(self.wvlGsLO,self.zenithGsLO,
                               self.azimuthGsLO,tag="NGS",verbose=verbose)
 
+
+    def sensorPupil(self, section, default):
+        """Pupil seen by all the stars of a sensor section ('sensor_LO', 'sensor_Focus').
+
+        The section has its own pupil if it sets PathPupil (a FITS map over TelescopeDiameter,
+        rotated by PupilAngle and interpolated to Resolution, as [telescope] PathPupil) or
+        ObscurationRatio (an annulus of diameter TelescopeDiameter). Otherwise `default`
+        (the caller passes the telescope pupil for LO, the LO pupil for focus).
+        """
+        path = self.get_config_value(section, 'PathPupil') if self.check_config_key(section, 'PathPupil') else ''
+        has_obs = self.check_config_key(section, 'ObscurationRatio')
+        if path and has_obs:
+            raise ValueError(f"[{section}]: set either PathPupil or ObscurationRatio, not both")
+        if not path and not has_obs:
+            if self.check_config_key(section, 'PupilAngle'):
+                raise ValueError(f"[{section}] PupilAngle needs PathPupil or ObscurationRatio")
+            return default
+        if path:
+            path = self.resolve_path(path)
+            # telescope() silently builds an annulus when the file is missing
+            if not ospath.isfile(path):
+                raise ValueError(f"[{section}] PathPupil file not found: {path}")
+        obs = self.get_config_value(section, 'ObscurationRatio') if has_obs else 0.0
+        angle = self.get_config_value(section, 'PupilAngle') if self.check_config_key(section, 'PupilAngle') else 0.0
+        return telescope(self.D, self.tel.resolution, obsRatio=obs, pupilAngle=angle,
+                         path_pupil=path or None, precision=self.precision, verbose=False).pupil
 
     def configLOsensor(self):
 
